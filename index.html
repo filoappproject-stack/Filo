@@ -125,9 +125,20 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 </style>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 </head>
 <body>
+
+<!-- LOGIN -->
+<div id="login-screen" style="position:fixed;inset:0;background:#F7F5F0;display:flex;align-items:center;justify-content:center;z-index:200;">
+  <div style="text-align:center;">
+    <h2 style="margin-bottom:20px;">Accedi a Filo</h2>
+    <button onclick="login()" style="padding:12px 18px;font-size:14px;">Accedi con Google</button>
+  </div>
+</div>
+
 
 <!-- ── CHECK-IN OVERLAY ── -->
 <div class="checkin-overlay" id="checkin-overlay">
@@ -236,7 +247,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
           <div class="topbar-title" id="page-title">Buongiorno, Marco</div>
           <div class="topbar-sub" id="page-sub">Mercoledì 18 marzo · Dimmi cosa hai oggi, penso io all'ordine</div>
         </div>
-        <div id="topbar-actions"><button class="btn-primary" onclick="loginWithGoogle()">Login con Google</button> <button class="btn-ghost" onclick="logout()">Logout</button></div>
+        <div id="topbar-actions"></div>
       </div>
     </div>
 
@@ -813,38 +824,34 @@ Dai 3-5 suggerimenti ordinati per urgenza. Se energia bassa, dai meno suggerimen
 renderAll();
 initCheckin();
 analyzePatterns();
+</script>
 
-// ===== SUPABASE CONFIG =====
-const supabaseUrl = "https://xkdniukhksfiuromnmtv.supabase.co";
-const supabaseKey = "sb_publishable_UdRD3JHIa14slQ_0ltkNTA_0Xkdkfn4";
+<script>
+const supabase = window.supabase.createClient(
+  "https://xkdniukhksfiuromnmtv.supabase.co",
+  "sb_publishable_UdRD3JHIa14slQ_0ltkNTA_0Xkdkfn4"
+);
 
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-
-// ===== LOGIN GOOGLE =====
-async function loginWithGoogle() {
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-  });
-  if (error) alert("Errore login: " + error.message);
+async function login(){
+  await supabase.auth.signInWithOAuth({ provider:'google' });
 }
 
-// ===== LOGOUT =====
-async function logout() {
-  await supabase.auth.signOut();
-  location.reload();
-}
-
-// ===== CHECK SESSION =====
-async function checkUser() {
+async function checkAuth(){
   const { data } = await supabase.auth.getSession();
-  if (data.session) {
-    const user = data.session.user;
-    document.getElementById("sidebar-name").textContent = user.email;
-    document.getElementById("profile-name-disp").textContent = user.email;
+  if(data.session){
+    document.getElementById('login-screen').style.display='none';
+    initCheckin(); // mostra checkin SOLO dopo login
+  } else {
+    document.getElementById('checkin-overlay').style.display='none';
   }
 }
-checkUser();
 
+supabase.auth.onAuthStateChange((e,s)=>{
+  if(s){ checkAuth(); }
+});
+
+checkAuth();
 </script>
+
 </body>
 </html>
