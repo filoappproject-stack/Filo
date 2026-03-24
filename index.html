@@ -11,23 +11,30 @@
 body {
   font-family: sans-serif;
   background:#F7F5F0;
+  margin:0;
+}
+
+/* HEADER */
+.header {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:20px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
 }
 
 /* LOGIN BUTTON */
 #login-btn {
-  position:fixed;
-  top:20px;
-  right:20px;
-  z-index:9999;
   background:#fff;
   border:1px solid #ccc;
-  padding:10px 16px;
+  padding:8px 14px;
   border-radius:8px;
   cursor:pointer;
 }
 
 /* APP */
-.app {
+.container {
   padding:40px;
 }
 
@@ -39,14 +46,14 @@ body {
   display:none;
   align-items:center;
   justify-content:center;
-  z-index:2000;
+  z-index:1000;
 }
 
 .checkin-box {
   background:white;
   padding:30px;
   border-radius:12px;
-  width:300px;
+  width:320px;
   text-align:center;
 }
 </style>
@@ -54,19 +61,20 @@ body {
 
 <body>
 
-<!-- LOGIN -->
-<button id="login-btn" onclick="login()">Accedi con Google</button>
+<div class="header">
+  <h2>Filo</h2>
+  <button id="login-btn" onclick="login()">Accedi con Google</button>
+</div>
 
-<!-- APP -->
-<div class="app">
-  <h1>Filo</h1>
+<div class="container">
+  <h1>Buongiorno</h1>
   <p>La tua dashboard</p>
 </div>
 
-<!-- CHECKIN -->
 <div class="checkin-overlay" id="checkin-overlay">
   <div class="checkin-box">
     <h3>Check-in energia</h3>
+    <p>Come ti senti oggi?</p>
     <button onclick="closeCheckin()">Inizia</button>
   </div>
 </div>
@@ -87,15 +95,16 @@ function closeCheckin() {
   document.getElementById('checkin-overlay').style.display = 'none';
 }
 
-// CHECK LOGIN
-window.addEventListener('load', async () => {
+async function checkUser() {
   const { data: { session } } = await supabase.auth.getSession();
 
   if (session) {
     document.getElementById('login-btn').style.display = 'none';
     document.getElementById('checkin-overlay').style.display = 'flex';
   }
-});
+}
+
+checkUser();
 </script>
 
 </body>
