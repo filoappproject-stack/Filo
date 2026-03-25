@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Filo</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+body {
+  margin:0;
+  font-family:sans-serif;
+  background:#F7F5F0;
+  height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.box {
+  background:white;
+  padding:50px;
+  border-radius:18px;
+  text-align:center;
+  box-shadow:0 20px 50px rgba(0,0,0,0.1);
+}
+
+button {
+  background:#1A4FBF;
+  color:white;
+  border:none;
+  padding:14px 22px;
+  border-radius:12px;
+  cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<div class="box">
+  <h1>Filo</h1>
+  <p>Il tuo capo di stato maggiore digitale</p>
+  <button id="loginBtn">Accedi con Google</button>
+</div>
+
+<script>
+const supabase = window.supabase.createClient(
+  "https://xkdniukhksfiuromnmtv.supabase.co",
+  "sb_publishable_UdRD3JHIa14slQ_0ltkNTA_0Xkdkfn4"
+);
+
+document.getElementById("loginBtn").addEventListener("click", async () => {
+  await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin + "/app.html"
+    }
+  });
+});
+</script>
+
+</body>
+</html>
