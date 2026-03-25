@@ -49,11 +49,24 @@ button {
 </head>
 
 <body>
-
+<div style="position:fixed; inset:0; pointer-events:none;"></div>
 <div class="box">
   <h1>Filo</h1>
   <p>Il tuo capo di stato maggiore digitale</p>
-  <button onclick="login()">Accedi con Google</button>
+<button onclick="login()" style="
+position:relative;
+z-index:99999;
+pointer-events:auto;
+background:#1A4FBF;
+color:white;
+border:none;
+padding:14px 22px;
+border-radius:12px;
+cursor:pointer;
+font-size:14px;
+">
+Accedi con Google
+</button>
 </div>
 
 <script>
