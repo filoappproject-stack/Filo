@@ -125,8 +125,24 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+<button id="login-btn" onclick="login()" 
+style="
+position: fixed;
+top: 20px;
+right: 20px;
+z-index: 9999999;
+background: white;
+border: 1px solid #ccc;
+padding: 8px 12px;
+cursor: pointer;
+pointer-events: auto;
+">
+  Accedi con Google
+</button>
+
 
 <!-- ── CHECK-IN OVERLAY ── -->
 <div class="checkin-overlay" id="checkin-overlay">
@@ -810,8 +826,42 @@ Dai 3-5 suggerimenti ordinati per urgenza. Se energia bassa, dai meno suggerimen
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 renderAll();
-initCheckin();
+// initCheckin();
 analyzePatterns();
 </script>
+
+<script>
+const supabase = window.supabase.createClient(
+"https://xkdniukhksfiuromnmtv.supabase.co",
+"sb_publishable_UdRD3JHIa14slQ_0ltkNTA_0Xkdkfn4"
+);
+
+async function login(){
+  await supabase.auth.signInWithOAuth({
+    provider:'google',
+    options:{ redirectTo: window.location.origin }
+  });
+}
+
+async function checkAuth(){
+  const { data } = await supabase.auth.getSession();
+
+  if(data.session){
+    const btn = document.getElementById("login-btn");
+    if(btn) btn.style.display="none";
+
+    if(typeof initCheckin === "function"){
+      initCheckin();
+    }
+  } else {
+    const overlay = document.getElementById("checkin-overlay");
+    if(overlay) overlay.style.display="none";
+  }
+}
+
+supabase.auth.onAuthStateChange(()=>checkAuth());
+checkAuth();
+</script>
+
 </body>
 </html>
