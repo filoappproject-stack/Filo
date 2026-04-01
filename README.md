@@ -49,59 +49,31 @@ Cerca in tempo reale tra task, note e inbox.
 | Componente | Tecnologia |
 |---|---|
 | Frontend | HTML / CSS / JavaScript vanilla |
+| Backend (nuovo) | Node.js + Express |
+| Database (nuovo) | PostgreSQL |
 | Autenticazione | Supabase Auth + Google OAuth 2.0 |
-| Database | Supabase (PostgreSQL) |
 | AI | Anthropic Claude API (claude-sonnet) |
-| Hosting | Vercel |
-| Memoria locale | localStorage (pattern comportamentali) |
+| Hosting | Vercel (frontend) + Node hosting |
 | Version control | GitHub |
 
 ---
 
-## Architettura
+## Nuova struttura backend (bootstrap)
 
-```
-Utente
-  │
-  ├── Login (Google OAuth via Supabase)
-  │
-  ├── index.html (Single Page Application)
-  │     ├── Suggerimenti AI → Anthropic API
-  │     ├── Check-in energia → localStorage
-  │     ├── Memoria adattiva → localStorage
-  │     ├── Task / Note / Inbox → stato locale
-  │     └── Autenticazione → Supabase
-  │
-  └── Vercel (hosting statico)
-```
+È stato aggiunto un backend iniziale in `backend/` con:
+
+- API Express v1 (`/api/v1/tasks`, `/api/v1/checkins`, `/api/v1/health`)
+- Validazione input con Zod
+- Connessione PostgreSQL tramite `pg`
+- Schema SQL iniziale con tabelle `users`, `tasks`, `daily_checkins`
+
+Dettagli architetturali: [`docs/ARCHITETTURA.md`](docs/ARCHITETTURA.md).
 
 ---
 
-## Roadmap
+## Sviluppo locale frontend
 
-| Fase | Obiettivo | Stato |
-|---|---|---|
-| Fase 0 — Prototipo | File HTML funzionante con AI e memoria | ✅ Completato |
-| Fase 1 — App Web | Deploy Vercel, Supabase, login Google | ✅ Completato |
-| Fase 2 — App Mobile | React Native, App Store e Play Store | 🔄 In pianificazione |
-| Fase 3 — Autonomia | Agenti AI, bozze email, follow-up automatici | 📋 Roadmap |
-| Fase 4 — Team | Workspace condivisi, dashboard manager-team | 📋 Roadmap |
-
----
-
-## Piani e pricing
-
-| Piano | Prezzo | Funzionalità |
-|---|---|---|
-| Free | Gratuito | Task, note, calendario base, 3 check-in/settimana |
-| Pro | €9,99/mese | Tutto il Free + AI illimitata, Gmail, memoria completa |
-| Team | €7,99/utente/mese | Tutto il Pro + workspace condiviso, dashboard team |
-
----
-
-## Sviluppo locale
-
-Il progetto è un singolo file HTML — non richiede installazioni.
+Il frontend attuale è ancora un singolo file HTML.
 
 1. Clona il repository
 ```bash
@@ -110,16 +82,37 @@ git clone https://github.com/filoappproject-stack/Filo.git
 
 2. Apri `index.html` nel browser
 
-Per abilitare i suggerimenti AI, aggiungi la tua chiave API Anthropic nel file.
-
 ---
 
-## Variabili di configurazione
+## Sviluppo locale backend
 
-| Variabile | Descrizione |
-|---|---|
-| `SUPABASE_URL` | URL del progetto Supabase |
-| `SUPABASE_KEY` | Chiave publishable di Supabase |
+1. Vai nella cartella backend:
+```bash
+cd backend
+```
+
+2. Installa dipendenze:
+```bash
+npm install
+```
+
+3. Configura variabili ambiente:
+```bash
+cp .env.example .env
+```
+
+4. Crea schema DB:
+```bash
+psql "$DATABASE_URL" -f db/schema.sql
+psql "$DATABASE_URL" -f db/seed.sql
+```
+
+5. Avvia server:
+```bash
+npm run dev
+```
+
+API disponibile su `http://localhost:4000`.
 
 ---
 
@@ -129,4 +122,4 @@ Progetto privato — tutti i diritti riservati.
 
 ---
 
-*Filo è in sviluppo attivo. Versione corrente: 0.7.0*
+*Filo è in sviluppo attivo. Versione corrente: 0.8.0*
