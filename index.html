@@ -549,8 +549,10 @@ function showLoginScreen() {
   document.getElementById('checkin-overlay').style.display = 'none';
 }
 
-function loginSuccess(user) {
+async function loginSuccess(user) {
   currentUser = user;
+  tasks = [];
+  nextTaskId = 100;
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-shell').classList.add('active');
 
@@ -568,6 +570,7 @@ function loginSuccess(user) {
   document.getElementById('pf-name').value = name;
   document.getElementById('page-title').textContent = 'Buongiorno, ' + firstName;
 
+  await loadTasksFromApi();
   initCheckin();
   renderAll();
   analyzePatterns();
@@ -579,13 +582,43 @@ const CAL=[{time:"09:00",title:"Standup team prodotto",meta:"15 min · Google Me
 const TAG_PALETTE=[{bg:"#E8EEFB",tc:"#0D2E7A"},{bg:"#E4F4EE",tc:"#0E6B4A"},{bg:"#FDF3DC",tc:"#8A5C00"},{bg:"#FDECEC",tc:"#9B2525"},{bg:"#F0EAF8",tc:"#5B2D8E"},{bg:"#F0EDE6",tc:"#6B6860"}];
 const ENERGY_LABELS={1:"😴 A pezzi",2:"😕 Stanco",3:"😐 Nella norma",4:"😊 Bene",5:"🚀 Ottimo"};
 const ENERGY_COLORS={1:"#9B2525",2:"#8A5C00",3:"#6B6860",4:"#0E6B4A",5:"#0D2E7A"};
-let tasks=[{id:1,label:"Preparare punti per call con Rossi",done:false,priorita:"urgente",scadenza:"Oggi"},{id:2,label:"Rispondere a Bianchi sul contratto",done:false,priorita:"alta",scadenza:"Oggi"},{id:3,label:"Standup mattutino",done:true,priorita:"bassa",scadenza:""},{id:4,label:"Approvare budget Q2",done:false,priorita:"alta",scadenza:"Venerdì"},{id:5,label:"Revisione proposta Rossi",done:false,priorita:"normale",scadenza:"Venerdì"}];
+let tasks=[];
 let nextTaskId=100;
 let notes=[{id:1,title:"Budget Q2 — bozza",body:"Marketing +15%, sviluppo stabile, ops da rivedere.",tags:["Budget","Q2"]},{id:2,title:"Note call Rossi — 10 marzo",body:"Vuole sconto 8% su volume. Ordine min. 500 unità.",tags:["Clienti","Vendite"]},{id:3,title:"Idee roadmap H2",body:"Onboarding semplificato, dashboard analytics v2.",tags:["Prodotto"]},{id:4,title:"Riflessioni pricing",body:"Seat-based vs usage-based. Competitor cambiato a gennaio.",tags:["Strategia"]}];
 let nextNoteId=100;
 let currentNoteId=null;
 let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
+const API_BASES=[window.FILO_API_BASE_URL,window.location.origin,'http://localhost:4000'].filter((v,i,a)=>v&&a.indexOf(v)===i);
+
+function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
+
+async function fetchApi(path,options={}){
+  let lastError=null;
+  for(const base of API_BASES){
+    try{
+      const url=base.replace(/\/$/,'')+path;
+      const res=await fetch(url,options);
+      if(res.ok)return res;
+      if(res.status>=500)lastError=new Error(`HTTP ${res.status} su ${url}`);
+    }catch(err){lastError=err;}
+  }
+  throw lastError||new Error('API non raggiungibile');
+}
+
+async function loadTasksFromApi(){
+  if(!currentUser?.id)return;
+  try{
+    const res=await fetchApi(`/api/v1/tasks?userId=${encodeURIComponent(currentUser.id)}`);
+    const payload=await res.json();
+    const apiTasks=Array.isArray(payload?.data)?payload.data:[];
+    tasks=apiTasks.map(normalizeApiTask);
+    const numericIds=tasks.map(t=>parseInt(t.id,10)).filter(n=>Number.isFinite(n));
+    nextTaskId=numericIds.length?Math.max(...numericIds)+1:100;
+  }catch(err){
+    console.warn('Impossibile caricare task da backend, uso fallback locale:',err);
+  }
+}
 
 // ── MEMORIA ───────────────────────────────────────────────────────────────────
 function mem_get(key){try{return JSON.parse(localStorage.getItem('filo_'+key));}catch(e){return null;}}
@@ -629,20 +662,31 @@ function toggleTaskForm(){const f=document.getElementById('task-form');const b=d
 async function addTask() {
   const label = document.getElementById('new-task-label').value.trim();
   const priority = document.getElementById('new-task-pri').value;
+  const dueInput = document.getElementById('new-task-scad').value.trim();
   const apiPriorityMap = { bassa: 'low', normale: 'medium', alta: 'high', urgente: 'urgent' };
   const userId = currentUser?.id || '11111111-1111-1111-1111-111111111111';
 
   if (!label) return;
 
+  const fallbackTask = {
+    id: nextTaskId++,
+    label,
+    done: false,
+    priorita: priority,
+    scadenza: dueInput
+  };
+  const parsedDueDate = dueInput ? new Date(dueInput) : null;
+  const dueDateIso = parsedDueDate && !Number.isNaN(parsedDueDate.getTime()) ? parsedDueDate.toISOString() : null;
+
   try {
-    const res = await fetch('http://localhost:4000/api/v1/tasks', {
+    const res = await fetchApi('/api/v1/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userId,
         title: label,
         priority: apiPriorityMap[priority] || 'medium',
-        status: 'todo'
+        dueDate: dueDateIso
       })
     });
 
@@ -653,24 +697,17 @@ async function addTask() {
 
     const payload = await res.json();
     const created = payload?.data;
-    const uiPriorityMap = { low: 'bassa', medium: 'normale', high: 'alta', urgent: 'urgente' };
-
-    tasks.unshift({
-      id: created?.id || nextTaskId++,
-      label: created?.title || label,
-      done: false,
-      priorita: uiPriorityMap[created?.priority] || priority,
-      scadenza: created?.due_date ? new Date(created.due_date).toLocaleDateString('it-IT') : ''
-    });
-    renderTasks();
-
-    document.getElementById('new-task-label').value = '';
-    document.getElementById('new-task-pri').value = 'normale';
-    toggleTaskForm();
-
+    tasks.unshift(created?normalizeApiTask(created):fallbackTask);
   } catch (err) {
     console.error('Errore creazione task:', err);
+    tasks.unshift(fallbackTask);
   }
+
+  renderTasks();
+  document.getElementById('new-task-label').value = '';
+  document.getElementById('new-task-pri').value = 'normale';
+  document.getElementById('new-task-scad').value = '';
+  toggleTaskForm();
 }
 function addTaskFromSuggestion(titolo){tasks.push({id:nextTaskId++,label:titolo,done:false,priorita:'urgente',scadenza:'Oggi'});renderTasks();showPage('task',document.querySelectorAll('.nav-item')[3]);}
 function toggleTask(id){const t=tasks.find(t=>t.id===id);if(t){if(!t.done)recordTaskPostponed(t);else{t.done=false;renderTasks();return;}t.done=true;recordTaskCompleted(t);}renderTasks();}
