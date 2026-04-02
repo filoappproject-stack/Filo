@@ -626,7 +626,33 @@ function updateStatsPage(){document.getElementById('stat-total-tasks').textConte
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────
 function toggleTaskForm(){const f=document.getElementById('task-form');const b=document.getElementById('task-form-toggle');const open=f.style.display==='none';f.style.display=open?'':'none';b.textContent=open?'✕  Annulla':'＋  Nuovo task';b.style.background=open?'#F0EDE6':'#1A4FBF';b.style.color=open?'#6B6860':'#fff';if(open)document.getElementById('new-task-label').focus();}
-function addTask(lbl,pri,scad){const l=lbl||document.getElementById('new-task-label').value.trim();const p=pri||document.getElementById('new-task-pri').value;const s=scad||document.getElementById('new-task-scad').value.trim();if(!l)return;tasks.push({id:nextTaskId++,label:l,done:false,priorita:p,scadenza:s});document.getElementById('new-task-label').value='';document.getElementById('new-task-pri').value='normale';document.getElementById('new-task-scad').value='';if(lbl)return;toggleTaskForm();renderTasks();}
+async function addTask() {
+  const label = document.getElementById('new-task-label').value.trim();
+  const priority = document.getElementById('new-task-pri').value;
+
+  if (!label) return;
+
+  try {
+    const res = await fetch('http://localhost:4000/api/v1/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: '550e8400-e29b-41d4-a716-446655440000',
+        title: label,
+        priority: priority,
+        status: 'todo'
+      })
+    });
+
+    await loadTasks();
+
+    document.getElementById('new-task-label').value = '';
+    document.getElementById('new-task-pri').value = 'normale';
+
+  } catch (err) {
+    console.error('Errore:', err);
+  }
+}
 function addTaskFromSuggestion(titolo){tasks.push({id:nextTaskId++,label:titolo,done:false,priorita:'urgente',scadenza:'Oggi'});renderTasks();showPage('task',document.querySelectorAll('.nav-item')[3]);}
 function toggleTask(id){const t=tasks.find(t=>t.id===id);if(t){if(!t.done)recordTaskPostponed(t);else{t.done=false;renderTasks();return;}t.done=true;recordTaskCompleted(t);}renderTasks();}
 function deleteTask(id){tasks=tasks.filter(t=>t.id!==id);renderTasks();}
