@@ -590,8 +590,12 @@ let currentNoteId=null;
 let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 const API_BASES=[window.FILO_API_BASE_URL,window.location.origin,'http://localhost:4000'].filter((v,i,a)=>v&&a.indexOf(v)===i);
+const TASKS_CACHE_PREFIX='filo_tasks_cache_';
 
 function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
+function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
+function saveTasksToCache(){const key=getTaskCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(tasks));}catch(e){}}
+function loadTasksFromCache(){const key=getTaskCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
 
 async function fetchApi(path,options={}){
   let lastError=null;
@@ -613,10 +617,15 @@ async function loadTasksFromApi(){
     const payload=await res.json();
     const apiTasks=Array.isArray(payload?.data)?payload.data:[];
     tasks=apiTasks.map(normalizeApiTask);
+    saveTasksToCache();
     const numericIds=tasks.map(t=>parseInt(t.id,10)).filter(n=>Number.isFinite(n));
     nextTaskId=numericIds.length?Math.max(...numericIds)+1:100;
   }catch(err){
-    console.warn('Impossibile caricare task da backend, uso fallback locale:',err);
+    console.warn('Impossibile caricare task da backend, uso cache locale:',err);
+    const cached=loadTasksFromCache();
+    if(cached)tasks=cached;
+    const numericIds=tasks.map(t=>parseInt(t.id,10)).filter(n=>Number.isFinite(n));
+    nextTaskId=numericIds.length?Math.max(...numericIds)+1:100;
   }
 }
 
@@ -703,15 +712,16 @@ async function addTask() {
     tasks.unshift(fallbackTask);
   }
 
+  saveTasksToCache();
   renderTasks();
   document.getElementById('new-task-label').value = '';
   document.getElementById('new-task-pri').value = 'normale';
   document.getElementById('new-task-scad').value = '';
   toggleTaskForm();
 }
-function addTaskFromSuggestion(titolo){tasks.push({id:nextTaskId++,label:titolo,done:false,priorita:'urgente',scadenza:'Oggi'});renderTasks();showPage('task',document.querySelectorAll('.nav-item')[3]);}
-function toggleTask(id){const t=tasks.find(t=>t.id===id);if(t){if(!t.done)recordTaskPostponed(t);else{t.done=false;renderTasks();return;}t.done=true;recordTaskCompleted(t);}renderTasks();}
-function deleteTask(id){tasks=tasks.filter(t=>t.id!==id);renderTasks();}
+function addTaskFromSuggestion(titolo){tasks.push({id:nextTaskId++,label:titolo,done:false,priorita:'urgente',scadenza:'Oggi'});saveTasksToCache();renderTasks();showPage('task',document.querySelectorAll('.nav-item')[3]);}
+function toggleTask(id){const t=tasks.find(t=>t.id===id);if(t){if(!t.done)recordTaskPostponed(t);else{t.done=false;saveTasksToCache();renderTasks();return;}t.done=true;recordTaskCompleted(t);}saveTasksToCache();renderTasks();}
+function deleteTask(id){tasks=tasks.filter(t=>t.id!==id);saveTasksToCache();renderTasks();}
 
 // ── NOTE CRUD ─────────────────────────────────────────────────────────────────
 function showNoteList(){document.getElementById('note-list-view').style.display='';document.getElementById('note-editor-view').style.display='none';document.getElementById('page-sub').textContent=notes.length+' note';renderNotes();}
