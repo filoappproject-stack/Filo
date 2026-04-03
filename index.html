@@ -606,16 +606,39 @@ function saveTasksToCache(){const key=getTaskCacheKey();if(!key)return;try{local
 function loadTasksFromCache(){const key=getTaskCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
 
 async function fetchApi(path,options={}){
-  let lastError=null;
+  let lastNetworkError=null;
+  let lastHttpError=null;
   for(const base of API_BASES){
     try{
       const url=base.replace(/\/$/,'')+path;
       const res=await fetch(url,options);
       if(res.ok)return res;
-      if(res.status>=500)lastError=new Error(`HTTP ${res.status} su ${url}`);
-    }catch(err){lastError=err;}
+      let details='';
+      try{
+        const body=await res.clone().json();
+        details=body?.message||body?.error||JSON.stringify(body);
+      }catch(e){
+        try{details=await res.text();}catch(e2){details='';}
+      }
+      const compact=String(details||'').trim().slice(0,240);
+      lastHttpError=new Error(`HTTP ${res.status} su ${url}${compact?` — ${compact}`:''}`);
+    }catch(err){lastNetworkError=err;}
   }
-  throw lastError||new Error('API non raggiungibile');
+  throw lastHttpError||lastNetworkError||new Error('API non raggiungibile');
+}
+
+function explainInboxConnectError(err){
+  const msg=(err?.message||'').toLowerCase();
+  if(msg.includes('config google oauth mancante')||msg.includes('google_client_id')){
+    return 'Configurazione backend incompleta: imposta GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET.';
+  }
+  if(msg.includes('http 404')){
+    return 'Endpoint inbox non trovato: verifica FILO_API_BASE_URL e deploy del backend.';
+  }
+  if(msg.includes('failed to fetch')||msg.includes('api non raggiungibile')){
+    return 'Backend non raggiungibile: verifica URL API e CORS.';
+  }
+  return err?.message||'Connessione Gmail non riuscita.';
 }
 
 async function loadTasksFromApi(){
@@ -674,7 +697,7 @@ async function connectGoogleInbox(){
     window.location.href=authUrl;
   }catch(err){
     console.error('Errore connect inbox:',err);
-    setInboxStatus('Connessione Gmail non riuscita. Verifica configurazione OAuth del backend.','error');
+    setInboxStatus(explainInboxConnectError(err),'error');
     if(btn){btn.textContent=original;btn.disabled=false;}
   }
 }
