@@ -687,11 +687,12 @@ async function loadInboxFromApi(){
     const payload=await res.json();
     const apiMessages=Array.isArray(payload?.data)?payload.data:[];
     inboxItems=apiMessages.map((m)=>{const from=extractSenderName(m.sender);const tone=inboxToneFromText(from);const labels=Array.isArray(m.labels)?m.labels:[];return{initials:initialsFromName(from),bg:tone.bg,tc:tone.tc,from,subj:m.subject||'(Senza oggetto)',prev:m.snippet||'',time:formatInboxTime(m.received_at),unread:labels.includes('UNREAD'),source:'Email'};});
-    setInboxStatus(inboxItems.length?'Mailbox Gmail sincronizzata.':'Mailbox collegata ma senza messaggi recenti.',inboxItems.length?'ok':'warn');
+    if(inboxItems.length){setInboxStatus('Mailbox Gmail sincronizzata.','ok');}
+    else{setInboxStatus(null);}
   }catch(err){
     console.warn('Impossibile caricare inbox da backend:',err);
     inboxItems=[];
-    setInboxStatus('Mailbox non collegata. Premi "Collega Gmail" per attivare l’integrazione.','warn');
+    setInboxStatus(null);
   }
 }
 
