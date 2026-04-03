@@ -706,7 +706,7 @@ async function connectGoogleInbox(){
   const original=btn?.textContent||'Collega Gmail';
   if(btn){btn.textContent='Connessione…';btn.disabled=true;}
   try{
-    const redirectUri=window.location.origin+window.location.pathname;
+    const redirectUri=window.location.origin;
     const state=`${currentUser.id}:${Date.now()}`;
     sessionStorage.setItem('filo_inbox_oauth_state',state);
     const res=await fetchApi('/api/v1/inbox/google/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,redirectUri,state})});
@@ -731,7 +731,7 @@ async function maybeHandleInboxOAuthCallback(){
   const expectedState=sessionStorage.getItem('filo_inbox_oauth_state');
   if(expectedState&&state&&expectedState!==state){setInboxStatus('Stato OAuth non valido. Riprova il collegamento Gmail.','error');return;}
   try{
-    const redirectUri=window.location.origin+window.location.pathname;
+    const redirectUri=window.location.origin;
     const res=await fetchApi('/api/v1/inbox/google/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,code,redirectUri})});
     if(!res.ok){const text=await res.text();throw new Error(text||`HTTP ${res.status}`);}
     sessionStorage.removeItem('filo_inbox_oauth_state');
