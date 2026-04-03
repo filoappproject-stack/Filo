@@ -142,6 +142,17 @@ async function upsertInboxAccount(input) {
   return rows[0];
 }
 
+async function ensureUserExists(userId, email) {
+  const sql = `
+    INSERT INTO users (id, email)
+    VALUES ($1, $2)
+    ON CONFLICT (id)
+    DO NOTHING
+  `;
+
+  await query(sql, [userId, email]);
+}
+
 async function updateAccountTokens(accountId, accessToken, tokenExpiresAt) {
   const sql = `
     UPDATE inbox_accounts
@@ -256,6 +267,8 @@ export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
   const expiresAt = new Date(Date.now() + (oauthPayload.expires_in ?? 3600) * 1000).toISOString();
 
   const profile = await gmailRequest('/users/me/profile', oauthPayload.access_token);
+
+  await ensureUserExists(userId, profile.emailAddress);
 
   const account = await upsertInboxAccount({
     userId,
