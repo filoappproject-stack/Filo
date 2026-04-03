@@ -363,7 +363,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 
       <!-- INBOX -->
       <div id="page-inbox" class="page">
-        <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:14px;gap:8px;">
+          <button class="btn-ghost" id="btn-config-api" onclick="configureApiBaseUrl()">Configura API</button>
           <button class="btn-primary" id="btn-connect-inbox" onclick="connectGoogleInbox()">Collega Gmail</button>
         </div>
         <div class="card" id="inbox-status" style="display:none;margin-bottom:10px;padding:10px 14px;font-size:12px;"></div>
@@ -597,8 +598,25 @@ let nextNoteId=100;
 let currentNoteId=null;
 let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
-const API_BASES=[window.FILO_API_BASE_URL,window.location.origin,'http://localhost:4000'].filter((v,i,a)=>v&&a.indexOf(v)===i);
+const IS_LOCAL_HOST=/(^localhost$|^127\.0\.0\.1$)/.test(window.location.hostname);
+const API_BASE_STORAGE_KEY='filo_api_base_url';
 const TASKS_CACHE_PREFIX='filo_tasks_cache_';
+
+function safeLocalStorageGet(key){try{return localStorage.getItem(key);}catch(e){return null;}}
+function safeLocalStorageSet(key,value){try{localStorage.setItem(key,value);}catch(e){}}
+function normalizeBaseUrl(raw){const value=(raw||'').trim();if(!value)return '';return value.replace(/\/$/,'');}
+function readApiBaseFromQuery(){try{const url=new URL(window.location.href);return url.searchParams.get('apiBase')||'';}catch(e){return '';}}
+function getConfiguredApiBaseUrl(){const fromQuery=normalizeBaseUrl(readApiBaseFromQuery());if(fromQuery){safeLocalStorageSet(API_BASE_STORAGE_KEY,fromQuery);return fromQuery;}const fromWindow=normalizeBaseUrl(window.FILO_API_BASE_URL);if(fromWindow)return fromWindow;return normalizeBaseUrl(safeLocalStorageGet(API_BASE_STORAGE_KEY));}
+function getApiBases(){const configured=getConfiguredApiBaseUrl();return [configured,IS_LOCAL_HOST?window.location.origin:null,'http://localhost:4000'].filter((v,i,a)=>v&&a.indexOf(v)===i);}
+function configureApiBaseUrl(){
+  const current=getConfiguredApiBaseUrl();
+  const entered=prompt('Inserisci URL base del backend API (es: https://api.tuodominio.com)',current||'');
+  if(entered===null)return;
+  const normalized=normalizeBaseUrl(entered);
+  if(!normalized){localStorage.removeItem(API_BASE_STORAGE_KEY);setInboxStatus('Configurazione API rimossa.','warn');return;}
+  safeLocalStorageSet(API_BASE_STORAGE_KEY,normalized);
+  setInboxStatus(`Backend API configurato su: ${normalized}`,'ok');
+}
 
 function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
 function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
@@ -608,7 +626,7 @@ function loadTasksFromCache(){const key=getTaskCacheKey();if(!key)return null;tr
 async function fetchApi(path,options={}){
   let lastNetworkError=null;
   let lastHttpError=null;
-  for(const base of API_BASES){
+  for(const base of getApiBases()){
     try{
       const url=base.replace(/\/$/,'')+path;
       const res=await fetch(url,options);
@@ -634,6 +652,9 @@ function explainInboxConnectError(err){
   }
   if(msg.includes('http 404')){
     return 'Endpoint inbox non trovato: verifica FILO_API_BASE_URL e deploy del backend.';
+  }
+  if(msg.includes('http 405')){
+    return 'Endpoint API non disponibile su questo dominio: imposta FILO_API_BASE_URL verso il backend.';
   }
   if(msg.includes('failed to fetch')||msg.includes('api non raggiungibile')){
     return 'Backend non raggiungibile: verifica URL API e CORS.';
@@ -683,6 +704,10 @@ async function loadInboxFromApi(){
 
 async function connectGoogleInbox(){
   if(!currentUser?.id){setInboxStatus('Effettua il login prima di collegare Gmail.','warn');return;}
+  if(!getConfiguredApiBaseUrl()&&!IS_LOCAL_HOST){
+    setInboxStatus('Prima configura l’URL backend API (bottone "Configura API").','error');
+    return;
+  }
   const btn=document.getElementById('btn-connect-inbox');
   const original=btn?.textContent||'Collega Gmail';
   if(btn){btn.textContent='Connessione…';btn.disabled=true;}
