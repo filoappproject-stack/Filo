@@ -6,6 +6,7 @@ const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 const GOOGLE_AUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1';
+let inboxSchemaReady = false;
 
 function requireGoogleOauthEnv() {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
@@ -120,6 +121,54 @@ function buildAfterQuery(lastSyncedAt) {
 
 function headerValue(headers = [], name) {
   return headers.find((item) => item.name?.toLowerCase() === name.toLowerCase())?.value ?? null;
+}
+
+async function ensureInboxSchema() {
+  if (inboxSchemaReady) {
+    return;
+  }
+
+  await query('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS inbox_accounts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL CHECK (provider IN ('google')),
+      provider_email TEXT NOT NULL,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT,
+      token_expires_at TIMESTAMPTZ,
+      scope TEXT NOT NULL,
+      last_synced_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, provider)
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS inbox_messages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      account_id UUID NOT NULL REFERENCES inbox_accounts(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider_message_id TEXT NOT NULL,
+      provider_thread_id TEXT,
+      snippet TEXT NOT NULL DEFAULT '',
+      subject TEXT,
+      sender TEXT,
+      received_at TIMESTAMPTZ,
+      labels TEXT[] NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (account_id, provider_message_id)
+    )
+  `);
+
+  await query('CREATE INDEX IF NOT EXISTS idx_inbox_accounts_user_provider ON inbox_accounts(user_id, provider)');
+  await query('CREATE INDEX IF NOT EXISTS idx_inbox_messages_user_received ON inbox_messages(user_id, received_at DESC)');
+
+  inboxSchemaReady = true;
 }
 
 async function upsertInboxAccount(input) {
@@ -284,6 +333,8 @@ async function resolveAccountAccessToken(account) {
 }
 
 export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
+  await ensureInboxSchema();
+
   const oauthPayload = await exchangeGoogleCode({ code, redirectUri });
   const expiresAt = new Date(Date.now() + (oauthPayload.expires_in ?? 3600) * 1000).toISOString();
 
@@ -318,6 +369,8 @@ export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
 }
 
 export async function listInboxMessages(userId, limit) {
+  await ensureInboxSchema();
+
   const sql = `
     SELECT
       m.id,
