@@ -8,6 +8,10 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1';
 let inboxSchemaReady = false;
 
+function isMissingRelationError(error) {
+  return error && (error.code === '42P01' || /relation .* does not exist/i.test(error.message || ''));
+}
+
 function requireGoogleOauthEnv() {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
     throw new HttpError(500, 'Config Google OAuth mancante');
@@ -127,8 +131,6 @@ async function ensureInboxSchema() {
   if (inboxSchemaReady) {
     return;
   }
-
-  await query('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
 
   await query(`
     CREATE TABLE IF NOT EXISTS inbox_accounts (
@@ -369,8 +371,6 @@ export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
 }
 
 export async function listInboxMessages(userId, limit) {
-  await ensureInboxSchema();
-
   const sql = `
     SELECT
       m.id,
@@ -388,6 +388,18 @@ export async function listInboxMessages(userId, limit) {
     LIMIT $2
   `;
 
-  const { rows } = await query(sql, [userId, limit]);
-  return rows;
+  try {
+    await ensureInboxSchema();
+    const { rows } = await query(sql, [userId, limit]);
+    return rows;
+  } catch (error) {
+    if (!isMissingRelationError(error)) {
+      throw error;
+    }
+
+    inboxSchemaReady = false;
+    await ensureInboxSchema();
+    const { rows } = await query(sql, [userId, limit]);
+    return rows;
+  }
 }
