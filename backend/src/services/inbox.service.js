@@ -76,7 +76,23 @@ async function refreshAccessToken(refreshToken) {
 }
 
 async function gmailRequest(path, accessToken, queryParams = {}) {
-  const qs = new URLSearchParams(queryParams);
+  const qs = new URLSearchParams();
+  Object.entries(queryParams).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') {
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (item !== undefined && item !== null && item !== '') {
+          qs.append(key, String(item));
+        }
+      });
+      return;
+    }
+
+    qs.append(key, String(value));
+  });
   const url = `${GMAIL_BASE}${path}${qs.size ? `?${qs.toString()}` : ''}`;
 
   const response = await fetch(url, {
@@ -176,7 +192,7 @@ async function markLastSynced(accountId) {
 }
 
 async function syncInboxMessages(account, accessToken) {
-  const searchQuery = buildAfterQuery(account.last_synced_at);
+  const searchQuery = account.last_synced_at ? buildAfterQuery(account.last_synced_at) : null;
   const collectedIds = [];
 
   let pageToken;
@@ -201,7 +217,7 @@ async function syncInboxMessages(account, accessToken) {
   for (const providerMessageId of collectedIds) {
     const message = await gmailRequest(`/users/me/messages/${providerMessageId}`, accessToken, {
       format: 'metadata',
-      metadataHeaders: ['From', 'Subject', 'Date'].join(',')
+      metadataHeaders: ['From', 'Subject', 'Date']
     });
 
     const headers = message.payload?.headers ?? [];
@@ -229,6 +245,11 @@ async function syncInboxMessages(account, accessToken) {
         updated_at = NOW()
     `;
 
+    const rawReceivedAt = headerValue(headers, 'Date');
+    const receivedAt = rawReceivedAt ? new Date(rawReceivedAt) : null;
+    const receivedAtIso =
+      receivedAt && !Number.isNaN(receivedAt.getTime()) ? receivedAt.toISOString() : null;
+
     await query(sql, [
       account.id,
       account.user_id,
@@ -237,7 +258,7 @@ async function syncInboxMessages(account, accessToken) {
       message.snippet ?? '',
       headerValue(headers, 'Subject'),
       headerValue(headers, 'From'),
-      headerValue(headers, 'Date') ? new Date(headerValue(headers, 'Date')).toISOString() : null,
+      receivedAtIso,
       message.labelIds ?? []
     ]);
   }
