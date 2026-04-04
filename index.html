@@ -772,13 +772,12 @@ async function maybeHandleInboxOAuthCallback(){
   if(handledInboxOauthCodes.has(code)||inboxOauthExchangeInFlight)return;
   handledInboxOauthCodes.add(code);
   const expectedState=sessionStorage.getItem('filo_inbox_oauth_state');
-  if(expectedState&&state&&expectedState!==state){setInboxStatus('Stato OAuth non valido. Riprova il collegamento Gmail.','error');return;}
+  if(!expectedState||!state||expectedState!==state)return;
   try{
-    inboxOauthExchangeInFlight=true;
+    sessionStorage.removeItem('filo_inbox_oauth_state');
     const redirectUri=getGmailRedirectUri();
     const res=await fetchApi('/api/v1/inbox/google/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,code,redirectUri})});
     if(!res.ok){const text=await res.text();throw new Error(text||`HTTP ${res.status}`);}
-    sessionStorage.removeItem('filo_inbox_oauth_state');
     setInboxStatus('Gmail collegata con successo. Sincronizzazione completata.','ok');
     ['code','scope','authuser','prompt','state'].forEach((k)=>url.searchParams.delete(k));
     window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));
@@ -906,32 +905,13 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 async function init() {
   const hash = window.location.hash;
   const hasToken = hash && hash.includes('access_token');
-  const shouldPreserveQueryForInboxOAuth = () => {
-    try{
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get('code');
-      const state = url.searchParams.get('state');
-      const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
-      return Boolean(code && state && expectedState && state === expectedState);
-    }catch(e){
-      return false;
-    }
-  };
-  const clearAuthArtifactsFromUrl = () => {
+  const clearUrlHashOnly = () => {
     const url = new URL(window.location.href);
-    const preserveQuery = shouldPreserveQueryForInboxOAuth();
-    window.history.replaceState({}, document.title, url.pathname + (preserveQuery ? (url.search || '') : ''));
+    const state = url.searchParams.get('state');
+    const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
+    const keepQuery = Boolean(expectedState && state && expectedState === state);
+    window.history.replaceState({}, document.title, url.pathname + (keepQuery ? (url.search || '') : ''));
   };
-  const urlNow = new URL(window.location.href);
-  const hasSupabaseAuthCode = Boolean(urlNow.searchParams.get('code')) && !shouldPreserveQueryForInboxOAuth();
-
-  if (hasSupabaseAuthCode) {
-    try {
-      await supabaseClient.auth.exchangeCodeForSession(urlNow.searchParams.get('code'));
-    } catch (exchangeErr) {
-      console.warn('Impossibile completare exchange code Supabase:', exchangeErr);
-    }
-  }
 
   // Se c'e' un token nell'URL, nascondi il login e aspetta
   if (hasToken) {
@@ -943,7 +923,7 @@ async function init() {
   supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log('Auth event:', event, session ? 'session ok' : 'no session');
     if (event === 'SIGNED_IN' && session) {
-      clearAuthArtifactsFromUrl();
+      clearUrlHashOnly();
       loginSuccess(session.user);
     }
     if (event === 'SIGNED_OUT') showLoginScreen();
@@ -969,7 +949,7 @@ async function init() {
       console.log('Attempt', attempts, '- session:', session ? 'yes' : 'no');
       if (session) {
         clearInterval(checkSession);
-        clearAuthArtifactsFromUrl();
+        clearUrlHashOnly();
         loginSuccess(session.user);
       } else if (attempts >= 10) {
         clearInterval(checkSession);
