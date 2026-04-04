@@ -586,6 +586,7 @@ async function loginSuccess(user) {
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────
 let inboxItems=[];
+let inboxSyncInFlight=false;
 const CAL=[{time:"09:00",title:"Standup team prodotto",meta:"15 min · Google Meet",done:true,hl:false},{time:"10:30",title:"Call con cliente Rossi",meta:"45 min · Zoom · 3 email non lette",done:false,hl:true},{time:"12:00",title:"Pausa pranzo",meta:"Blocco personale",done:false,hl:false},{time:"14:30",title:"Revisione roadmap Q2",meta:"60 min · Sala B · 6 partecipanti",done:false,hl:false},{time:"17:00",title:"Riepilogo team",meta:"Ricorrente ogni mercoledì",done:false,hl:false}];
 const TAG_PALETTE=[{bg:"#E8EEFB",tc:"#0D2E7A"},{bg:"#E4F4EE",tc:"#0E6B4A"},{bg:"#FDF3DC",tc:"#8A5C00"},{bg:"#FDECEC",tc:"#9B2525"},{bg:"#F0EAF8",tc:"#5B2D8E"},{bg:"#F0EDE6",tc:"#6B6860"}];
 const ENERGY_LABELS={1:"😴 A pezzi",2:"😕 Stanco",3:"😐 Nella norma",4:"😊 Bene",5:"🚀 Ottimo"};
@@ -687,6 +688,16 @@ function setInboxStatus(message,tone='info'){const el=document.getElementById('i
 async function loadInboxFromApi(){
   if(!currentUser?.id)return;
   try{
+    if(!inboxSyncInFlight){
+      inboxSyncInFlight=true;
+      try{
+        await fetchApi('/api/v1/inbox/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});
+      }catch(syncErr){
+        console.warn('Sync inbox automatica non disponibile:',syncErr);
+      }finally{
+        inboxSyncInFlight=false;
+      }
+    }
     const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=100`);
     const payload=await res.json();
     const apiMessages=Array.isArray(payload?.data)?payload.data:[];
