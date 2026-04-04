@@ -891,6 +891,10 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 async function init() {
   const hash = window.location.hash;
   const hasToken = hash && hash.includes('access_token');
+  const clearUrlHashOnly = () => {
+    const url = new URL(window.location.href);
+    window.history.replaceState({}, document.title, url.pathname + (url.search || ''));
+  };
 
   // Se c'e' un token nell'URL, nascondi il login e aspetta
   if (hasToken) {
@@ -902,7 +906,7 @@ async function init() {
   supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log('Auth event:', event, session ? 'session ok' : 'no session');
     if (event === 'SIGNED_IN' && session) {
-      window.history.replaceState({}, document.title, window.location.pathname);
+      clearUrlHashOnly();
       loginSuccess(session.user);
     }
     if (event === 'SIGNED_OUT') showLoginScreen();
@@ -928,7 +932,7 @@ async function init() {
       console.log('Attempt', attempts, '- session:', session ? 'yes' : 'no');
       if (session) {
         clearInterval(checkSession);
-        window.history.replaceState({}, document.title, window.location.pathname);
+        clearUrlHashOnly();
         loginSuccess(session.user);
       } else if (attempts >= 10) {
         clearInterval(checkSession);
