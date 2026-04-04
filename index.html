@@ -905,13 +905,26 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 async function init() {
   const hash = window.location.hash;
   const hasToken = hash && hash.includes('access_token');
+  const url = new URL(window.location.href);
   const clearUrlHashOnly = () => {
-    const url = new URL(window.location.href);
-    const state = url.searchParams.get('state');
+    const currentUrl = new URL(window.location.href);
+    const state = currentUrl.searchParams.get('state');
     const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
     const keepQuery = Boolean(expectedState && state && expectedState === state);
-    window.history.replaceState({}, document.title, url.pathname + (keepQuery ? (url.search || '') : ''));
+    window.history.replaceState({}, document.title, currentUrl.pathname + (keepQuery ? (currentUrl.search || '') : ''));
   };
+  const oauthError = url.searchParams.get('error');
+  const oauthErrorDescription = url.searchParams.get('error_description');
+  const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
+  const callbackState = url.searchParams.get('state');
+  const isInboxOauthCallback = Boolean(expectedState && callbackState && expectedState === callbackState);
+
+  if (oauthError && !isInboxOauthCallback) {
+    const detail = decodeURIComponent((oauthErrorDescription || '').replace(/\+/g, ' ')).trim();
+    const msg = detail || `OAuth error: ${oauthError}`;
+    showError(`Accesso Google non riuscito. ${msg}`);
+    window.history.replaceState({}, document.title, url.pathname);
+  }
 
   // Se c'e' un token nell'URL, nascondi il login e aspetta
   if (hasToken) {
