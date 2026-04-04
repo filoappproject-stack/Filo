@@ -468,12 +468,15 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, 
   auth: {
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: 'implicit'
+    flowType: 'pkce'
   }
 });
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 let currentUser = null;
+let didRunLoginSuccess = false;
+let inboxOauthExchangeInFlight = false;
+const handledInboxOauthCodes = new Set();
 
 
 
@@ -550,12 +553,19 @@ async function doLogout() {
 
 function showLoginScreen() {
   currentUser = null;
+  didRunLoginSuccess = false;
+  inboxOauthExchangeInFlight = false;
+  handledInboxOauthCodes.clear();
   document.getElementById('app-shell').classList.remove('active');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('checkin-overlay').style.display = 'none';
 }
 
 async function loginSuccess(user) {
+  if (didRunLoginSuccess && currentUser?.id === user?.id) {
+    return;
+  }
+  didRunLoginSuccess = true;
   currentUser = user;
   tasks = [];
   nextTaskId = 100;
@@ -759,6 +769,8 @@ async function maybeHandleInboxOAuthCallback(){
   const error=url.searchParams.get('error');
   if(error){setInboxStatus('Autorizzazione Gmail annullata o fallita.','error');url.searchParams.delete('error');url.searchParams.delete('state');window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));return;}
   if(!code)return;
+  if(handledInboxOauthCodes.has(code)||inboxOauthExchangeInFlight)return;
+  handledInboxOauthCodes.add(code);
   const expectedState=sessionStorage.getItem('filo_inbox_oauth_state');
   if(!expectedState||!state||expectedState!==state)return;
   try{
@@ -772,6 +784,8 @@ async function maybeHandleInboxOAuthCallback(){
   }catch(err){
     console.error('Errore OAuth callback inbox:',err);
     setInboxStatus('Errore durante il completamento OAuth Gmail.','error');
+  }finally{
+    inboxOauthExchangeInFlight=false;
   }
 }
 
