@@ -269,7 +269,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
     <div class="nav-item" onclick="showPage('inbox',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 2.5h13L7.5 8 1 2.5z"/><path d="M1 2.5v9a1 1 0 001 1h11a1 1 0 001-1v-9"/></svg>
       Inbox
-      <span class="nav-badge nb-red" id="nb-inbox">3</span>
+      <span class="nav-badge nb-red" id="nb-inbox">0</span>
     </div>
     <div class="nav-item" onclick="showPage('task',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="13" height="13" rx="2"/><path d="M4.5 7.5l2 2 4-4"/></svg>
@@ -320,7 +320,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
         <div class="memory-banner" id="energy-banner"></div>
         <div class="memory-banner" id="memory-banner" style="background:#E4F4EE;border-color:rgba(14,107,74,0.15);color:#0E6B4A;"></div>
         <div class="stats-grid">
-          <div class="stat-card"><div class="stat-label">Email non lette</div><div class="stat-value" id="stat-inbox">3</div><div class="stat-delta">+ 1 da ieri</div></div>
+          <div class="stat-card"><div class="stat-label">Email non lette</div><div class="stat-value" id="stat-inbox">0</div><div class="stat-delta">+ 1 da ieri</div></div>
           <div class="stat-card"><div class="stat-label">Task aperti</div><div class="stat-value" id="stat-tasks">0</div><div class="stat-delta">2 in scadenza oggi</div></div>
           <div class="stat-card"><div class="stat-label">Energia oggi</div><div class="stat-value" id="stat-energy">—</div><div class="stat-delta" id="stat-energy-sub">non rilevata</div></div>
         </div>
@@ -586,6 +586,7 @@ async function loginSuccess(user) {
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────
 let inboxItems=[];
+let inboxSyncInFlight=false;
 const CAL=[{time:"09:00",title:"Standup team prodotto",meta:"15 min · Google Meet",done:true,hl:false},{time:"10:30",title:"Call con cliente Rossi",meta:"45 min · Zoom · 3 email non lette",done:false,hl:true},{time:"12:00",title:"Pausa pranzo",meta:"Blocco personale",done:false,hl:false},{time:"14:30",title:"Revisione roadmap Q2",meta:"60 min · Sala B · 6 partecipanti",done:false,hl:false},{time:"17:00",title:"Riepilogo team",meta:"Ricorrente ogni mercoledì",done:false,hl:false}];
 const TAG_PALETTE=[{bg:"#E8EEFB",tc:"#0D2E7A"},{bg:"#E4F4EE",tc:"#0E6B4A"},{bg:"#FDF3DC",tc:"#8A5C00"},{bg:"#FDECEC",tc:"#9B2525"},{bg:"#F0EAF8",tc:"#5B2D8E"},{bg:"#F0EDE6",tc:"#6B6860"}];
 const ENERGY_LABELS={1:"😴 A pezzi",2:"😕 Stanco",3:"😐 Nella norma",4:"😊 Bene",5:"🚀 Ottimo"};
@@ -687,7 +688,17 @@ function setInboxStatus(message,tone='info'){const el=document.getElementById('i
 async function loadInboxFromApi(){
   if(!currentUser?.id)return;
   try{
-    const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=100`);
+    if(!inboxSyncInFlight){
+      inboxSyncInFlight=true;
+      try{
+        await fetchApi('/api/v1/inbox/sync',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});
+      }catch(syncErr){
+        console.warn('Sync inbox automatica non disponibile:',syncErr);
+      }finally{
+        inboxSyncInFlight=false;
+      }
+    }
+    const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=100&_t=${Date.now()}`,{cache:'no-store'});
     const payload=await res.json();
     const apiMessages=Array.isArray(payload?.data)?payload.data:[];
     inboxItems=apiMessages.map((m)=>{const from=extractSenderName(m.sender);const tone=inboxToneFromText(from);const labels=Array.isArray(m.labels)?m.labels:[];return{initials:initialsFromName(from),bg:tone.bg,tc:tone.tc,from,subj:m.subject||'(Senza oggetto)',prev:m.snippet||'',time:formatInboxTime(m.received_at),unread:labels.includes('UNREAD'),source:'Email'};});
@@ -708,8 +719,24 @@ async function connectGoogleInbox(){
   }
   const btn=document.getElementById('btn-connect-inbox');
   const original=btn?.textContent||'Collega Gmail';
-  if(btn){btn.textContent='Connessione…';btn.disabled=true;}
+  if(btn){btn.textContent='Sincronizzo…';btn.disabled=true;}
   try{
+    try{
+      const syncRes=await fetchApi('/api/v1/inbox/sync',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});
+      const syncPayload=await syncRes.json();
+      if(syncPayload?.data?.connected){
+        const imported=Number(syncPayload?.data?.importedCount||0);
+        setInboxStatus(imported>0?`Sincronizzazione completata: ${imported} email aggiornate.`:'Gmail già collegata. Nessuna nuova email da importare.','ok');
+        await loadInboxFromApi();
+        renderAll();
+        if(btn){btn.textContent=original;btn.disabled=false;}
+        return;
+      }
+    }catch(syncErr){
+      console.warn('Sync diretto inbox non disponibile, avvio OAuth:',syncErr);
+    }
+
+    if(btn){btn.textContent='Connessione…';}
     const redirectUri=getGmailRedirectUri();
     const state=`${currentUser.id}:${Date.now()}`;
     sessionStorage.setItem('filo_inbox_oauth_state',state);
@@ -733,12 +760,12 @@ async function maybeHandleInboxOAuthCallback(){
   if(error){setInboxStatus('Autorizzazione Gmail annullata o fallita.','error');url.searchParams.delete('error');url.searchParams.delete('state');window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));return;}
   if(!code)return;
   const expectedState=sessionStorage.getItem('filo_inbox_oauth_state');
-  if(expectedState&&state&&expectedState!==state){setInboxStatus('Stato OAuth non valido. Riprova il collegamento Gmail.','error');return;}
+  if(!expectedState||!state||expectedState!==state)return;
   try{
+    sessionStorage.removeItem('filo_inbox_oauth_state');
     const redirectUri=getGmailRedirectUri();
     const res=await fetchApi('/api/v1/inbox/google/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,code,redirectUri})});
     if(!res.ok){const text=await res.text();throw new Error(text||`HTTP ${res.status}`);}
-    sessionStorage.removeItem('filo_inbox_oauth_state');
     setInboxStatus('Gmail collegata con successo. Sincronizzazione completata.','ok');
     ['code','scope','authuser','prompt','state'].forEach((k)=>url.searchParams.delete(k));
     window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));
@@ -864,6 +891,13 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 async function init() {
   const hash = window.location.hash;
   const hasToken = hash && hash.includes('access_token');
+  const clearUrlHashOnly = () => {
+    const url = new URL(window.location.href);
+    const state = url.searchParams.get('state');
+    const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
+    const keepQuery = Boolean(expectedState && state && expectedState === state);
+    window.history.replaceState({}, document.title, url.pathname + (keepQuery ? (url.search || '') : ''));
+  };
 
   // Se c'e' un token nell'URL, nascondi il login e aspetta
   if (hasToken) {
@@ -875,7 +909,7 @@ async function init() {
   supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log('Auth event:', event, session ? 'session ok' : 'no session');
     if (event === 'SIGNED_IN' && session) {
-      window.history.replaceState({}, document.title, window.location.pathname);
+      clearUrlHashOnly();
       loginSuccess(session.user);
     }
     if (event === 'SIGNED_OUT') showLoginScreen();
@@ -901,7 +935,7 @@ async function init() {
       console.log('Attempt', attempts, '- session:', session ? 'yes' : 'no');
       if (session) {
         clearInterval(checkSession);
-        window.history.replaceState({}, document.title, window.location.pathname);
+        clearUrlHashOnly();
         loginSuccess(session.user);
       } else if (attempts >= 10) {
         clearInterval(checkSession);
