@@ -691,14 +691,14 @@ async function loadInboxFromApi(){
     if(!inboxSyncInFlight){
       inboxSyncInFlight=true;
       try{
-        await fetchApi('/api/v1/inbox/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});
+        await fetchApi('/api/v1/inbox/sync',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});
       }catch(syncErr){
         console.warn('Sync inbox automatica non disponibile:',syncErr);
       }finally{
         inboxSyncInFlight=false;
       }
     }
-    const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=100`);
+    const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=100&_t=${Date.now()}`,{cache:'no-store'});
     const payload=await res.json();
     const apiMessages=Array.isArray(payload?.data)?payload.data:[];
     inboxItems=apiMessages.map((m)=>{const from=extractSenderName(m.sender);const tone=inboxToneFromText(from);const labels=Array.isArray(m.labels)?m.labels:[];return{initials:initialsFromName(from),bg:tone.bg,tc:tone.tc,from,subj:m.subject||'(Senza oggetto)',prev:m.snippet||'',time:formatInboxTime(m.received_at),unread:labels.includes('UNREAD'),source:'Email'};});
@@ -722,7 +722,7 @@ async function connectGoogleInbox(){
   if(btn){btn.textContent='Sincronizzo…';btn.disabled=true;}
   try{
     try{
-      const syncRes=await fetchApi('/api/v1/inbox/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});
+      const syncRes=await fetchApi('/api/v1/inbox/sync',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});
       const syncPayload=await syncRes.json();
       if(syncPayload?.data?.connected){
         const imported=Number(syncPayload?.data?.importedCount||0);

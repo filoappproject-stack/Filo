@@ -54,6 +54,7 @@ export async function getInboxMessages(req, res) {
   }
 
   const messages = await listInboxMessages(parsed.data.userId, parsed.data.limit);
+  res.set('Cache-Control', 'no-store');
   res.json({ data: messages });
 }
 
@@ -64,5 +65,6 @@ export async function postInboxSync(req, res) {
   }
 
   const result = await syncInboxForUser(parsed.data.userId);
+  res.set('Cache-Control', 'no-store');
   res.json({ data: result });
 }
