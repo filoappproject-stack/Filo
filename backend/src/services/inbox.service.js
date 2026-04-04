@@ -129,6 +129,15 @@ async function ensureInboxSchema() {
   }
 
   await query('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
+  await query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT UNIQUE NOT NULL,
+      full_name TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
 
   await query(`
     CREATE TABLE IF NOT EXISTS inbox_accounts (
@@ -332,6 +341,48 @@ async function resolveAccountAccessToken(account) {
   return refreshed.access_token;
 }
 
+async function findGoogleAccountByUserId(userId) {
+  const sql = `
+    SELECT id, user_id, access_token, refresh_token, token_expires_at, last_synced_at
+    FROM inbox_accounts
+    WHERE user_id = $1 AND provider = 'google'
+    LIMIT 1
+  `;
+
+  const { rows } = await query(sql, [userId]);
+  return rows[0] ?? null;
+}
+
+function shouldSyncAccount(account) {
+  if (!account?.last_synced_at) {
+    return true;
+  }
+
+  const lastSyncedTs = new Date(account.last_synced_at).getTime();
+  if (Number.isNaN(lastSyncedTs)) {
+    return true;
+  }
+
+  const FIVE_MINUTES_MS = 5 * 60 * 1000;
+  return Date.now() - lastSyncedTs > FIVE_MINUTES_MS;
+}
+
+async function maybeSyncInboxForUser(userId, options = {}) {
+  const forceSync = options.force === true;
+  const account = await findGoogleAccountByUserId(userId);
+  if (!account) {
+    return { connected: false, importedCount: 0, synced: false };
+  }
+
+  if (!forceSync && !shouldSyncAccount(account)) {
+    return { connected: true, importedCount: 0, synced: false };
+  }
+
+  const accessToken = await resolveAccountAccessToken(account);
+  const importedCount = await syncInboxMessages(account, accessToken);
+  return { connected: true, importedCount, synced: true };
+}
+
 export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
   await ensureInboxSchema();
 
@@ -370,6 +421,7 @@ export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
 
 export async function listInboxMessages(userId, limit) {
   await ensureInboxSchema();
+  await maybeSyncInboxForUser(userId);
 
   const sql = `
     SELECT
@@ -390,4 +442,9 @@ export async function listInboxMessages(userId, limit) {
 
   const { rows } = await query(sql, [userId, limit]);
   return rows;
+}
+
+export async function syncInboxForUser(userId) {
+  await ensureInboxSchema();
+  return maybeSyncInboxForUser(userId, { force: true });
 }
