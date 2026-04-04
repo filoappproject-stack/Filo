@@ -708,8 +708,24 @@ async function connectGoogleInbox(){
   }
   const btn=document.getElementById('btn-connect-inbox');
   const original=btn?.textContent||'Collega Gmail';
-  if(btn){btn.textContent='Connessione…';btn.disabled=true;}
+  if(btn){btn.textContent='Sincronizzo…';btn.disabled=true;}
   try{
+    try{
+      const syncRes=await fetchApi('/api/v1/inbox/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});
+      const syncPayload=await syncRes.json();
+      if(syncPayload?.data?.connected){
+        const imported=Number(syncPayload?.data?.importedCount||0);
+        setInboxStatus(imported>0?`Sincronizzazione completata: ${imported} email aggiornate.`:'Gmail già collegata. Nessuna nuova email da importare.','ok');
+        await loadInboxFromApi();
+        renderAll();
+        if(btn){btn.textContent=original;btn.disabled=false;}
+        return;
+      }
+    }catch(syncErr){
+      console.warn('Sync diretto inbox non disponibile, avvio OAuth:',syncErr);
+    }
+
+    if(btn){btn.textContent='Connessione…';}
     const redirectUri=getGmailRedirectUri();
     const state=`${currentUser.id}:${Date.now()}`;
     sessionStorage.setItem('filo_inbox_oauth_state',state);

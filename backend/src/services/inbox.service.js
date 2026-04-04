@@ -367,14 +367,20 @@ function shouldSyncAccount(account) {
   return Date.now() - lastSyncedTs > FIVE_MINUTES_MS;
 }
 
-async function maybeSyncInboxForUser(userId) {
+async function maybeSyncInboxForUser(userId, options = {}) {
+  const forceSync = options.force === true;
   const account = await findGoogleAccountByUserId(userId);
-  if (!account || !shouldSyncAccount(account)) {
-    return;
+  if (!account) {
+    return { connected: false, importedCount: 0, synced: false };
+  }
+
+  if (!forceSync && !shouldSyncAccount(account)) {
+    return { connected: true, importedCount: 0, synced: false };
   }
 
   const accessToken = await resolveAccountAccessToken(account);
-  await syncInboxMessages(account, accessToken);
+  const importedCount = await syncInboxMessages(account, accessToken);
+  return { connected: true, importedCount, synced: true };
 }
 
 export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
@@ -436,4 +442,9 @@ export async function listInboxMessages(userId, limit) {
 
   const { rows } = await query(sql, [userId, limit]);
   return rows;
+}
+
+export async function syncInboxForUser(userId) {
+  await ensureInboxSchema();
+  return maybeSyncInboxForUser(userId, { force: true });
 }
