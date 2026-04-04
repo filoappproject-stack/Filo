@@ -922,6 +922,16 @@ async function init() {
     const preserveQuery = shouldPreserveQueryForInboxOAuth();
     window.history.replaceState({}, document.title, url.pathname + (preserveQuery ? (url.search || '') : ''));
   };
+  const urlNow = new URL(window.location.href);
+  const hasSupabaseAuthCode = Boolean(urlNow.searchParams.get('code')) && !shouldPreserveQueryForInboxOAuth();
+
+  if (hasSupabaseAuthCode) {
+    try {
+      await supabaseClient.auth.exchangeCodeForSession(urlNow.searchParams.get('code'));
+    } catch (exchangeErr) {
+      console.warn('Impossibile completare exchange code Supabase:', exchangeErr);
+    }
+  }
 
   // Se c'e' un token nell'URL, nascondi il login e aspetta
   if (hasToken) {
