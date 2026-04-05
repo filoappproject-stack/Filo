@@ -476,12 +476,8 @@ const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
 
     const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
     const matchesExpectedState = !!(expectedState && state && expectedState === state);
-    const looksLikeGmailCallback = !!(code && state && (
-      url.searchParams.has('scope') ||
-      url.searchParams.has('authuser') ||
-      (url.searchParams.get('prompt')||'').toLowerCase() === 'consent'
-    ));
-    const isInboxOAuthCallback = matchesExpectedState || looksLikeGmailCallback;
+    const hasInboxStatePrefix = typeof state === 'string' && state.startsWith('inbox:');
+    const isInboxOAuthCallback = matchesExpectedState || hasInboxStatePrefix;
     if(!isInboxOAuthCallback) return;
 
     const payload = {
@@ -790,7 +786,7 @@ async function connectGoogleInbox(){
 
     if(btn){btn.textContent='Connessione…';}
     const redirectUri=getGmailRedirectUri();
-    const state=`${currentUser.id}:${Date.now()}`;
+    const state=`inbox:${currentUser.id}:${Date.now()}`;
     sessionStorage.setItem('filo_inbox_oauth_state',state);
     const res=await fetchApi('/api/v1/inbox/google/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,redirectUri,state})});
     const payload=await res.json();
@@ -811,6 +807,9 @@ async function maybeHandleInboxOAuthCallback(){
   const code=url.searchParams.get('code')||storedPayload?.code||null;
   const state=url.searchParams.get('state')||storedPayload?.state||null;
   const error=url.searchParams.get('error')||storedPayload?.error||null;
+  const expectedState=sessionStorage.getItem('filo_inbox_oauth_state');
+  const isInboxState=!!((state&&state.startsWith('inbox:'))||(expectedState&&state&&expectedState===state));
+  if(storedPayload&&!isInboxState){sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);}
   if(error){sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);setInboxStatus('Autorizzazione Gmail annullata o fallita.','error');url.searchParams.delete('error');url.searchParams.delete('state');window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));return;}
   if(!code)return;
   if(handledInboxOAuthCodes.has(code)){
@@ -818,8 +817,7 @@ async function maybeHandleInboxOAuthCallback(){
     window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));
     return;
   }
-  const expectedState=sessionStorage.getItem('filo_inbox_oauth_state');
-  if(!expectedState||!state||expectedState!==state)return;
+  if(expectedState&&state&&expectedState!==state){setInboxStatus('Stato OAuth non valido. Riprova il collegamento Gmail.','error');return;}
   try{
     sessionStorage.removeItem('filo_inbox_oauth_state');
     const redirectUri=getGmailRedirectUri();
