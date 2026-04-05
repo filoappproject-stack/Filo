@@ -269,7 +269,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
     <div class="nav-item" onclick="showPage('inbox',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 2.5h13L7.5 8 1 2.5z"/><path d="M1 2.5v9a1 1 0 001 1h11a1 1 0 001-1v-9"/></svg>
       Inbox
-      <span class="nav-badge nb-red" id="nb-inbox">3</span>
+      <span class="nav-badge nb-red" id="nb-inbox">0</span>
     </div>
     <div class="nav-item" onclick="showPage('task',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="13" height="13" rx="2"/><path d="M4.5 7.5l2 2 4-4"/></svg>
@@ -320,7 +320,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
         <div class="memory-banner" id="energy-banner"></div>
         <div class="memory-banner" id="memory-banner" style="background:#E4F4EE;border-color:rgba(14,107,74,0.15);color:#0E6B4A;"></div>
         <div class="stats-grid">
-          <div class="stat-card"><div class="stat-label">Email non lette</div><div class="stat-value" id="stat-inbox">3</div><div class="stat-delta">+ 1 da ieri</div></div>
+          <div class="stat-card"><div class="stat-label">Email non lette</div><div class="stat-value" id="stat-inbox">0</div><div class="stat-delta">+ 1 da ieri</div></div>
           <div class="stat-card"><div class="stat-label">Task aperti</div><div class="stat-value" id="stat-tasks">0</div><div class="stat-delta">2 in scadenza oggi</div></div>
           <div class="stat-card"><div class="stat-label">Energia oggi</div><div class="stat-value" id="stat-energy">—</div><div class="stat-delta" id="stat-energy-sub">non rilevata</div></div>
         </div>
@@ -464,6 +464,34 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 // ── SUPABASE ──────────────────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://xkdniukhksfiuromnmtv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_UdRD3JHIa14slQ_0ltkNTA_0Xkdkfn4';
+const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
+
+(function preserveInboxOAuthQueryBeforeSupabaseInit(){
+  try{
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    const error = url.searchParams.get('error');
+    const state = url.searchParams.get('state');
+    if(!code && !error) return;
+
+    const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
+    const isInboxOAuthCallback = !!(expectedState && state && expectedState === state);
+    if(!isInboxOAuthCallback) return;
+
+    const payload = {
+      code,
+      error,
+      state,
+      scope: url.searchParams.get('scope'),
+      authuser: url.searchParams.get('authuser'),
+      prompt: url.searchParams.get('prompt')
+    };
+    sessionStorage.setItem(INBOX_OAUTH_QUERY_STORAGE_KEY, JSON.stringify(payload));
+    ['code','error','state','scope','authuser','prompt'].forEach((k)=>url.searchParams.delete(k));
+    window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash);
+  }catch(e){}
+})();
+
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: {
     persistSession: true,
@@ -474,6 +502,9 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, 
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 let currentUser = null;
+let authTransitionInFlight = false;
+let lastAuthenticatedUserId = null;
+const handledInboxOAuthCodes = new Set();
 
 
 
@@ -550,38 +581,51 @@ async function doLogout() {
 
 function showLoginScreen() {
   currentUser = null;
+  authTransitionInFlight = false;
+  lastAuthenticatedUserId = null;
+  handledInboxOAuthCodes.clear();
   document.getElementById('app-shell').classList.remove('active');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('checkin-overlay').style.display = 'none';
 }
 
 async function loginSuccess(user) {
-  currentUser = user;
-  tasks = [];
-  nextTaskId = 100;
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app-shell').classList.add('active');
+  if (!user?.id) return;
+  if (authTransitionInFlight) return;
+  if (currentUser?.id === user.id && document.getElementById('app-shell').classList.contains('active')) return;
 
-  const name = user.user_metadata?.full_name || user.email.split('@')[0];
-  const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-  const firstName = name.split(' ')[0];
+  authTransitionInFlight = true;
+  try {
+    currentUser = user;
+    tasks = [];
+    nextTaskId = 100;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-shell').classList.add('active');
 
-  document.getElementById('sidebar-initials').textContent = initials;
-  document.getElementById('sidebar-name').textContent = name;
-  document.getElementById('profile-av-big').textContent = initials;
-  document.getElementById('profile-name-disp').textContent = name;
-  document.getElementById('pv-name').textContent = name;
-  document.getElementById('pv-email').textContent = user.email;
-  document.getElementById('profile-role-disp').textContent = user.email;
-  document.getElementById('pf-name').value = name;
-  document.getElementById('page-title').textContent = 'Buongiorno, ' + firstName;
+    const name = user.user_metadata?.full_name || user.email.split('@')[0];
+    const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const firstName = name.split(' ')[0];
 
-  await loadTasksFromApi();
-  await maybeHandleInboxOAuthCallback();
-  await loadInboxFromApi();
-  initCheckin();
-  renderAll();
-  analyzePatterns();
+    document.getElementById('sidebar-initials').textContent = initials;
+    document.getElementById('sidebar-name').textContent = name;
+    document.getElementById('profile-av-big').textContent = initials;
+    document.getElementById('profile-name-disp').textContent = name;
+    document.getElementById('pv-name').textContent = name;
+    document.getElementById('pv-email').textContent = user.email;
+    document.getElementById('profile-role-disp').textContent = user.email;
+    document.getElementById('pf-name').value = name;
+    document.getElementById('page-title').textContent = 'Buongiorno, ' + firstName;
+
+    await loadTasksFromApi();
+    await maybeHandleInboxOAuthCallback();
+    await loadInboxFromApi();
+    initCheckin();
+    renderAll();
+    analyzePatterns();
+    lastAuthenticatedUserId = user.id;
+  } finally {
+    authTransitionInFlight = false;
+  }
 }
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────
@@ -614,6 +658,8 @@ function readApiBaseFromQuery(){try{const url=new URL(window.location.href);retu
 function getConfiguredApiBaseUrl(){const fromQuery=normalizeBaseUrl(readApiBaseFromQuery());if(fromQuery){safeLocalStorageSet(API_BASE_STORAGE_KEY,fromQuery);return fromQuery;}const fromWindow=normalizeBaseUrl(window.FILO_API_BASE_URL);if(fromWindow)return fromWindow;const fromStorage=normalizeBaseUrl(safeLocalStorageGet(API_BASE_STORAGE_KEY));if(fromStorage)return fromStorage;const fromHostMap=normalizeBaseUrl(DEFAULT_API_BASE_BY_HOST[window.location.hostname]);return fromHostMap;}
 function getGmailRedirectUri(){return normalizeBaseUrl(DEFAULT_OAUTH_REDIRECT_BY_HOST[window.location.hostname]||window.location.origin);}
 function getApiBases(){const configured=getConfiguredApiBaseUrl();return [configured,IS_LOCAL_HOST?window.location.origin:null,'http://localhost:4000'].filter((v,i,a)=>v&&a.indexOf(v)===i);}
+function clearSupabaseAuthHashFromUrl(){const hash=window.location.hash||'';if(!hash)return;const hasSupabaseTokens=/access_token|refresh_token|expires_in|token_type/.test(hash);if(!hasSupabaseTokens)return;const clean=window.location.pathname+window.location.search;window.history.replaceState({},document.title,clean);}
+function handleSupabaseAuthErrorInQuery(){try{const url=new URL(window.location.href);const authError=url.searchParams.get('error');if(!authError)return false;const authDesc=decodeURIComponent(url.searchParams.get('error_description')||'');if(authError.toLowerCase().includes('server_error')||authError.toLowerCase().includes('access_denied')){showError(authDesc?'Login Google non completato: '+authDesc:'Login Google non completato. Riprova.');}['error','error_code','error_description','code'].forEach((k)=>url.searchParams.delete(k));window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));return true;}catch(e){return false;}}
 
 function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
 function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
@@ -727,17 +773,26 @@ async function connectGoogleInbox(){
 
 async function maybeHandleInboxOAuthCallback(){
   const url=new URL(window.location.href);
-  const code=url.searchParams.get('code');
-  const state=url.searchParams.get('state');
-  const error=url.searchParams.get('error');
-  if(error){setInboxStatus('Autorizzazione Gmail annullata o fallita.','error');url.searchParams.delete('error');url.searchParams.delete('state');window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));return;}
+  let storedPayload=null;
+  try{storedPayload=JSON.parse(sessionStorage.getItem(INBOX_OAUTH_QUERY_STORAGE_KEY)||'null');}catch(e){storedPayload=null;}
+  const code=url.searchParams.get('code')||storedPayload?.code||null;
+  const state=url.searchParams.get('state')||storedPayload?.state||null;
+  const error=url.searchParams.get('error')||storedPayload?.error||null;
+  if(error){sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);setInboxStatus('Autorizzazione Gmail annullata o fallita.','error');url.searchParams.delete('error');url.searchParams.delete('state');window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));return;}
   if(!code)return;
+  if(handledInboxOAuthCodes.has(code)){
+    ['code','scope','authuser','prompt','state'].forEach((k)=>url.searchParams.delete(k));
+    window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));
+    return;
+  }
   const expectedState=sessionStorage.getItem('filo_inbox_oauth_state');
   if(expectedState&&state&&expectedState!==state){setInboxStatus('Stato OAuth non valido. Riprova il collegamento Gmail.','error');return;}
   try{
     const redirectUri=getGmailRedirectUri();
     const res=await fetchApi('/api/v1/inbox/google/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,code,redirectUri})});
     if(!res.ok){const text=await res.text();throw new Error(text||`HTTP ${res.status}`);}
+    handledInboxOAuthCodes.add(code);
+    sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
     sessionStorage.removeItem('filo_inbox_oauth_state');
     setInboxStatus('Gmail collegata con successo. Sincronizzazione completata.','ok');
     ['code','scope','authuser','prompt','state'].forEach((k)=>url.searchParams.delete(k));
@@ -745,6 +800,7 @@ async function maybeHandleInboxOAuthCallback(){
   }catch(err){
     console.error('Errore OAuth callback inbox:',err);
     setInboxStatus('Errore durante il completamento OAuth Gmail.','error');
+    sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
   }
 }
 
@@ -862,54 +918,62 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 
 // ── START ──────────────────────────────────────────────────────────────────────
 async function init() {
-  const hash = window.location.hash;
-  const hasToken = hash && hash.includes('access_token');
+  const hadSupabaseQueryError = handleSupabaseAuthErrorInQuery();
+  const hasTokenInHash = !hadSupabaseQueryError && window.location.hash && window.location.hash.includes('access_token');
+  let awaitingHashSession = !!hasTokenInHash;
+  let hashWaitTimeout = null;
 
-  // Se c'e' un token nell'URL, nascondi il login e aspetta
-  if (hasToken) {
+  if (hasTokenInHash) {
     document.getElementById('login-screen').style.display = 'none';
     document.body.style.background = '#F7F5F0';
+    hashWaitTimeout = setTimeout(() => {
+      awaitingHashSession = false;
+      if (!currentUser) showLoginScreen();
+    }, 4000);
   }
 
-  // Ascolta eventi auth
+  const applySession = async (session) => {
+    if (session?.user) {
+      awaitingHashSession = false;
+      if (hashWaitTimeout) {
+        clearTimeout(hashWaitTimeout);
+        hashWaitTimeout = null;
+      }
+      clearSupabaseAuthHashFromUrl();
+      if (lastAuthenticatedUserId !== session.user.id || !currentUser) {
+        await loginSuccess(session.user);
+      }
+      return;
+    }
+    if (awaitingHashSession) return;
+    showLoginScreen();
+  };
+
   supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log('Auth event:', event, session ? 'session ok' : 'no session');
     if (event === 'SIGNED_IN' && session) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-      loginSuccess(session.user);
+      applySession(session);
+      return;
     }
-    if (event === 'SIGNED_OUT') showLoginScreen();
-    if (event === 'INITIAL_SESSION' && !session && !hasToken) {
-      // Solo se non stiamo aspettando un token
-      document.getElementById('login-screen').style.display = 'flex';
+    if (event === 'SIGNED_OUT') {
+      supabaseClient.auth.getSession().then(({ data: { session: latestSession } }) => {
+        if (latestSession?.user) {
+          applySession(latestSession);
+          return;
+        }
+        lastAuthenticatedUserId = null;
+        applySession(null);
+      });
+      return;
+    }
+    if (event === 'INITIAL_SESSION') {
+      applySession(session);
     }
   });
 
-  // Se non c'e' token nell'URL, controlla sessione esistente normalmente
-  if (!hasToken) {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    console.log('Existing session:', session ? 'yes' : 'no');
-    if (session) loginSuccess(session.user);
-    else document.getElementById('login-screen').style.display = 'flex';
-  } else {
-    // C'e' un token — aspetta fino a 5 secondi che Supabase lo processi
-    console.log('Token found in URL, waiting for Supabase to process...');
-    let attempts = 0;
-    const checkSession = setInterval(async () => {
-      attempts++;
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      console.log('Attempt', attempts, '- session:', session ? 'yes' : 'no');
-      if (session) {
-        clearInterval(checkSession);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        loginSuccess(session.user);
-      } else if (attempts >= 10) {
-        clearInterval(checkSession);
-        console.log('Timeout - showing login');
-        document.getElementById('login-screen').style.display = 'flex';
-      }
-    }, 500);
-  }
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  console.log('Existing session:', session ? 'yes' : 'no');
+  await applySession(session);
 }
 
 init();
