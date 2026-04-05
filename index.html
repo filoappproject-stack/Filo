@@ -474,9 +474,8 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, 
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 let currentUser = null;
-let didRunLoginSuccess = false;
-let inboxOauthExchangeInFlight = false;
-const handledInboxOauthCodes = new Set();
+let authTransitionInFlight = false;
+let lastAuthenticatedUserId = null;
 
 
 
@@ -562,36 +561,42 @@ function showLoginScreen() {
 }
 
 async function loginSuccess(user) {
-  if (didRunLoginSuccess && currentUser?.id === user?.id) {
-    return;
+  if (!user?.id) return;
+  if (authTransitionInFlight) return;
+  if (currentUser?.id === user.id && document.getElementById('app-shell').classList.contains('active')) return;
+
+  authTransitionInFlight = true;
+  try {
+    currentUser = user;
+    tasks = [];
+    nextTaskId = 100;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-shell').classList.add('active');
+
+    const name = user.user_metadata?.full_name || user.email.split('@')[0];
+    const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const firstName = name.split(' ')[0];
+
+    document.getElementById('sidebar-initials').textContent = initials;
+    document.getElementById('sidebar-name').textContent = name;
+    document.getElementById('profile-av-big').textContent = initials;
+    document.getElementById('profile-name-disp').textContent = name;
+    document.getElementById('pv-name').textContent = name;
+    document.getElementById('pv-email').textContent = user.email;
+    document.getElementById('profile-role-disp').textContent = user.email;
+    document.getElementById('pf-name').value = name;
+    document.getElementById('page-title').textContent = 'Buongiorno, ' + firstName;
+
+    await loadTasksFromApi();
+    await maybeHandleInboxOAuthCallback();
+    await loadInboxFromApi();
+    initCheckin();
+    renderAll();
+    analyzePatterns();
+    lastAuthenticatedUserId = user.id;
+  } finally {
+    authTransitionInFlight = false;
   }
-  didRunLoginSuccess = true;
-  currentUser = user;
-  tasks = [];
-  nextTaskId = 100;
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app-shell').classList.add('active');
-
-  const name = user.user_metadata?.full_name || user.email.split('@')[0];
-  const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-  const firstName = name.split(' ')[0];
-
-  document.getElementById('sidebar-initials').textContent = initials;
-  document.getElementById('sidebar-name').textContent = name;
-  document.getElementById('profile-av-big').textContent = initials;
-  document.getElementById('profile-name-disp').textContent = name;
-  document.getElementById('pv-name').textContent = name;
-  document.getElementById('pv-email').textContent = user.email;
-  document.getElementById('profile-role-disp').textContent = user.email;
-  document.getElementById('pf-name').value = name;
-  document.getElementById('page-title').textContent = 'Buongiorno, ' + firstName;
-
-  await loadTasksFromApi();
-  await maybeHandleInboxOAuthCallback();
-  await loadInboxFromApi();
-  initCheckin();
-  renderAll();
-  analyzePatterns();
 }
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────
@@ -903,61 +908,43 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 
 // ── START ──────────────────────────────────────────────────────────────────────
 async function init() {
-  const hash = window.location.hash;
-  const hasToken = hash && hash.includes('access_token');
-  const clearUrlHashOnly = () => {
-    const url = new URL(window.location.href);
-    const state = url.searchParams.get('state');
-    const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
-    const keepQuery = Boolean(expectedState && state && expectedState === state);
-    window.history.replaceState({}, document.title, url.pathname + (keepQuery ? (url.search || '') : ''));
-  };
+  const hasTokenInHash = window.location.hash && window.location.hash.includes('access_token');
 
-  // Se c'e' un token nell'URL, nascondi il login e aspetta
-  if (hasToken) {
+  if (hasTokenInHash) {
     document.getElementById('login-screen').style.display = 'none';
     document.body.style.background = '#F7F5F0';
   }
 
-  // Ascolta eventi auth
+  const applySession = async (session) => {
+    if (session?.user) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      if (lastAuthenticatedUserId !== session.user.id || !currentUser) {
+        await loginSuccess(session.user);
+      }
+      return;
+    }
+    showLoginScreen();
+  };
+
   supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log('Auth event:', event, session ? 'session ok' : 'no session');
     if (event === 'SIGNED_IN' && session) {
-      clearUrlHashOnly();
-      loginSuccess(session.user);
+      applySession(session);
+      return;
     }
-    if (event === 'SIGNED_OUT') showLoginScreen();
-    if (event === 'INITIAL_SESSION' && !session && !hasToken) {
-      // Solo se non stiamo aspettando un token
-      document.getElementById('login-screen').style.display = 'flex';
+    if (event === 'SIGNED_OUT') {
+      lastAuthenticatedUserId = null;
+      showLoginScreen();
+      return;
+    }
+    if (event === 'INITIAL_SESSION') {
+      applySession(session);
     }
   });
 
-  // Se non c'e' token nell'URL, controlla sessione esistente normalmente
-  if (!hasToken) {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    console.log('Existing session:', session ? 'yes' : 'no');
-    if (session) loginSuccess(session.user);
-    else document.getElementById('login-screen').style.display = 'flex';
-  } else {
-    // C'e' un token — aspetta fino a 5 secondi che Supabase lo processi
-    console.log('Token found in URL, waiting for Supabase to process...');
-    let attempts = 0;
-    const checkSession = setInterval(async () => {
-      attempts++;
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      console.log('Attempt', attempts, '- session:', session ? 'yes' : 'no');
-      if (session) {
-        clearInterval(checkSession);
-        clearUrlHashOnly();
-        loginSuccess(session.user);
-      } else if (attempts >= 10) {
-        clearInterval(checkSession);
-        console.log('Timeout - showing login');
-        document.getElementById('login-screen').style.display = 'flex';
-      }
-    }, 500);
-  }
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  console.log('Existing session:', session ? 'yes' : 'no');
+  await applySession(session);
 }
 
 init();
