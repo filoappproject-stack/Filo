@@ -464,6 +464,34 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 // ── SUPABASE ──────────────────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://xkdniukhksfiuromnmtv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_UdRD3JHIa14slQ_0ltkNTA_0Xkdkfn4';
+const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
+
+(function preserveInboxOAuthQueryBeforeSupabaseInit(){
+  try{
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    const error = url.searchParams.get('error');
+    const state = url.searchParams.get('state');
+    if(!code && !error) return;
+
+    const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
+    const isInboxOAuthCallback = !!(expectedState && state && expectedState === state);
+    if(!isInboxOAuthCallback) return;
+
+    const payload = {
+      code,
+      error,
+      state,
+      scope: url.searchParams.get('scope'),
+      authuser: url.searchParams.get('authuser'),
+      prompt: url.searchParams.get('prompt')
+    };
+    sessionStorage.setItem(INBOX_OAUTH_QUERY_STORAGE_KEY, JSON.stringify(payload));
+    ['code','error','state','scope','authuser','prompt'].forEach((k)=>url.searchParams.delete(k));
+    window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash);
+  }catch(e){}
+})();
+
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: {
     persistSession: true,
@@ -772,10 +800,12 @@ async function connectGoogleInbox(){
 
 async function maybeHandleInboxOAuthCallback(){
   const url=new URL(window.location.href);
-  const code=url.searchParams.get('code');
-  const state=url.searchParams.get('state');
-  const error=url.searchParams.get('error');
-  if(error){setInboxStatus('Autorizzazione Gmail annullata o fallita.','error');url.searchParams.delete('error');url.searchParams.delete('state');window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));return;}
+  let storedPayload=null;
+  try{storedPayload=JSON.parse(sessionStorage.getItem(INBOX_OAUTH_QUERY_STORAGE_KEY)||'null');}catch(e){storedPayload=null;}
+  const code=url.searchParams.get('code')||storedPayload?.code||null;
+  const state=url.searchParams.get('state')||storedPayload?.state||null;
+  const error=url.searchParams.get('error')||storedPayload?.error||null;
+  if(error){sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);setInboxStatus('Autorizzazione Gmail annullata o fallita.','error');url.searchParams.delete('error');url.searchParams.delete('state');window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));return;}
   if(!code)return;
   if(handledInboxOAuthCodes.has(code)){
     ['code','scope','authuser','prompt','state'].forEach((k)=>url.searchParams.delete(k));
@@ -790,6 +820,7 @@ async function maybeHandleInboxOAuthCallback(){
     const res=await fetchApi('/api/v1/inbox/google/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,code,redirectUri})});
     if(!res.ok){const text=await res.text();throw new Error(text||`HTTP ${res.status}`);}
     handledInboxOAuthCodes.add(code);
+    sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
     sessionStorage.removeItem('filo_inbox_oauth_state');
     setInboxStatus('Gmail collegata con successo. Sincronizzazione completata.','ok');
     ['code','scope','authuser','prompt','state'].forEach((k)=>url.searchParams.delete(k));
@@ -797,8 +828,7 @@ async function maybeHandleInboxOAuthCallback(){
   }catch(err){
     console.error('Errore OAuth callback inbox:',err);
     setInboxStatus('Errore durante il completamento OAuth Gmail.','error');
-  }finally{
-    inboxOauthExchangeInFlight=false;
+    sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
   }
 }
 
