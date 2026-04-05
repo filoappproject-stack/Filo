@@ -630,6 +630,7 @@ function readApiBaseFromQuery(){try{const url=new URL(window.location.href);retu
 function getConfiguredApiBaseUrl(){const fromQuery=normalizeBaseUrl(readApiBaseFromQuery());if(fromQuery){safeLocalStorageSet(API_BASE_STORAGE_KEY,fromQuery);return fromQuery;}const fromWindow=normalizeBaseUrl(window.FILO_API_BASE_URL);if(fromWindow)return fromWindow;const fromStorage=normalizeBaseUrl(safeLocalStorageGet(API_BASE_STORAGE_KEY));if(fromStorage)return fromStorage;const fromHostMap=normalizeBaseUrl(DEFAULT_API_BASE_BY_HOST[window.location.hostname]);return fromHostMap;}
 function getGmailRedirectUri(){return normalizeBaseUrl(DEFAULT_OAUTH_REDIRECT_BY_HOST[window.location.hostname]||window.location.origin);}
 function getApiBases(){const configured=getConfiguredApiBaseUrl();return [configured,IS_LOCAL_HOST?window.location.origin:null,'http://localhost:4000'].filter((v,i,a)=>v&&a.indexOf(v)===i);}
+function clearSupabaseAuthHashFromUrl(){const hash=window.location.hash||'';if(!hash)return;const hasSupabaseTokens=/access_token|refresh_token|expires_in|token_type/.test(hash);if(!hasSupabaseTokens)return;const clean=window.location.pathname+window.location.search;window.history.replaceState({},document.title,clean);}
 
 function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
 function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
@@ -909,20 +910,32 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 // ── START ──────────────────────────────────────────────────────────────────────
 async function init() {
   const hasTokenInHash = window.location.hash && window.location.hash.includes('access_token');
+  let awaitingHashSession = !!hasTokenInHash;
+  let hashWaitTimeout = null;
 
   if (hasTokenInHash) {
     document.getElementById('login-screen').style.display = 'none';
     document.body.style.background = '#F7F5F0';
+    hashWaitTimeout = setTimeout(() => {
+      awaitingHashSession = false;
+      if (!currentUser) showLoginScreen();
+    }, 4000);
   }
 
   const applySession = async (session) => {
     if (session?.user) {
-      window.history.replaceState({}, document.title, window.location.pathname);
+      awaitingHashSession = false;
+      if (hashWaitTimeout) {
+        clearTimeout(hashWaitTimeout);
+        hashWaitTimeout = null;
+      }
+      clearSupabaseAuthHashFromUrl();
       if (lastAuthenticatedUserId !== session.user.id || !currentUser) {
         await loginSuccess(session.user);
       }
       return;
     }
+    if (awaitingHashSession) return;
     showLoginScreen();
   };
 
@@ -934,7 +947,7 @@ async function init() {
     }
     if (event === 'SIGNED_OUT') {
       lastAuthenticatedUserId = null;
-      showLoginScreen();
+      applySession(null);
       return;
     }
     if (event === 'INITIAL_SESSION') {
