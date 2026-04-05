@@ -496,7 +496,7 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, 
   auth: {
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: 'implicit'
+    flowType: 'pkce'
   }
 });
 
@@ -630,6 +630,7 @@ async function loginSuccess(user) {
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────
 let inboxItems=[];
+let inboxSyncInFlight=false;
 const CAL=[{time:"09:00",title:"Standup team prodotto",meta:"15 min · Google Meet",done:true,hl:false},{time:"10:30",title:"Call con cliente Rossi",meta:"45 min · Zoom · 3 email non lette",done:false,hl:true},{time:"12:00",title:"Pausa pranzo",meta:"Blocco personale",done:false,hl:false},{time:"14:30",title:"Revisione roadmap Q2",meta:"60 min · Sala B · 6 partecipanti",done:false,hl:false},{time:"17:00",title:"Riepilogo team",meta:"Ricorrente ogni mercoledì",done:false,hl:false}];
 const TAG_PALETTE=[{bg:"#E8EEFB",tc:"#0D2E7A"},{bg:"#E4F4EE",tc:"#0E6B4A"},{bg:"#FDF3DC",tc:"#8A5C00"},{bg:"#FDECEC",tc:"#9B2525"},{bg:"#F0EAF8",tc:"#5B2D8E"},{bg:"#F0EDE6",tc:"#6B6860"}];
 const ENERGY_LABELS={1:"😴 A pezzi",2:"😕 Stanco",3:"😐 Nella norma",4:"😊 Bene",5:"🚀 Ottimo"};
@@ -733,7 +734,17 @@ function setInboxStatus(message,tone='info'){const el=document.getElementById('i
 async function loadInboxFromApi(){
   if(!currentUser?.id)return;
   try{
-    const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=100`);
+    if(!inboxSyncInFlight){
+      inboxSyncInFlight=true;
+      try{
+        await fetchApi('/api/v1/inbox/sync',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});
+      }catch(syncErr){
+        console.warn('Sync inbox automatica non disponibile:',syncErr);
+      }finally{
+        inboxSyncInFlight=false;
+      }
+    }
+    const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=100&_t=${Date.now()}`,{cache:'no-store'});
     const payload=await res.json();
     const apiMessages=Array.isArray(payload?.data)?payload.data:[];
     inboxItems=apiMessages.map((m)=>{const from=extractSenderName(m.sender);const tone=inboxToneFromText(from);const labels=Array.isArray(m.labels)?m.labels:[];return{initials:initialsFromName(from),bg:tone.bg,tc:tone.tc,from,subj:m.subject||'(Senza oggetto)',prev:m.snippet||'',time:formatInboxTime(m.received_at),unread:labels.includes('UNREAD'),source:'Email'};});
@@ -754,8 +765,24 @@ async function connectGoogleInbox(){
   }
   const btn=document.getElementById('btn-connect-inbox');
   const original=btn?.textContent||'Collega Gmail';
-  if(btn){btn.textContent='Connessione…';btn.disabled=true;}
+  if(btn){btn.textContent='Sincronizzo…';btn.disabled=true;}
   try{
+    try{
+      const syncRes=await fetchApi('/api/v1/inbox/sync',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});
+      const syncPayload=await syncRes.json();
+      if(syncPayload?.data?.connected){
+        const imported=Number(syncPayload?.data?.importedCount||0);
+        setInboxStatus(imported>0?`Sincronizzazione completata: ${imported} email aggiornate.`:'Gmail già collegata. Nessuna nuova email da importare.','ok');
+        await loadInboxFromApi();
+        renderAll();
+        if(btn){btn.textContent=original;btn.disabled=false;}
+        return;
+      }
+    }catch(syncErr){
+      console.warn('Sync diretto inbox non disponibile, avvio OAuth:',syncErr);
+    }
+
+    if(btn){btn.textContent='Connessione…';}
     const redirectUri=getGmailRedirectUri();
     const state=`${currentUser.id}:${Date.now()}`;
     sessionStorage.setItem('filo_inbox_oauth_state',state);
@@ -786,8 +813,9 @@ async function maybeHandleInboxOAuthCallback(){
     return;
   }
   const expectedState=sessionStorage.getItem('filo_inbox_oauth_state');
-  if(expectedState&&state&&expectedState!==state){setInboxStatus('Stato OAuth non valido. Riprova il collegamento Gmail.','error');return;}
+  if(!expectedState||!state||expectedState!==state)return;
   try{
+    sessionStorage.removeItem('filo_inbox_oauth_state');
     const redirectUri=getGmailRedirectUri();
     const res=await fetchApi('/api/v1/inbox/google/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,code,redirectUri})});
     if(!res.ok){const text=await res.text();throw new Error(text||`HTTP ${res.status}`);}
