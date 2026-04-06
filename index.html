@@ -623,6 +623,7 @@ async function tryExchangeSupabaseCodeSession() {
     const { data, error } = await supabaseClient.auth.exchangeCodeForSession(code);
     if (error) {
       console.warn('OAuth code exchange fallito:', error.message || error);
+      showError('Login Google non completato. Riprova.');
       return false;
     }
 
@@ -635,6 +636,7 @@ async function tryExchangeSupabaseCodeSession() {
     return !!data?.session;
   } catch (err) {
     console.warn('Errore durante exchangeCodeForSession:', err);
+    showError('Login Google non completato. Riprova.');
     return false;
   }
 }
