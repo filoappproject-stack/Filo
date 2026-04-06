@@ -575,6 +575,70 @@ async function doLogout() {
   await supabaseClient.auth.signOut();
 }
 
+function handleSupabaseAuthErrorInQuery() {
+  let url;
+  try {
+    url = new URL(window.location.href);
+  } catch (e) {
+    return false;
+  }
+
+  const authError = url.searchParams.get('error');
+  if (!authError) return false;
+
+  const rawDescription = url.searchParams.get('error_description') || '';
+  const authDescription = decodeURIComponent(rawDescription);
+  const isExternalCodeError = authDescription.toLowerCase().includes('external code');
+
+  if (!isExternalCodeError) {
+    showError(authDescription ? `Login Google non completato: ${authDescription}` : 'Login Google non completato. Riprova.');
+  }
+
+  ['error', 'error_code', 'error_description', 'code', 'state'].forEach((key) => {
+    url.searchParams.delete(key);
+  });
+
+  window.history.replaceState(
+    {},
+    document.title,
+    url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '')
+  );
+  return true;
+}
+
+async function tryExchangeSupabaseCodeSession() {
+  let url;
+  try {
+    url = new URL(window.location.href);
+  } catch (e) {
+    return false;
+  }
+
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state') || '';
+  if (!code) return false;
+  if (state.startsWith('inbox:')) return false;
+
+  try {
+    const { data, error } = await supabaseClient.auth.exchangeCodeForSession(code);
+    if (error) {
+      console.warn('OAuth code exchange fallito:', error.message || error);
+      return false;
+    }
+
+    ['code', 'state'].forEach((k) => url.searchParams.delete(k));
+    window.history.replaceState(
+      {},
+      document.title,
+      url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '')
+    );
+    return !!data?.session;
+  } catch (err) {
+    console.warn('Errore durante exchangeCodeForSession:', err);
+    return false;
+  }
+}
+
 function showLoginScreen() {
   currentUser = null;
   authTransitionInFlight = false;
@@ -779,10 +843,10 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 
 // ── START ──────────────────────────────────────────────────────────────────────
 async function init() {
-  const hadSupabaseQueryError = handleSupabaseAuthErrorInQuery();
-  const hasTokenInHash = !hadSupabaseQueryError && window.location.hash && window.location.hash.includes('access_token');
-  let awaitingHashSession = !!hasTokenInHash;
-  let hashWaitTimeout = null;
+  await tryExchangeSupabaseCodeSession();
+  handleSupabaseAuthErrorInQuery();
+  const hash = window.location.hash;
+  const hasToken = hash && hash.includes('access_token');
 
   if (hasTokenInHash) {
     document.getElementById('login-screen').style.display = 'none';
