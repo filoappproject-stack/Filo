@@ -847,7 +847,9 @@ async function init() {
   handleSupabaseAuthErrorInQuery();
   const hash = window.location.hash;
   const hasToken = hash && hash.includes('access_token');
+  const hasTokenInHash = !!hasToken;
 
+  // Se c'e' un token nell'URL, nascondi il login e aspetta
   if (hasTokenInHash) {
     document.getElementById('login-screen').style.display = 'none';
     document.body.style.background = '#F7F5F0';
@@ -880,25 +882,38 @@ async function init() {
       applySession(session);
       return;
     }
-    if (event === 'SIGNED_OUT') {
-      supabaseClient.auth.getSession().then(({ data: { session: latestSession } }) => {
-        if (latestSession?.user) {
-          applySession(latestSession);
-          return;
-        }
-        lastAuthenticatedUserId = null;
-        applySession(null);
-      });
-      return;
-    }
-    if (event === 'INITIAL_SESSION') {
-      applySession(session);
+    if (event === 'SIGNED_OUT') showLoginScreen();
+    if (event === 'INITIAL_SESSION' && !session && !hasTokenInHash) {
+      // Solo se non stiamo aspettando un token
+      document.getElementById('login-screen').style.display = 'flex';
     }
   });
 
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  console.log('Existing session:', session ? 'yes' : 'no');
-  await applySession(session);
+  // Se non c'e' token nell'URL, controlla sessione esistente normalmente
+  if (!hasTokenInHash) {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    console.log('Existing session:', session ? 'yes' : 'no');
+    if (session) loginSuccess(session.user);
+    else document.getElementById('login-screen').style.display = 'flex';
+  } else {
+    // C'e' un token — aspetta fino a 5 secondi che Supabase lo processi
+    console.log('Token found in URL, waiting for Supabase to process...');
+    let attempts = 0;
+    const checkSession = setInterval(async () => {
+      attempts++;
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      console.log('Attempt', attempts, '- session:', session ? 'yes' : 'no');
+      if (session) {
+        clearInterval(checkSession);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        loginSuccess(session.user);
+      } else if (attempts >= 10) {
+        clearInterval(checkSession);
+        console.log('Timeout - showing login');
+        document.getElementById('login-screen').style.display = 'flex';
+      }
+    }, 500);
+  }
 }
 
 init();
