@@ -645,6 +645,7 @@ async function tryExchangeSupabaseCodeSession() {
 }
 
 function showLoginScreen() {
+  activeSessionUserId = null;
   currentUser = null;
   authTransitionInFlight = false;
   lastAuthenticatedUserId = null;
@@ -655,11 +656,16 @@ function showLoginScreen() {
 }
 
 async function loginSuccess(user) {
+  if (!user?.id) return;
+  const shell = document.getElementById('app-shell');
+  if (activeSessionUserId === user.id && shell.classList.contains('active')) return;
+
+  activeSessionUserId = user.id;
   currentUser = user;
   tasks = [];
   nextTaskId = 100;
   document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app-shell').classList.add('active');
+  shell.classList.add('active');
 
   const name = user.user_metadata?.full_name || user.email.split('@')[0];
   const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
@@ -681,9 +687,9 @@ async function loginSuccess(user) {
   analyzePatterns();
 }
 
-// â”€â”€ DATI STATICI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const INBOX=[{initials:"AR",bg:"#E8EEFB",tc:"#0D2E7A",from:"Antonio Rossi",subj:"Re: Proposta commerciale",prev:"Ho rivisto i numeri, possiamo discuterne al call...",time:"09:14",unread:true,source:"Email"},{initials:"LB",bg:"#E4F4EE",tc:"#0E6B4A",from:"Lucia Bianchi",subj:"Contratto â€” chiarimento 4.2",prev:"Prima di firmare ho bisogno di un chiarimento...",time:"08:52",unread:true,source:"Email"},{initials:"TM",bg:"#FDF3DC",tc:"#8A5C00",from:"Team Marketing",subj:"Budget Q2 â€” attesa approvazione",prev:"Documento aggiornato, serve il tuo ok...",time:"Ieri",unread:true,source:"Slack"},{initials:"GV",bg:"#E8EEFB",tc:"#0D2E7A",from:"Giuseppe Verdi",subj:"Feedback prototipo v2",prev:"Ho guardato il mockup, alcune osservazioni...",time:"Ieri",unread:false,source:"Email"},{initials:"FR",bg:"#E4F4EE",tc:"#0E6B4A",from:"Francesca Romano",subj:"Onboarding nuovo cliente",prev:"Allego la checklist per il nuovo cliente...",time:"2gg fa",unread:false,source:"Email"}];
-const CAL=[{time:"09:00",title:"Standup team prodotto",meta:"15 min Â· Google Meet",done:true,hl:false},{time:"10:30",title:"Call con cliente Rossi",meta:"45 min Â· Zoom Â· 3 email non lette",done:false,hl:true},{time:"12:00",title:"Pausa pranzo",meta:"Blocco personale",done:false,hl:false},{time:"14:30",title:"Revisione roadmap Q2",meta:"60 min Â· Sala B Â· 6 partecipanti",done:false,hl:false},{time:"17:00",title:"Riepilogo team",meta:"Ricorrente ogni mercoledÃ¬",done:false,hl:false}];
+// ── DATI STATICI ──────────────────────────────────────────────────────────────
+const INBOX=[{initials:"AR",bg:"#E8EEFB",tc:"#0D2E7A",from:"Antonio Rossi",subj:"Re: Proposta commerciale",prev:"Ho rivisto i numeri, possiamo discuterne al call...",time:"09:14",unread:true,source:"Email"},{initials:"LB",bg:"#E4F4EE",tc:"#0E6B4A",from:"Lucia Bianchi",subj:"Contratto — chiarimento 4.2",prev:"Prima di firmare ho bisogno di un chiarimento...",time:"08:52",unread:true,source:"Email"},{initials:"TM",bg:"#FDF3DC",tc:"#8A5C00",from:"Team Marketing",subj:"Budget Q2 — attesa approvazione",prev:"Documento aggiornato, serve il tuo ok...",time:"Ieri",unread:true,source:"Slack"},{initials:"GV",bg:"#E8EEFB",tc:"#0D2E7A",from:"Giuseppe Verdi",subj:"Feedback prototipo v2",prev:"Ho guardato il mockup, alcune osservazioni...",time:"Ieri",unread:false,source:"Email"},{initials:"FR",bg:"#E4F4EE",tc:"#0E6B4A",from:"Francesca Romano",subj:"Onboarding nuovo cliente",prev:"Allego la checklist per il nuovo cliente...",time:"2gg fa",unread:false,source:"Email"}];
+const CAL=[{time:"09:00",title:"Standup team prodotto",meta:"15 min · Google Meet",done:true,hl:false},{time:"10:30",title:"Call con cliente Rossi",meta:"45 min · Zoom · 3 email non lette",done:false,hl:true},{time:"12:00",title:"Pausa pranzo",meta:"Blocco personale",done:false,hl:false},{time:"14:30",title:"Revisione roadmap Q2",meta:"60 min · Sala B · 6 partecipanti",done:false,hl:false},{time:"17:00",title:"Riepilogo team",meta:"Ricorrente ogni mercoledì",done:false,hl:false}];
 const TAG_PALETTE=[{bg:"#E8EEFB",tc:"#0D2E7A"},{bg:"#E4F4EE",tc:"#0E6B4A"},{bg:"#FDF3DC",tc:"#8A5C00"},{bg:"#FDECEC",tc:"#9B2525"},{bg:"#F0EAF8",tc:"#5B2D8E"},{bg:"#F0EDE6",tc:"#6B6860"}];
 const ENERGY_LABELS={1:"ðŸ˜´ A pezzi",2:"ðŸ˜• Stanco",3:"ðŸ˜ Nella norma",4:"ðŸ˜Š Bene",5:"ðŸš€ Ottimo"};
 const ENERGY_COLORS={1:"#9B2525",2:"#8A5C00",3:"#6B6860",4:"#0E6B4A",5:"#0D2E7A"};
@@ -694,6 +700,7 @@ let nextNoteId=100;
 let currentNoteId=null;
 let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
+let activeSessionUserId=null;
 const API_BASES=[window.FILO_API_BASE_URL,window.location.origin,'http://localhost:4000'].filter((v,i,a)=>v&&a.indexOf(v)===i);
 const TASKS_CACHE_PREFIX='filo_tasks_cache_';
 
@@ -709,7 +716,8 @@ async function fetchApi(path,options={}){
       const url=base.replace(/\/$/,'')+path;
       const res=await fetch(url,options);
       if(res.ok)return res;
-      if(res.status>=500)lastError=new Error(`HTTP ${res.status} su ${url}`);
+      if(res.status<500)return res;
+      lastError=new Error(`HTTP ${res.status} su ${url}`);
     }catch(err){lastError=err;}
   }
   throw lastError||new Error('API non raggiungibile');
@@ -734,7 +742,7 @@ async function loadTasksFromApi(){
   }
 }
 
-// â”€â”€ MEMORIA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MEMORIA ───────────────────────────────────────────────────────────────────
 function mem_get(key){try{return JSON.parse(localStorage.getItem('filo_'+key));}catch(e){return null;}}
 function mem_set(key,val){try{localStorage.setItem('filo_'+key,JSON.stringify(val));}catch(e){}}
 function saveCheckinToMemory(energy,sleep,stress){const today=new Date().toISOString().slice(0,10);let h=mem_get('checkins')||[];h=h.filter(c=>c.date!==today);h.push({date:today,energy,sleep,stress});if(h.length>30)h=h.slice(-30);mem_set('checkins',h);analyzePatterns();}
@@ -755,20 +763,20 @@ function initCheckin(){const today=new Date().toISOString().slice(0,10);const ch
 // â”€â”€ MEMORIA PAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderMemoryPage(){const checkins=mem_get('checkins')||[];const patterns=analyzePatterns()||[];const eh=document.getElementById('energy-history');if(eh){if(!checkins.length)eh.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">Nessun dato ancora.</div>';else eh.innerHTML=checkins.slice(-7).reverse().map(c=>`<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-size:12px;color:#9E9B94;width:80px;">${c.date}</span><span class="energy-dot" style="background:${ENERGY_COLORS[c.energy]||'#ccc'};"></span><span style="font-size:13px;">${ENERGY_LABELS[c.energy]||c.energy}</span><span style="margin-left:auto;font-size:12px;color:#9E9B94;">sonno: ${c.sleep} Â· stress: ${c.stress}/5</span></div>`).join('');}const pl=document.getElementById('pattern-list');if(pl){if(!patterns.length)pl.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">I pattern emergono dopo qualche giorno.</div>';else pl.innerHTML=patterns.map(p=>`<div class="mem-item"><div class="mem-icon" style="background:#F0EDE6;">${p.icon}</div><div><div class="mem-label">${p.label}</div><div class="mem-sub">${p.sub}</div></div></div>`).join('');}const ch=document.getElementById('checkin-history');if(ch)ch.innerHTML=`<div style="font-size:13px;color:#9E9B94;">${checkins.length} check-in registrati${checkins.length?' Â· ultimo: '+checkins[checkins.length-1].date:''}.</div>`;const sc=document.getElementById('stat-checkins');if(sc)sc.textContent=checkins.length;const nb=document.getElementById('nb-mem');if(nb)nb.style.display=patterns.length?'':'none';}
 
-// â”€â”€ NAVIGAZIONE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","MercoledÃ¬ 18 marzo Â· 3 eventi in programma"],inbox:["Inbox unificata","5 messaggi Â· 3 non letti"],task:["Task",""],note:["Note",""],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
-function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');if(el)el.classList.add('active');const m=PAGE_META[id];const firstName=currentUser?(currentUser.user_metadata?.full_name||currentUser.email).split(' ')[0]:'';document.getElementById('page-title').textContent=id==='suggerimenti'?'Buongiorno, '+firstName:m[0];document.getElementById('page-sub').textContent=m[1];document.getElementById('topbar-actions').innerHTML='';if(id==='task')updateTaskSubtitle();if(id==='note'){showNoteList();document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">ï¼‹ Nuova nota</button>';}if(id==='memoria')renderMemoryPage();if(id==='impostazioni')updateStatsPage();renderAll();}
+// ── NAVIGAZIONE ───────────────────────────────────────────────────────────────
+const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Mercoledì 18 marzo · 3 eventi in programma"],inbox:["Inbox unificata","5 messaggi · 3 non letti"],task:["Task",""],note:["Note",""],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
+function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');if(el)el.classList.add('active');const m=PAGE_META[id];const firstName=currentUser?(currentUser.user_metadata?.full_name||currentUser.email).split(' ')[0]:'';document.getElementById('page-title').textContent=id==='suggerimenti'?'Buongiorno, '+firstName:m[0];document.getElementById('page-sub').textContent=m[1];document.getElementById('topbar-actions').innerHTML='';if(id==='task')updateTaskSubtitle();if(id==='note'){showNoteList();document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">＋ Nuova nota</button>';}if(id==='memoria')renderMemoryPage();if(id==='impostazioni')updateStatsPage();renderAll();}
 
 // â”€â”€ RENDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function tagBadge(tag,idx){const c=TAG_PALETTE[idx%TAG_PALETTE.length];return `<span style="font-size:10px;font-weight:500;padding:2px 7px;border-radius:8px;background:${c.bg};color:${c.tc};">${tag}</span>`;}
 function prioritaBadge(p){const m={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};const l={urgente:'Urgente',alta:'Alta',normale:'Normale',bassa:'Bassa'};return `<span class="badge ${m[p]||'b-normale'}">${l[p]||p}</span>`;}
 function renderAll(){renderInbox();renderCalendar();renderTasks();renderNotes();updateBadges();}
 function renderInbox(){const el=document.getElementById('inbox-list');if(!el)return;el.innerHTML=INBOX.map(item=>`<div class="inbox-item"><div style="width:7px;height:7px;border-radius:50%;background:${item.unread?'#1A4FBF':'transparent'};margin-top:6px;flex-shrink:0;"></div><div class="av" style="background:${item.bg};color:${item.tc};">${item.initials}</div><div class="inbox-body"><div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span style="font-size:13px;font-weight:500;">${item.from}</span><span style="font-size:11px;color:#9E9B94;">${item.time}</span></div><div style="font-size:13px;margin-bottom:2px;">${item.subj}</div><div style="font-size:12px;color:#9E9B94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.prev}</div></div><span class="badge ${item.source==='Slack'?'b-slack':'b-blue'}">${item.source}</span></div>`).join('');}
-function renderCalendar(){const el=document.getElementById('cal-events');if(!el)return;el.innerHTML=CAL.map(ev=>`<div class="cal-slot" style="${ev.done?'opacity:0.45':''}"><div class="cal-time">${ev.time}</div><div class="cal-block ${ev.hl?'hl':''}"><div style="font-size:13px;font-weight:500;color:${ev.hl?'#0D2E7A':'#1A1A18'};margin-bottom:3px;">${ev.title}</div><div style="font-size:12px;color:${ev.hl?'#185FA5':'#9E9B94'};">${ev.meta}</div></div>${ev.done?'<div style="font-size:11px;color:#0E6B4A;align-self:center;flex-shrink:0;">âœ“ Fatto</div>':''}</div>`).join('');}
-function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filter(t=>t.done);const ol=document.getElementById('open-tasks-list');const dl=document.getElementById('done-tasks-list');const dc=document.getElementById('done-tasks-card');if(!ol)return;document.getElementById('open-tasks-label').textContent=`Aperti (${open.length})`;ol.innerHTML=open.length===0?'<div style="font-size:13px;color:#9E9B94;padding:8px 0;font-style:italic;">Nessun task aperto!</div>':open.map(t=>`<div class="task-row"><div class="checkbox" onclick="toggleTask(${t.id})"></div><span style="font-size:13px;flex:1;">${t.label}</span>${t.scadenza?`<span style="font-size:11px;color:#9E9B94;">${t.scadenza}</span>`:''} ${prioritaBadge(t.priorita)}<button class="btn-icon" onclick="deleteTask(${t.id})">âœ•</button></div>`).join('');if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>`<div class="task-row"><div class="checkbox done" onclick="toggleTask(${t.id})"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div><span style="font-size:13px;flex:1;color:#9E9B94;text-decoration:line-through;">${t.label}</span><button class="btn-icon" onclick="deleteTask(${t.id})">âœ•</button></div>`).join('');}else dc.style.display='none';updateTaskSubtitle();updateBadges();}
+function renderCalendar(){const el=document.getElementById('cal-events');if(!el)return;el.innerHTML=CAL.map(ev=>`<div class="cal-slot" style="${ev.done?'opacity:0.45':''}"><div class="cal-time">${ev.time}</div><div class="cal-block ${ev.hl?'hl':''}"><div style="font-size:13px;font-weight:500;color:${ev.hl?'#0D2E7A':'#1A1A18'};margin-bottom:3px;">${ev.title}</div><div style="font-size:12px;color:${ev.hl?'#185FA5':'#9E9B94'};">${ev.meta}</div></div>${ev.done?'<div style="font-size:11px;color:#0E6B4A;align-self:center;flex-shrink:0;">✓ Fatto</div>':''}</div>`).join('');}
+function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filter(t=>t.done);const ol=document.getElementById('open-tasks-list');const dl=document.getElementById('done-tasks-list');const dc=document.getElementById('done-tasks-card');if(!ol)return;document.getElementById('open-tasks-label').textContent=`Aperti (${open.length})`;ol.innerHTML=open.length===0?'<div style="font-size:13px;color:#9E9B94;padding:8px 0;font-style:italic;">Nessun task aperto!</div>':open.map(t=>`<div class="task-row"><div class="checkbox" onclick="toggleTask(${t.id})"></div><span style="font-size:13px;flex:1;">${t.label}</span>${t.scadenza?`<span style="font-size:11px;color:#9E9B94;">${t.scadenza}</span>`:''} ${prioritaBadge(t.priorita)}<button class="btn-icon" onclick="deleteTask(${t.id})">✕</button></div>`).join('');if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>`<div class="task-row"><div class="checkbox done" onclick="toggleTask(${t.id})"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div><span style="font-size:13px;flex:1;color:#9E9B94;text-decoration:line-through;">${t.label}</span><button class="btn-icon" onclick="deleteTask(${t.id})">✕</button></div>`).join('');}else dc.style.display='none';updateTaskSubtitle();updateBadges();}
 function renderNotes(){const el=document.getElementById('notes-container');if(!el)return;if(!notes.length){el.innerHTML='<div class="empty-state"><div class="empty-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#9E9B94" stroke-width="1.4"><rect x="3" y="2" width="14" height="16" rx="2"/><line x1="7" y1="7" x2="13" y2="7"/><line x1="7" y1="10" x2="13" y2="10"/><line x1="7" y1="13" x2="10" y2="13"/></svg></div><div class="empty-title">Nessuna nota ancora</div></div>';return;}el.innerHTML=notes.map(n=>`<div class="note-card" onclick="openNoteEditor(${n.id})"><div style="font-size:14px;font-weight:500;margin-bottom:4px;">${n.title}</div><div style="font-size:12px;color:#6B6860;line-height:1.5;margin-bottom:8px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${n.body}</div><div style="display:flex;gap:5px;">${n.tags.map((t,j)=>tagBadge(t,j)).join('')}</div></div>`).join('');}
 function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=INBOX.filter(i=>i.unread).length;const nb=document.getElementById('nb-task');if(nb){nb.textContent=open;nb.style.display=open?'':'none';}document.getElementById('nb-inbox').textContent=unread;document.getElementById('stat-inbox').textContent=unread;document.getElementById('stat-tasks').textContent=open;}
-function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti Â· ${d} completati`;}
+function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 
 // â”€â”€ TASK CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -834,7 +842,7 @@ function openNoteEditor(id){currentNoteId=id;const n=id?notes.find(n=>n.id===id)
 function saveNote(){const title=document.getElementById('note-edit-title').value.trim()||'Nota senza titolo';const body=document.getElementById('note-edit-body').value.trim();const tags=document.getElementById('note-edit-tags').value.split(',').map(t=>t.trim()).filter(Boolean);if(currentNoteId){const n=notes.find(n=>n.id===currentNoteId);if(n){n.title=title;n.body=body;n.tags=tags;}}else{notes.push({id:nextNoteId++,title,body,tags});}showNoteList();}
 function deleteNote(id){notes=notes.filter(n=>n.id!==id);showNoteList();}
 
-// â”€â”€ RICERCA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── RICERCA ───────────────────────────────────────────────────────────────────
 function doSearch(q){const el=document.getElementById('search-results');if(!q.trim()){el.innerHTML='<div class="empty-state"><div class="empty-title">Inizia a digitare</div></div>';return;}const ql=q.toLowerCase();const rt=tasks.filter(t=>t.label.toLowerCase().includes(ql));const rn=notes.filter(n=>n.title.toLowerCase().includes(ql)||n.body.toLowerCase().includes(ql));const ri=INBOX.filter(i=>i.from.toLowerCase().includes(ql)||i.subj.toLowerCase().includes(ql));if(!rt.length&&!rn.length&&!ri.length){el.innerHTML=`<div style="text-align:center;padding:32px;color:#9E9B94;font-size:13px;">Nessun risultato per "${q}"</div>`;return;}let html='';if(rt.length)html+=`<div class="card"><div class="sec-label">Task (${rt.length})</div>${rt.map(t=>`<div class="task-row"><span style="font-size:13px;flex:1;color:${t.done?'#9E9B94':'#1A1A18'};text-decoration:${t.done?'line-through':'none'};">${t.label}</span>${prioritaBadge(t.priorita)}</div>`).join('')}</div>`;if(rn.length)html+=`<div class="card"><div class="sec-label">Note (${rn.length})</div>${rn.map(n=>`<div style="padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);cursor:pointer;" onclick="showPage('note');openNoteEditor(${n.id})"><div style="font-size:13px;font-weight:500;margin-bottom:2px;">${n.title}</div><div style="font-size:12px;color:#9E9B94;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${n.body}</div></div>`).join('')}</div>`;if(ri.length)html+=`<div class="card"><div class="sec-label">Email (${ri.length})</div>${ri.map(item=>`<div style="display:flex;gap:10px;padding:9px 0;"><div class="av" style="width:28px;height:28px;font-size:10px;background:${item.bg};color:${item.tc};">${item.initials}</div><div><div style="font-size:13px;font-weight:500;">${item.from}</div><div style="font-size:12px;color:#9E9B94;">${item.subj}</div></div></div>`).join('')}</div>`;el.innerHTML=html;}
 
 // â”€â”€ IMPOSTAZIONI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -850,19 +858,6 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 async function init() {
   await tryExchangeSupabaseCodeSession();
   handleSupabaseAuthErrorInQuery();
-  const hash = window.location.hash;
-  const hasToken = hash && hash.includes('access_token');
-  const hasTokenInHash = !!hasToken;
-
-  // Se c'e' un token nell'URL, nascondi il login e aspetta
-  if (hasTokenInHash) {
-    document.getElementById('login-screen').style.display = 'none';
-    document.body.style.background = '#F7F5F0';
-    hashWaitTimeout = setTimeout(() => {
-      awaitingHashSession = false;
-      if (!currentUser) showLoginScreen();
-    }, 4000);
-  }
 
   const applySession = async (session) => {
     if (session?.user) {
@@ -888,37 +883,16 @@ async function init() {
       return;
     }
     if (event === 'SIGNED_OUT') showLoginScreen();
-    if (event === 'INITIAL_SESSION' && !session && !hasTokenInHash) {
-      // Solo se non stiamo aspettando un token
-      document.getElementById('login-screen').style.display = 'flex';
+    if (event === 'INITIAL_SESSION') {
+      if (session) loginSuccess(session.user);
+      else showLoginScreen();
     }
   });
 
-  // Se non c'e' token nell'URL, controlla sessione esistente normalmente
-  if (!hasTokenInHash) {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    console.log('Existing session:', session ? 'yes' : 'no');
-    if (session) loginSuccess(session.user);
-    else document.getElementById('login-screen').style.display = 'flex';
-  } else {
-    // C'e' un token â€” aspetta fino a 5 secondi che Supabase lo processi
-    console.log('Token found in URL, waiting for Supabase to process...');
-    let attempts = 0;
-    const checkSession = setInterval(async () => {
-      attempts++;
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      console.log('Attempt', attempts, '- session:', session ? 'yes' : 'no');
-      if (session) {
-        clearInterval(checkSession);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        loginSuccess(session.user);
-      } else if (attempts >= 10) {
-        clearInterval(checkSession);
-        console.log('Timeout - showing login');
-        document.getElementById('login-screen').style.display = 'flex';
-      }
-    }, 500);
-  }
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  console.log('Existing session:', session ? 'yes' : 'no');
+  if (session) loginSuccess(session.user);
+  else showLoginScreen();
 }
 
 init();
