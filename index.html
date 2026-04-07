@@ -644,6 +644,37 @@ async function tryExchangeSupabaseCodeSession() {
   }
 }
 
+
+function clearSupabaseAuthHashFromUrl() {
+  if (!window.location.hash) return;
+  const cleanUrl = window.location.pathname + (window.location.search || '');
+  window.history.replaceState({}, document.title, cleanUrl);
+}
+
+async function trySetSupabaseSessionFromHash() {
+  const rawHash = window.location.hash || '';
+  if (!rawHash.includes('access_token') || !rawHash.includes('refresh_token')) return false;
+
+  const hashParams = new URLSearchParams(rawHash.replace(/^#/, ''));
+  const access_token = hashParams.get('access_token');
+  const refresh_token = hashParams.get('refresh_token');
+  if (!access_token || !refresh_token) return false;
+
+  try {
+    const { data, error } = await supabaseClient.auth.setSession({ access_token, refresh_token });
+    if (error) {
+      console.warn('Impossibile impostare la sessione da hash OAuth:', error.message || error);
+      return false;
+    }
+
+    clearSupabaseAuthHashFromUrl();
+    return !!data?.session;
+  } catch (err) {
+    console.warn('Errore durante setSession da hash OAuth:', err);
+    return false;
+  }
+}
+
 function showLoginScreen() {
   activeSessionUserId = null;
   currentUser = null;
@@ -856,25 +887,11 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
-  await tryExchangeSupabaseCodeSession();
-  handleSupabaseAuthErrorInQuery();
+  document.getElementById('login-password').value = '';
 
-  const applySession = async (session) => {
-    if (session?.user) {
-      awaitingHashSession = false;
-      if (hashWaitTimeout) {
-        clearTimeout(hashWaitTimeout);
-        hashWaitTimeout = null;
-      }
-      clearSupabaseAuthHashFromUrl();
-      if (lastAuthenticatedUserId !== session.user.id || !currentUser) {
-        await loginSuccess(session.user);
-      }
-      return;
-    }
-    if (awaitingHashSession) return;
-    showLoginScreen();
-  };
+  await tryExchangeSupabaseCodeSession();
+  await trySetSupabaseSessionFromHash();
+  handleSupabaseAuthErrorInQuery();
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log('Auth event:', event, session ? 'session ok' : 'no session');
