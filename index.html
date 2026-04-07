@@ -216,19 +216,19 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 <div class="checkin-overlay" id="checkin-overlay">
   <div class="checkin-box">
     <div class="checkin-title">Bentornato!</div>
-    <div class="checkin-sub">Come stai oggi? Ci vuole un minuto â€” lo uso per calibrare i tuoi suggerimenti.</div>
+    <div class="checkin-sub">Come stai oggi? Ci vuole un minuto &mdash; lo uso per calibrare i tuoi suggerimenti.</div>
     <div class="checkin-q">Come ti senti in questo momento?</div>
     <div class="energy-btns">
-      <div class="e-btn" onclick="selectEnergy(1,this)"><div style="font-size:18px;margin-bottom:3px;">ðŸ˜´</div>A pezzi</div>
-      <div class="e-btn" onclick="selectEnergy(2,this)"><div style="font-size:18px;margin-bottom:3px;">ðŸ˜•</div>Stanco</div>
-      <div class="e-btn" onclick="selectEnergy(3,this)"><div style="font-size:18px;margin-bottom:3px;">ðŸ˜</div>Normale</div>
-      <div class="e-btn" onclick="selectEnergy(4,this)"><div style="font-size:18px;margin-bottom:3px;">ðŸ˜Š</div>Bene</div>
-      <div class="e-btn" onclick="selectEnergy(5,this)"><div style="font-size:18px;margin-bottom:3px;">ðŸš€</div>Ottimo</div>
+      <div class="e-btn" onclick="selectEnergy(1,this)"><div style="font-size:18px;margin-bottom:3px;">&#x1F634;</div>A pezzi</div>
+      <div class="e-btn" onclick="selectEnergy(2,this)"><div style="font-size:18px;margin-bottom:3px;">&#x1F615;</div>Stanco</div>
+      <div class="e-btn" onclick="selectEnergy(3,this)"><div style="font-size:18px;margin-bottom:3px;">&#x1F610;</div>Normale</div>
+      <div class="e-btn" onclick="selectEnergy(4,this)"><div style="font-size:18px;margin-bottom:3px;">&#x1F60A;</div>Bene</div>
+      <div class="e-btn" onclick="selectEnergy(5,this)"><div style="font-size:18px;margin-bottom:3px;">&#x1F680;</div>Ottimo</div>
     </div>
     <div class="checkin-q">Hai dormito bene?</div>
     <div class="sleep-btns">
       <div class="s-btn" onclick="selectSleep('male',this)">Male</div>
-      <div class="s-btn" onclick="selectSleep('cosÃ¬ cosÃ¬',this)">CosÃ¬ cosÃ¬</div>
+      <div class="s-btn" onclick="selectSleep('così così',this)">Cos&igrave; cos&igrave;</div>
       <div class="s-btn" onclick="selectSleep('bene',this)">Bene</div>
       <div class="s-btn" onclick="selectSleep('benissimo',this)">Benissimo</div>
     </div>
@@ -561,7 +561,8 @@ async function doGoogleLogin() {
   const { error } = await supabaseClient.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin
+      redirectTo: window.location.origin,
+      scopes: 'openid email profile'
     }
   });
   if (error) {
@@ -722,7 +723,7 @@ async function loginSuccess(user) {
 const INBOX=[{initials:"AR",bg:"#E8EEFB",tc:"#0D2E7A",from:"Antonio Rossi",subj:"Re: Proposta commerciale",prev:"Ho rivisto i numeri, possiamo discuterne al call...",time:"09:14",unread:true,source:"Email"},{initials:"LB",bg:"#E4F4EE",tc:"#0E6B4A",from:"Lucia Bianchi",subj:"Contratto — chiarimento 4.2",prev:"Prima di firmare ho bisogno di un chiarimento...",time:"08:52",unread:true,source:"Email"},{initials:"TM",bg:"#FDF3DC",tc:"#8A5C00",from:"Team Marketing",subj:"Budget Q2 — attesa approvazione",prev:"Documento aggiornato, serve il tuo ok...",time:"Ieri",unread:true,source:"Slack"},{initials:"GV",bg:"#E8EEFB",tc:"#0D2E7A",from:"Giuseppe Verdi",subj:"Feedback prototipo v2",prev:"Ho guardato il mockup, alcune osservazioni...",time:"Ieri",unread:false,source:"Email"},{initials:"FR",bg:"#E4F4EE",tc:"#0E6B4A",from:"Francesca Romano",subj:"Onboarding nuovo cliente",prev:"Allego la checklist per il nuovo cliente...",time:"2gg fa",unread:false,source:"Email"}];
 const CAL=[{time:"09:00",title:"Standup team prodotto",meta:"15 min · Google Meet",done:true,hl:false},{time:"10:30",title:"Call con cliente Rossi",meta:"45 min · Zoom · 3 email non lette",done:false,hl:true},{time:"12:00",title:"Pausa pranzo",meta:"Blocco personale",done:false,hl:false},{time:"14:30",title:"Revisione roadmap Q2",meta:"60 min · Sala B · 6 partecipanti",done:false,hl:false},{time:"17:00",title:"Riepilogo team",meta:"Ricorrente ogni mercoledì",done:false,hl:false}];
 const TAG_PALETTE=[{bg:"#E8EEFB",tc:"#0D2E7A"},{bg:"#E4F4EE",tc:"#0E6B4A"},{bg:"#FDF3DC",tc:"#8A5C00"},{bg:"#FDECEC",tc:"#9B2525"},{bg:"#F0EAF8",tc:"#5B2D8E"},{bg:"#F0EDE6",tc:"#6B6860"}];
-const ENERGY_LABELS={1:"ðŸ˜´ A pezzi",2:"ðŸ˜• Stanco",3:"ðŸ˜ Nella norma",4:"ðŸ˜Š Bene",5:"ðŸš€ Ottimo"};
+const ENERGY_LABELS={1:"A pezzi",2:"Stanco",3:"Nella norma",4:"Bene",5:"Ottimo"};
 const ENERGY_COLORS={1:"#9B2525",2:"#8A5C00",3:"#6B6860",4:"#0E6B4A",5:"#0D2E7A"};
 let tasks=[];
 let nextTaskId=100;
