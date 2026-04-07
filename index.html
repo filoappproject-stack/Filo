@@ -367,7 +367,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
       <!-- TASK -->
       <div id="page-task" class="page">
         <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
-          <button class="btn-primary" id="task-form-toggle" onclick="toggleTaskForm()">ï¼‹  Nuovo task</button>
+          <button class="btn-primary" id="task-form-toggle" onclick="toggleTaskForm()">+ Nuovo task</button>
         </div>
         <div class="card highlight-border" id="task-form" style="display:none;">
           <div style="font-size:13px;font-weight:500;color:#1A1A18;margin-bottom:14px;">Aggiungi un nuovo task</div>
@@ -820,8 +820,8 @@ function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 
-// â”€â”€ TASK CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function toggleTaskForm(){const f=document.getElementById('task-form');const b=document.getElementById('task-form-toggle');const open=f.style.display==='none';f.style.display=open?'':'none';b.textContent=open?'âœ•  Annulla':'ï¼‹  Nuovo task';b.style.background=open?'#F0EDE6':'#1A4FBF';b.style.color=open?'#6B6860':'#fff';if(open)document.getElementById('new-task-label').focus();}
+// ── TASK CRUD ─────────────────────────────────────────────────────────────────
+function toggleTaskForm(){const f=document.getElementById('task-form');const b=document.getElementById('task-form-toggle');const open=f.style.display==='none';f.style.display=open?'':'none';b.textContent=open?'Annulla':'+ Nuovo task';b.style.background=open?'#F0EDE6':'#1A4FBF';b.style.color=open?'#6B6860':'#fff';if(open)document.getElementById('new-task-label').focus();}
 async function addTask() {
   const label = document.getElementById('new-task-label').value.trim();
   const priority = document.getElementById('new-task-pri').value;
