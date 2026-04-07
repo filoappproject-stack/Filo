@@ -173,7 +173,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
       </div>
       <div class="login-input-group">
         <label class="login-label">Password</label>
-        <input class="login-input" id="login-password" type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" onkeydown="if(event.key==='Enter')doEmailLogin()">
+        <input class="login-input" id="login-password" type="password" autocomplete="new-password" spellcheck="false" placeholder="••••••••" onkeydown="if(event.key==='Enter')doEmailLogin()">
       </div>
       <button class="login-btn" onclick="doEmailLogin()" id="btn-email-login">Accedi</button>
     </div>
@@ -572,6 +572,15 @@ async function doGoogleLogin() {
   }
 }
 
+function clearCorruptedPasswordAutofill() {
+  const pwd = document.getElementById('login-password');
+  if (!pwd) return;
+  const value = pwd.value || '';
+  if (!value) return;
+  const looksCorrupted = value.includes('â€¢') || /^[âÃ€�•\s]+$/.test(value);
+  if (looksCorrupted) pwd.value = '';
+}
+
 async function doLogout() {
   await supabaseClient.auth.signOut();
 }
@@ -789,7 +798,7 @@ function selectEnergy(val,el){todayEnergy=val;document.querySelectorAll('.e-btn'
 function selectSleep(val,el){todaySleep=val;document.querySelectorAll('.s-btn').forEach(b=>b.classList.remove('selected'));el.classList.add('selected');}
 function saveCheckin(){todayStress=parseInt(document.getElementById('stress-slider').value);const energy=todayEnergy||3;const sleep=todaySleep||'nella norma';saveCheckinToMemory(energy,sleep,todayStress);document.getElementById('checkin-overlay').style.display='none';updateEnergyDisplay(energy,sleep,todayStress);}
 function skipCheckin(){document.getElementById('checkin-overlay').style.display='none';}
-function updateEnergyDisplay(energy,sleep,stress){const el=document.getElementById('stat-energy');const sub=document.getElementById('stat-energy-sub');if(el){el.textContent=energy+'/5';el.style.color=ENERGY_COLORS[energy]||'#1A1A18';}if(sub)sub.textContent=ENERGY_LABELS[energy]||'';const banner=document.getElementById('energy-banner');if(banner){let msg='';if(energy<=2)msg=`<strong>Energia bassa oggi</strong> â€” suggerimenti focalizzati su 1-2 prioritÃ .`;else if(energy>=4)msg=`<strong>Ottima energia oggi</strong> â€” momento ideale per attivitÃ  impegnative.`;else msg=`<strong>Energia nella norma</strong> â€” sonno ${sleep}, stress ${stress}/5.`;banner.innerHTML=msg;banner.classList.add('active');}const checkins=mem_get('checkins')||[];const memBanner=document.getElementById('memory-banner');if(memBanner&&checkins.length>=3){const patterns=analyzePatterns()||[];if(patterns.length){memBanner.innerHTML=`<strong>Memoria:</strong> ${patterns[0].label}`;memBanner.classList.add('active');}}}
+function updateEnergyDisplay(energy,sleep,stress){const el=document.getElementById('stat-energy');const sub=document.getElementById('stat-energy-sub');if(el){el.textContent=energy+'/5';el.style.color=ENERGY_COLORS[energy]||'#1A1A18';}if(sub)sub.textContent=ENERGY_LABELS[energy]||'';const banner=document.getElementById('energy-banner');if(banner){let msg='';if(energy<=2)msg=`<strong>Energia bassa oggi</strong>. Concentrati su 1-2 priorità.`;else if(energy>=4)msg=`<strong>Ottima energia oggi.</strong> E' il momento ideale per attività impegnative.`;else msg=`<strong>Energia nella norma.</strong> Sonno ${sleep}, stress ${stress}/5.`;banner.innerHTML=msg;banner.classList.add('active');}const checkins=mem_get('checkins')||[];const memBanner=document.getElementById('memory-banner');if(memBanner&&checkins.length>=3){const patterns=analyzePatterns()||[];if(patterns.length){memBanner.innerHTML=`<strong>Memoria:</strong> ${patterns[0].label}`;memBanner.classList.add('active');}}}
 function initCheckin(){const today=new Date().toISOString().slice(0,10);const checkins=mem_get('checkins')||[];const doneToday=checkins.some(c=>c.date===today);if(!prefs.checkin||doneToday){document.getElementById('checkin-overlay').style.display='none';if(doneToday){const last=checkins[checkins.length-1];updateEnergyDisplay(last.energy,last.sleep,last.stress);}}else{document.getElementById('checkin-overlay').style.display='flex';}}
 
 // â”€â”€ MEMORIA PAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -889,11 +898,19 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
   document.getElementById('login-password').value = '';
+  clearCorruptedPasswordAutofill();
+  const pwd = document.getElementById('login-password');
+  if (pwd) {
+    pwd.addEventListener('focus', clearCorruptedPasswordAutofill);
+    setTimeout(clearCorruptedPasswordAutofill, 250);
+    setTimeout(clearCorruptedPasswordAutofill, 1000);
+  }
 
   await tryExchangeSupabaseCodeSession();
   await trySetSupabaseSessionFromHash();
   handleSupabaseAuthErrorInQuery();
 
+  // Ascolta eventi auth
   supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log('Auth event:', event, session ? 'session ok' : 'no session');
     if (event === 'SIGNED_IN' && session) {
