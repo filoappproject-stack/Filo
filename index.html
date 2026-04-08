@@ -279,6 +279,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
     <div class="nav-item" onclick="showPage('note',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="1" width="11" height="13" rx="1.5"/><line x1="4.5" y1="4.5" x2="10.5" y2="4.5"/><line x1="4.5" y1="7" x2="10.5" y2="7"/><line x1="4.5" y1="9.5" x2="8" y2="9.5"/></svg>
       Note
+      <span class="nav-badge nb-blue" id="nb-note">0</span>
     </div>
     <div class="nav-sec">Strumenti</div>
     <div class="nav-item" onclick="showPage('memoria',this)">
@@ -479,7 +480,7 @@ const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
 
     const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
     const matchesExpectedState = !!(expectedState && state && expectedState === state);
-    const hasInboxStatePrefix = typeof state === 'string' && state.startsWith('inbox:');
+    const hasInboxStatePrefix = typeof state === 'string' && state.startsWith('mailbox:');
     const isInboxOAuthCallback = matchesExpectedState || hasInboxStatePrefix;
     if(!isInboxOAuthCallback) return;
 
@@ -492,7 +493,7 @@ const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
       prompt: url.searchParams.get('prompt')
     };
     sessionStorage.setItem(INBOX_OAUTH_QUERY_STORAGE_KEY, JSON.stringify(payload));
-    ['code','error','state','scope','authuser','prompt'].forEach((k)=>url.searchParams.delete(k));
+    ['code','error','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash);
   }catch(e){}
 })();
@@ -673,8 +674,22 @@ async function tryHandleMailboxOauthCallback() {
     return false;
   }
 
-  const code = url.searchParams.get('code');
-  const state = url.searchParams.get('state');
+  let code = url.searchParams.get('code');
+  let state = url.searchParams.get('state');
+  if (!code || !isMailboxOauthState(state)) {
+    try {
+      const raw = sessionStorage.getItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
+      if (raw) {
+        const stored = JSON.parse(raw);
+        const storedCode = typeof stored?.code === 'string' ? stored.code : '';
+        const storedState = typeof stored?.state === 'string' ? stored.state : '';
+        if (storedCode && isMailboxOauthState(storedState)) {
+          code = storedCode;
+          state = storedState;
+        }
+      }
+    } catch (e) {}
+  }
   if (!code || !isMailboxOauthState(state)) return false;
 
   const userId = extractUserIdFromMailboxState(state);
@@ -698,18 +713,19 @@ async function tryHandleMailboxOauthCallback() {
     setInboxConnectionState(true, syncedAt);
     await loadInboxMessages();
 
-    url.searchParams.delete('code');
-    url.searchParams.delete('state');
-    sessionStorage.removeItem(MAILBOX_REDIRECT_URI_KEY);
+    ['code','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     window.history.replaceState(
       {},
       document.title,
       url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '')
     );
+    sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
+    sessionStorage.removeItem('filo_inbox_oauth_state');
     return true;
   } catch (err) {
     console.warn('Errore callback mailbox OAuth:', err);
     showError('Connessione mailbox non completata. Riprova.');
+    sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
     return false;
   }
 }
@@ -817,7 +833,8 @@ let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
 const LOCAL_API_BASES=['http://localhost:4000','http://127.0.0.1:4000'];
 const SHOULD_TRY_LOCAL_API=['localhost','127.0.0.1'].includes(window.location.hostname);
-const API_BASES=[window.location.origin,...(SHOULD_TRY_LOCAL_API?LOCAL_API_BASES:[])].filter((v,i,a)=>v&&a.indexOf(v)===i);
+function buildApiBaseCandidates(){const out=[];const origin=window.location.origin;out.push(origin);const configured=(window.FILO_API_BASE_URL||'').trim();if(configured)out.push(configured);if(SHOULD_TRY_LOCAL_API)out.push(...LOCAL_API_BASES);return out.filter((v,i,a)=>v&&a.indexOf(v)===i);}
+const API_BASES=buildApiBaseCandidates();
 const TASKS_CACHE_PREFIX='filo_tasks_cache_';
 const MAILBOX_REDIRECT_URI_KEY='filo_mailbox_redirect_uri';
 
@@ -948,11 +965,11 @@ function renderInbox(){const el=document.getElementById('inbox-list');if(!el)ret
 function renderCalendar(){const el=document.getElementById('cal-events');if(!el)return;el.innerHTML=CAL.map(ev=>`<div class="cal-slot" style="${ev.done?'opacity:0.45':''}"><div class="cal-time">${ev.time}</div><div class="cal-block ${ev.hl?'hl':''}"><div style="font-size:13px;font-weight:500;color:${ev.hl?'#0D2E7A':'#1A1A18'};margin-bottom:3px;">${ev.title}</div><div style="font-size:12px;color:${ev.hl?'#185FA5':'#9E9B94'};">${ev.meta}</div></div>${ev.done?'<div style="font-size:11px;color:#0E6B4A;align-self:center;flex-shrink:0;">✓ Fatto</div>':''}</div>`).join('');}
 function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filter(t=>t.done);const ol=document.getElementById('open-tasks-list');const dl=document.getElementById('done-tasks-list');const dc=document.getElementById('done-tasks-card');if(!ol)return;document.getElementById('open-tasks-label').textContent=`Aperti (${open.length})`;ol.innerHTML=open.length===0?'<div style="font-size:13px;color:#9E9B94;padding:8px 0;font-style:italic;">Nessun task aperto!</div>':open.map(t=>`<div class="task-row"><div class="checkbox" onclick="toggleTask(${t.id})"></div><span style="font-size:13px;flex:1;">${t.label}</span>${t.scadenza?`<span style="font-size:11px;color:#9E9B94;">${t.scadenza}</span>`:''} ${prioritaBadge(t.priorita)}<button class="btn-icon" onclick="deleteTask(${t.id})">✕</button></div>`).join('');if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>`<div class="task-row"><div class="checkbox done" onclick="toggleTask(${t.id})"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div><span style="font-size:13px;flex:1;color:#9E9B94;text-decoration:line-through;">${t.label}</span><button class="btn-icon" onclick="deleteTask(${t.id})">✕</button></div>`).join('');}else dc.style.display='none';updateTaskSubtitle();updateBadges();}
 function renderNotes(){const el=document.getElementById('notes-container');if(!el)return;if(!notes.length){el.innerHTML='<div class="empty-state"><div class="empty-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#9E9B94" stroke-width="1.4"><rect x="3" y="2" width="14" height="16" rx="2"/><line x1="7" y1="7" x2="13" y2="7"/><line x1="7" y1="10" x2="13" y2="10"/><line x1="7" y1="13" x2="10" y2="13"/></svg></div><div class="empty-title">Nessuna nota ancora</div></div>';return;}el.innerHTML=notes.map(n=>`<div class="note-card" onclick="openNoteEditor(${n.id})"><div style="font-size:14px;font-weight:500;margin-bottom:4px;">${n.title}</div><div style="font-size:12px;color:#6B6860;line-height:1.5;margin-bottom:8px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${n.body}</div><div style="display:flex;gap:5px;">${n.tags.map((t,j)=>tagBadge(t,j)).join('')}</div></div>`).join('');}
-function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=INBOX.filter(i=>i.unread).length;const nb=document.getElementById('nb-task');if(nb){nb.textContent=open;nb.style.display='';}document.getElementById('nb-inbox').textContent=unread;document.getElementById('stat-inbox').textContent=unread;document.getElementById('stat-tasks').textContent=open;updateInboxSubtitle();}
+function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=INBOX.filter(i=>i.unread).length;const noteCount=notes.length;const nb=document.getElementById('nb-task');if(nb){nb.textContent=open;nb.style.display='';}const noteBadge=document.getElementById('nb-note');if(noteBadge){noteBadge.textContent=noteCount;noteBadge.style.display='';}document.getElementById('nb-inbox').textContent=unread;document.getElementById('stat-inbox').textContent=unread;document.getElementById('stat-tasks').textContent=open;updateInboxSubtitle();}
 function updateInboxSubtitle(){const total=INBOX.length;const unread=INBOX.filter(i=>i.unread).length;PAGE_META.inbox[1]=mailboxConnected?`${total} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
-async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;const connect=await requestMailboxConnectUrl(currentUser.id,state);if(connect?.redirectUri)sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,connect.redirectUri);window.location.assign(connect.authUrl);}catch(err){console.warn('Errore collegamento mailbox:',err);mailboxConnectionError=`Connessione mailbox non riuscita: ${err?.message||'backend API non raggiungibile'}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
+async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);const authUrl=await requestMailboxConnectUrl(currentUser.id,state);window.location.assign(authUrl);}catch(err){console.warn('Errore collegamento mailbox:',err);mailboxConnectionError='Connessione mailbox non riuscita: backend API non raggiungibile.';showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);showError('Sincronizzazione mailbox non riuscita.');}finally{mailboxSyncInProgress=false;renderAll();}}
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────
@@ -1076,4 +1093,3 @@ init();
 </script>
 </body>
 </html>
-
