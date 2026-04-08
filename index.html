@@ -899,6 +899,7 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 async function init() {
   document.getElementById('login-password').value = '';
   clearCorruptedPasswordAutofill();
+  let isAuthBootstrapping = true;
   const pwd = document.getElementById('login-password');
   if (pwd) {
     pwd.addEventListener('focus', clearCorruptedPasswordAutofill);
@@ -914,13 +915,17 @@ async function init() {
   supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log('Auth event:', event, session ? 'session ok' : 'no session');
     if (event === 'SIGNED_IN' && session) {
-      applySession(session);
-      return;
+      window.history.replaceState({}, document.title, window.location.pathname);
+      loginSuccess(session.user);
+      isAuthBootstrapping = false;
     }
-    if (event === 'SIGNED_OUT') showLoginScreen();
+    if (event === 'SIGNED_OUT') {
+      isAuthBootstrapping = false;
+      showLoginScreen();
+    }
     if (event === 'INITIAL_SESSION') {
       if (session) loginSuccess(session.user);
-      else showLoginScreen();
+      else if (!isAuthBootstrapping) showLoginScreen();
     }
   });
 
@@ -928,6 +933,7 @@ async function init() {
   console.log('Existing session:', session ? 'yes' : 'no');
   if (session) loginSuccess(session.user);
   else showLoginScreen();
+  isAuthBootstrapping = false;
 }
 
 init();
