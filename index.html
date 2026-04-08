@@ -813,7 +813,7 @@ let currentNoteId=null;
 let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
-const API_BASES=[window.FILO_API_BASE_URL,window.location.origin,'http://localhost:4000'].filter((v,i,a)=>v&&a.indexOf(v)===i);
+const API_BASES=[window.FILO_API_BASE_URL,'http://localhost:4000',window.location.origin].filter((v,i,a)=>v&&a.indexOf(v)===i);
 const TASKS_CACHE_PREFIX='filo_tasks_cache_';
 
 function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
@@ -836,7 +836,18 @@ async function fetchApi(path,options={}){
     try{
       const url=base.replace(/\/$/,'')+path;
       const res=await fetch(url,options);
-      if(res.ok)return res;
+      if(res.ok){
+        const contentType=(res.headers.get('content-type')||'').toLowerCase();
+        if(contentType.includes('text/html')){
+          lastError=new Error(`Risposta HTML inattesa da ${url}`);
+          continue;
+        }
+        return res;
+      }
+      if(res.status===404||res.status===405){
+        lastError=new Error(`HTTP ${res.status} su ${url}`);
+        continue;
+      }
       if(res.status<500)return res;
       lastError=new Error(`HTTP ${res.status} su ${url}`);
     }catch(err){lastError=err;}
