@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Filo — Il tuo capo di stato maggiore digitale</title>
+<title>Filo - Il tuo capo di stato maggiore digitale</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -147,7 +147,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 <body>
 
 <!-- LOGIN -->
-<div class="login-screen" id="login-screen">
+<div class="login-screen" id="login-screen" style="display:none;">
   <div class="login-box">
     <div class="login-logo-mark">
       <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
@@ -173,7 +173,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
       </div>
       <div class="login-input-group">
         <label class="login-label">Password</label>
-        <input class="login-input" id="login-password" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doEmailLogin()">
+        <input class="login-input" id="login-password" type="password" autocomplete="new-password" spellcheck="false" placeholder="••••••••" onkeydown="if(event.key==='Enter')doEmailLogin()">
       </div>
       <button class="login-btn" onclick="doEmailLogin()" id="btn-email-login">Accedi</button>
     </div>
@@ -216,19 +216,19 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 <div class="checkin-overlay" id="checkin-overlay">
   <div class="checkin-box">
     <div class="checkin-title">Bentornato!</div>
-    <div class="checkin-sub">Come stai oggi? Ci vuole un minuto — lo uso per calibrare i tuoi suggerimenti.</div>
+    <div class="checkin-sub">Come stai oggi? Ci vuole un minuto &mdash; lo uso per calibrare i tuoi suggerimenti.</div>
     <div class="checkin-q">Come ti senti in questo momento?</div>
     <div class="energy-btns">
-      <div class="e-btn" onclick="selectEnergy(1,this)"><div style="font-size:18px;margin-bottom:3px;">😴</div>A pezzi</div>
-      <div class="e-btn" onclick="selectEnergy(2,this)"><div style="font-size:18px;margin-bottom:3px;">😕</div>Stanco</div>
-      <div class="e-btn" onclick="selectEnergy(3,this)"><div style="font-size:18px;margin-bottom:3px;">😐</div>Normale</div>
-      <div class="e-btn" onclick="selectEnergy(4,this)"><div style="font-size:18px;margin-bottom:3px;">😊</div>Bene</div>
-      <div class="e-btn" onclick="selectEnergy(5,this)"><div style="font-size:18px;margin-bottom:3px;">🚀</div>Ottimo</div>
+      <div class="e-btn" onclick="selectEnergy(1,this)"><div style="font-size:18px;margin-bottom:3px;">&#x1F634;</div>A pezzi</div>
+      <div class="e-btn" onclick="selectEnergy(2,this)"><div style="font-size:18px;margin-bottom:3px;">&#x1F615;</div>Stanco</div>
+      <div class="e-btn" onclick="selectEnergy(3,this)"><div style="font-size:18px;margin-bottom:3px;">&#x1F610;</div>Normale</div>
+      <div class="e-btn" onclick="selectEnergy(4,this)"><div style="font-size:18px;margin-bottom:3px;">&#x1F60A;</div>Bene</div>
+      <div class="e-btn" onclick="selectEnergy(5,this)"><div style="font-size:18px;margin-bottom:3px;">&#x1F680;</div>Ottimo</div>
     </div>
     <div class="checkin-q">Hai dormito bene?</div>
     <div class="sleep-btns">
       <div class="s-btn" onclick="selectSleep('male',this)">Male</div>
-      <div class="s-btn" onclick="selectSleep('così così',this)">Così così</div>
+      <div class="s-btn" onclick="selectSleep('così così',this)">Cos&igrave; cos&igrave;</div>
       <div class="s-btn" onclick="selectSleep('bene',this)">Bene</div>
       <div class="s-btn" onclick="selectSleep('benissimo',this)">Benissimo</div>
     </div>
@@ -269,7 +269,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
     <div class="nav-item" onclick="showPage('inbox',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 2.5h13L7.5 8 1 2.5z"/><path d="M1 2.5v9a1 1 0 001 1h11a1 1 0 001-1v-9"/></svg>
       Inbox
-      <span class="nav-badge nb-red" id="nb-inbox">3</span>
+      <span class="nav-badge nb-red" id="nb-inbox">0</span>
     </div>
     <div class="nav-item" onclick="showPage('task',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="13" height="13" rx="2"/><path d="M4.5 7.5l2 2 4-4"/></svg>
@@ -320,12 +320,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
         <div class="memory-banner" id="energy-banner"></div>
         <div class="memory-banner" id="memory-banner" style="background:#E4F4EE;border-color:rgba(14,107,74,0.15);color:#0E6B4A;"></div>
         <div class="stats-grid">
-          <div class="stat-card"><div class="stat-label">Email non lette</div><div class="stat-value" id="stat-inbox">3</div><div class="stat-delta">+ 1 da ieri</div></div>
+          <div class="stat-card"><div class="stat-label">Email non lette</div><div class="stat-value" id="stat-inbox">0</div><div class="stat-delta">0 da ieri</div></div>
           <div class="stat-card"><div class="stat-label">Task aperti</div><div class="stat-value" id="stat-tasks">0</div><div class="stat-delta">2 in scadenza oggi</div></div>
-          <div class="stat-card"><div class="stat-label">Energia oggi</div><div class="stat-value" id="stat-energy">—</div><div class="stat-delta" id="stat-energy-sub">non rilevata</div></div>
+          <div class="stat-card"><div class="stat-label">Energia oggi</div><div class="stat-value" id="stat-energy">-</div><div class="stat-delta" id="stat-energy-sub">non rilevata</div></div>
         </div>
         <div class="card">
-          <div style="font-size:13px;font-weight:500;color:#6B6860;margin-bottom:12px;">Raccontami la tua giornata — ci penso io a ordinarla</div>
+          <div style="font-size:13px;font-weight:500;color:#6B6860;margin-bottom:12px;">Raccontami la tua giornata e ci penso io a ordinarla</div>
           <div class="grid-2" style="margin-bottom:14px;">
             <div>
               <div class="field-label">Cosa hai in agenda oggi?</div>
@@ -363,24 +363,27 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 
       <!-- INBOX -->
       <div id="page-inbox" class="page">
-        <div style="display:flex;justify-content:flex-end;margin-bottom:14px;gap:8px;">
-          <button class="btn-primary" id="btn-connect-inbox" onclick="connectGoogleInbox()">Collega Gmail</button>
+        <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <div style="font-size:13px;color:#6B6860;" id="inbox-connection-state">Mailbox non collegata</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-ghost" id="inbox-connect-btn" onclick="connectMailbox()">Collega mailbox</button>
+            <button class="btn-primary" id="inbox-sync-btn" onclick="syncMailbox()" style="display:none;">Sincronizza</button>
+          </div>
         </div>
-        <div class="card" id="inbox-status" style="display:none;margin-bottom:10px;padding:10px 14px;font-size:12px;"></div>
         <div class="card" style="padding:4px 18px;" id="inbox-list"></div>
       </div>
 
       <!-- TASK -->
       <div id="page-task" class="page">
         <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
-          <button class="btn-primary" id="task-form-toggle" onclick="toggleTaskForm()">＋  Nuovo task</button>
+          <button class="btn-primary" id="task-form-toggle" onclick="toggleTaskForm()">+ Nuovo task</button>
         </div>
         <div class="card highlight-border" id="task-form" style="display:none;">
           <div style="font-size:13px;font-weight:500;color:#1A1A18;margin-bottom:14px;">Aggiungi un nuovo task</div>
           <div style="margin-bottom:12px;"><div class="field-label">Descrizione *</div><input id="new-task-label" class="f-input" placeholder="Es: Chiamare il fornitore..." onkeydown="if(event.key==='Enter')addTask()"></div>
           <div class="grid-2">
             <div><div class="field-label">Priorità</div><select id="new-task-pri" class="f-select"><option value="urgente">Urgente</option><option value="alta">Alta</option><option value="normale" selected>Normale</option><option value="bassa">Bassa</option></select></div>
-            <div><div class="field-label">Scadenza (opzionale)</div><input id="new-task-scad" class="f-input" placeholder="Es: Oggi, Venerdì..."></div>
+            <div><div class="field-label">Scadenza (opzionale)</div><input id="new-task-scad" class="f-input" placeholder="Es: Oggi, Venerd&igrave;..."></div>
           </div>
           <div class="form-actions"><button class="btn-primary" onclick="addTask()">Aggiungi task</button><button class="btn-ghost" onclick="toggleTaskForm()">Annulla</button></div>
         </div>
@@ -429,8 +432,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
             </div>
           </div>
           <div id="profile-view">
-            <div class="row"><span class="row-label">Nome</span><span class="row-value" id="pv-name">—</span></div>
-            <div class="row"><span class="row-label">Email</span><span class="row-value" id="pv-email">—</span></div>
+            <div class="row"><span class="row-label">Nome</span><span class="row-value" id="pv-name">-</span></div>
+            <div class="row"><span class="row-label">Email</span><span class="row-value" id="pv-email">-</span></div>
             <div class="row"><span class="row-label">Lingua</span><span class="row-value" id="pv-lingua">Italiano</span></div>
           </div>
           <div id="profile-form" style="display:none;">
@@ -468,7 +471,7 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, 
   auth: {
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: 'implicit'
+    flowType: 'pkce'
   }
 });
 
@@ -529,12 +532,13 @@ async function doRegister() {
 
 async function doGoogleLogin() {
   const btn = document.getElementById('btn-google');
-  btn.innerHTML = '<span class="spinning">↻</span> Connessione a Google…';
+  btn.innerHTML = '<span class="spinning">↻</span> Connessione a Google...';
   btn.disabled = true;
   const { error } = await supabaseClient.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin
+      redirectTo: window.location.origin,
+      scopes: 'openid email profile'
     }
   });
   if (error) {
@@ -544,11 +548,170 @@ async function doGoogleLogin() {
   }
 }
 
+function clearCorruptedPasswordAutofill() {
+  const pwd = document.getElementById('login-password');
+  if (!pwd) return;
+  const value = pwd.value || '';
+  if (!value) return;
+  const looksCorrupted = value.includes('â€¢') || /^[âÃ€�•\s]+$/.test(value);
+  if (looksCorrupted) pwd.value = '';
+}
+
 async function doLogout() {
   await supabaseClient.auth.signOut();
 }
 
+function handleSupabaseAuthErrorInQuery() {
+  let url;
+  try {
+    url = new URL(window.location.href);
+  } catch (e) {
+    return false;
+  }
+
+  const authError = url.searchParams.get('error');
+  if (!authError) return false;
+
+  const rawDescription = url.searchParams.get('error_description') || '';
+  let authDescription = rawDescription;
+  try {
+    authDescription = decodeURIComponent(rawDescription);
+  } catch (err) {
+    authDescription = rawDescription;
+  }
+  const isExternalCodeError = authDescription.toLowerCase().includes('external code');
+
+  if (!isExternalCodeError) {
+    showError(authDescription ? `Login Google non completato: ${authDescription}` : 'Login Google non completato. Riprova.');
+  }
+
+  ['error', 'error_code', 'error_description', 'code', 'state'].forEach((key) => {
+    url.searchParams.delete(key);
+  });
+
+  window.history.replaceState(
+    {},
+    document.title,
+    url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '')
+  );
+  return true;
+}
+
+async function tryExchangeSupabaseCodeSession() {
+  let url;
+  try {
+    url = new URL(window.location.href);
+  } catch (e) {
+    return false;
+  }
+
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  if (!code) return false;
+  if (isMailboxOauthState(state)) return false;
+
+  try {
+    const { data, error } = await supabaseClient.auth.exchangeCodeForSession(code);
+    if (error) {
+      console.warn('OAuth code exchange fallito:', error.message || error);
+      showError('Login Google non completato. Riprova.');
+      return false;
+    }
+
+    ['code', 'state'].forEach((k) => url.searchParams.delete(k));
+    window.history.replaceState(
+      {},
+      document.title,
+      url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '')
+    );
+    return !!data?.session;
+  } catch (err) {
+    console.warn('Errore durante exchangeCodeForSession:', err);
+    showError('Login Google non completato. Riprova.');
+    return false;
+  }
+}
+
+async function tryHandleMailboxOauthCallback() {
+  let url;
+  try {
+    url = new URL(window.location.href);
+  } catch (e) {
+    return false;
+  }
+
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  if (!code || !isMailboxOauthState(state)) return false;
+
+  const userId = extractUserIdFromMailboxState(state);
+  if (!userId) return false;
+
+  try {
+    const res = await fetchApi('/api/v1/inbox/google/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, code, redirectUri: getInboxConnectRedirectUri() })
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`POST /inbox/google/exchange fallita (${res.status}): ${txt}`);
+    }
+
+    const payload = await res.json();
+    const syncedAt = payload?.data?.account?.last_synced_at || new Date().toISOString();
+    setInboxConnectionState(true, syncedAt);
+    await loadInboxMessages();
+
+    url.searchParams.delete('code');
+    url.searchParams.delete('state');
+    window.history.replaceState(
+      {},
+      document.title,
+      url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '')
+    );
+    return true;
+  } catch (err) {
+    console.warn('Errore callback mailbox OAuth:', err);
+    showError('Connessione mailbox non completata. Riprova.');
+    return false;
+  }
+}
+
+
+function clearSupabaseAuthHashFromUrl() {
+  if (!window.location.hash) return;
+  const cleanUrl = window.location.pathname + (window.location.search || '');
+  window.history.replaceState({}, document.title, cleanUrl);
+}
+
+async function trySetSupabaseSessionFromHash() {
+  const rawHash = window.location.hash || '';
+  if (!rawHash.includes('access_token') || !rawHash.includes('refresh_token')) return false;
+
+  const hashParams = new URLSearchParams(rawHash.replace(/^#/, ''));
+  const access_token = hashParams.get('access_token');
+  const refresh_token = hashParams.get('refresh_token');
+  if (!access_token || !refresh_token) return false;
+
+  try {
+    const { data, error } = await supabaseClient.auth.setSession({ access_token, refresh_token });
+    if (error) {
+      console.warn('Impossibile impostare la sessione da hash OAuth:', error.message || error);
+      return false;
+    }
+
+    clearSupabaseAuthHashFromUrl();
+    return !!data?.session;
+  } catch (err) {
+    console.warn('Errore durante setSession da hash OAuth:', err);
+    return false;
+  }
+}
+
 function showLoginScreen() {
+  activeSessionUserId = null;
   currentUser = null;
   document.getElementById('app-shell').classList.remove('active');
   document.getElementById('login-screen').style.display = 'flex';
@@ -556,11 +719,16 @@ function showLoginScreen() {
 }
 
 async function loginSuccess(user) {
+  if (!user?.id) return;
+  const shell = document.getElementById('app-shell');
+  if (activeSessionUserId === user.id && shell.classList.contains('active')) return;
+
+  activeSessionUserId = user.id;
   currentUser = user;
   tasks = [];
   nextTaskId = 100;
   document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app-shell').classList.add('active');
+  shell.classList.add('active');
 
   const name = user.user_metadata?.full_name || user.email.split('@')[0];
   const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
@@ -577,86 +745,78 @@ async function loginSuccess(user) {
   document.getElementById('page-title').textContent = 'Buongiorno, ' + firstName;
 
   await loadTasksFromApi();
-  await maybeHandleInboxOAuthCallback();
-  await loadInboxFromApi();
+  try{
+    await loadInboxMessages();
+    if(INBOX.length){
+      setInboxConnectionState(true,Date.now());
+    }
+  }catch(err){
+    setInboxConnectionState(false,null);
+    INBOX.length=0;
+  }
   initCheckin();
   renderAll();
   analyzePatterns();
 }
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────
-let inboxItems=[];
+const INBOX=[];
 const CAL=[{time:"09:00",title:"Standup team prodotto",meta:"15 min · Google Meet",done:true,hl:false},{time:"10:30",title:"Call con cliente Rossi",meta:"45 min · Zoom · 3 email non lette",done:false,hl:true},{time:"12:00",title:"Pausa pranzo",meta:"Blocco personale",done:false,hl:false},{time:"14:30",title:"Revisione roadmap Q2",meta:"60 min · Sala B · 6 partecipanti",done:false,hl:false},{time:"17:00",title:"Riepilogo team",meta:"Ricorrente ogni mercoledì",done:false,hl:false}];
 const TAG_PALETTE=[{bg:"#E8EEFB",tc:"#0D2E7A"},{bg:"#E4F4EE",tc:"#0E6B4A"},{bg:"#FDF3DC",tc:"#8A5C00"},{bg:"#FDECEC",tc:"#9B2525"},{bg:"#F0EAF8",tc:"#5B2D8E"},{bg:"#F0EDE6",tc:"#6B6860"}];
-const ENERGY_LABELS={1:"😴 A pezzi",2:"😕 Stanco",3:"😐 Nella norma",4:"😊 Bene",5:"🚀 Ottimo"};
+const ENERGY_LABELS={1:"A pezzi",2:"Stanco",3:"Nella norma",4:"Bene",5:"Ottimo"};
 const ENERGY_COLORS={1:"#9B2525",2:"#8A5C00",3:"#6B6860",4:"#0E6B4A",5:"#0D2E7A"};
 let tasks=[];
 let nextTaskId=100;
-let notes=[{id:1,title:"Budget Q2 — bozza",body:"Marketing +15%, sviluppo stabile, ops da rivedere.",tags:["Budget","Q2"]},{id:2,title:"Note call Rossi — 10 marzo",body:"Vuole sconto 8% su volume. Ordine min. 500 unità.",tags:["Clienti","Vendite"]},{id:3,title:"Idee roadmap H2",body:"Onboarding semplificato, dashboard analytics v2.",tags:["Prodotto"]},{id:4,title:"Riflessioni pricing",body:"Seat-based vs usage-based. Competitor cambiato a gennaio.",tags:["Strategia"]}];
+let mailboxConnected=false;
+let mailboxLastSync=null;
+let mailboxSyncInProgress=false;
+let mailboxConnectionError='';
+let notes=[{id:1,title:"Budget Q2 - bozza",body:"Marketing +15%, sviluppo stabile, ops da rivedere.",tags:["Budget","Q2"]},{id:2,title:"Note call Rossi - 10 marzo",body:"Vuole sconto 8% su volume. Ordine min. 500 unità.",tags:["Clienti","Vendite"]},{id:3,title:"Idee roadmap H2",body:"Onboarding semplificato, dashboard analytics v2.",tags:["Prodotto"]},{id:4,title:"Riflessioni pricing",body:"Seat-based vs usage-based. Competitor cambiato a gennaio.",tags:["Strategia"]}];
 let nextNoteId=100;
 let currentNoteId=null;
 let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
-const IS_LOCAL_HOST=/(^localhost$|^127\.0\.0\.1$)/.test(window.location.hostname);
-const API_BASE_STORAGE_KEY='filo_api_base_url';
-const DEFAULT_API_BASE_BY_HOST={
-  'filo-new.vercel.app':'https://filo-backend-zgx8.onrender.com'
-};
-const DEFAULT_OAUTH_REDIRECT_BY_HOST={
-  'filo-new.vercel.app':'https://filo-new.vercel.app'
-};
+let activeSessionUserId=null;
+const API_BASES=[window.FILO_API_BASE_URL,'http://localhost:4000',window.location.origin].filter((v,i,a)=>v&&a.indexOf(v)===i);
 const TASKS_CACHE_PREFIX='filo_tasks_cache_';
-
-function safeLocalStorageGet(key){try{return localStorage.getItem(key);}catch(e){return null;}}
-function safeLocalStorageSet(key,value){try{localStorage.setItem(key,value);}catch(e){}}
-function normalizeBaseUrl(raw){const value=(raw||'').trim();if(!value)return '';return value.replace(/\/$/,'');}
-function readApiBaseFromQuery(){try{const url=new URL(window.location.href);return url.searchParams.get('apiBase')||'';}catch(e){return '';}}
-function getConfiguredApiBaseUrl(){const fromQuery=normalizeBaseUrl(readApiBaseFromQuery());if(fromQuery){safeLocalStorageSet(API_BASE_STORAGE_KEY,fromQuery);return fromQuery;}const fromWindow=normalizeBaseUrl(window.FILO_API_BASE_URL);if(fromWindow)return fromWindow;const fromStorage=normalizeBaseUrl(safeLocalStorageGet(API_BASE_STORAGE_KEY));if(fromStorage)return fromStorage;const fromHostMap=normalizeBaseUrl(DEFAULT_API_BASE_BY_HOST[window.location.hostname]);return fromHostMap;}
-function getGmailRedirectUri(){return normalizeBaseUrl(DEFAULT_OAUTH_REDIRECT_BY_HOST[window.location.hostname]||window.location.origin);}
-function getApiBases(){const configured=getConfiguredApiBaseUrl();return [configured,IS_LOCAL_HOST?window.location.origin:null,'http://localhost:4000'].filter((v,i,a)=>v&&a.indexOf(v)===i);}
 
 function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
 function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
 function saveTasksToCache(){const key=getTaskCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(tasks));}catch(e){}}
 function loadTasksFromCache(){const key=getTaskCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
+function getInboxConnectRedirectUri(){return `${window.location.origin}${window.location.pathname}`;}
+function getInboxStatePrefix(){return 'mailbox:';}
+function isMailboxOauthState(state){return typeof state==='string'&&state.startsWith(getInboxStatePrefix());}
+function extractUserIdFromMailboxState(state){if(!isMailboxOauthState(state))return null;const [,userId]=state.split(':');return userId||null;}
+function formatInboxTime(ts){if(!ts)return '';const d=new Date(ts);if(Number.isNaN(d.getTime()))return '';return d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});}
+function avatarFromSender(sender){const raw=(sender||'').replace(/<[^>]+>/g,'').replace(/["']/g,'').trim();const display=raw||'Sconosciuto';const initials=display.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'?';return{display,initials};}
+function mapInboxMessageToUi(item){const labels=Array.isArray(item?.labels)?item.labels:[];const unread=labels.includes('UNREAD');const sender=avatarFromSender(item?.sender);return{id:item?.id,from:sender.display,subj:item?.subject||'(Senza oggetto)',prev:item?.snippet||'',time:formatInboxTime(item?.received_at||item?.created_at),source:'Email',initials:sender.initials,bg:'#E8EEFB',tc:'#0D2E7A',unread};}
+async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));}
+function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)mailboxConnectionError='';}
 
 async function fetchApi(path,options={}){
-  let lastNetworkError=null;
-  let lastHttpError=null;
-  for(const base of getApiBases()){
+  let lastError=null;
+  for(const base of API_BASES){
     try{
       const url=base.replace(/\/$/,'')+path;
       const res=await fetch(url,options);
-      if(res.ok)return res;
-      let details='';
-      try{
-        const body=await res.clone().json();
-        details=body?.message||body?.error||JSON.stringify(body);
-      }catch(e){
-        try{details=await res.text();}catch(e2){details='';}
+      if(res.ok){
+        const contentType=(res.headers.get('content-type')||'').toLowerCase();
+        if(contentType.includes('text/html')){
+          lastError=new Error(`Risposta HTML inattesa da ${url}`);
+          continue;
+        }
+        return res;
       }
-      const compact=String(details||'').trim().slice(0,240);
-      lastHttpError=new Error(`HTTP ${res.status} su ${url}${compact?` — ${compact}`:''}`);
-    }catch(err){lastNetworkError=err;}
+      if(res.status===404||res.status===405){
+        lastError=new Error(`HTTP ${res.status} su ${url}`);
+        continue;
+      }
+      if(res.status<500)return res;
+      lastError=new Error(`HTTP ${res.status} su ${url}`);
+    }catch(err){lastError=err;}
   }
-  throw lastHttpError||lastNetworkError||new Error('API non raggiungibile');
-}
-
-function explainInboxConnectError(err){
-  const msg=(err?.message||'').toLowerCase();
-  if(msg.includes('config google oauth mancante')||msg.includes('google_client_id')){
-    return 'Configurazione backend incompleta: imposta GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET.';
-  }
-  if(msg.includes('http 404')){
-    return 'Endpoint inbox non trovato: verifica FILO_API_BASE_URL e deploy del backend.';
-  }
-  if(msg.includes('http 405')){
-    return 'Endpoint API non disponibile su questo dominio: imposta FILO_API_BASE_URL verso il backend.';
-  }
-  if(msg.includes('failed to fetch')||msg.includes('api non raggiungibile')){
-    return 'Backend non raggiungibile: verifica URL API e CORS.';
-  }
-  return err?.message||'Connessione Gmail non riuscita.';
+  throw lastError||new Error('API non raggiungibile');
 }
 
 async function loadTasksFromApi(){
@@ -678,76 +838,6 @@ async function loadTasksFromApi(){
   }
 }
 
-function formatInboxTime(iso){if(!iso)return '—';const d=new Date(iso);if(Number.isNaN(d.getTime()))return '—';const now=new Date();if(d.toDateString()===now.toDateString())return d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});return d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'});}
-function extractSenderName(sender){if(!sender)return 'Sconosciuto';const m=sender.match(/^\"?([^<\"]+)\"?\s*</);return (m?.[1]||sender).trim();}
-function initialsFromName(name){const clean=(name||'').replace(/[^\p{L}\s]/gu,' ').trim();if(!clean)return '?';return clean.split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()).join('')||'?';}
-function inboxToneFromText(value){const palette=[{bg:'#E8EEFB',tc:'#0D2E7A'},{bg:'#E4F4EE',tc:'#0E6B4A'},{bg:'#FDF3DC',tc:'#8A5C00'}];const txt=(value||'').toLowerCase();let hash=0;for(let i=0;i<txt.length;i++)hash=(hash+txt.charCodeAt(i))%997;return palette[hash%palette.length];}
-function setInboxStatus(message,tone='info'){const el=document.getElementById('inbox-status');if(!el)return;if(!message){el.style.display='none';el.textContent='';return;}const tones={info:{bg:'#E8EEFB',color:'#0D2E7A',border:'rgba(26,79,191,0.18)'},ok:{bg:'#E4F4EE',color:'#0E6B4A',border:'rgba(14,107,74,0.18)'},warn:{bg:'#FDF3DC',color:'#8A5C00',border:'rgba(138,92,0,0.18)'},error:{bg:'#FDECEC',color:'#9B2525',border:'rgba(155,37,37,0.18)'}};const selected=tones[tone]||tones.info;el.style.display='';el.style.background=selected.bg;el.style.color=selected.color;el.style.border=`1px solid ${selected.border}`;el.textContent=message;}
-
-async function loadInboxFromApi(){
-  if(!currentUser?.id)return;
-  try{
-    const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=100`);
-    const payload=await res.json();
-    const apiMessages=Array.isArray(payload?.data)?payload.data:[];
-    inboxItems=apiMessages.map((m)=>{const from=extractSenderName(m.sender);const tone=inboxToneFromText(from);const labels=Array.isArray(m.labels)?m.labels:[];return{initials:initialsFromName(from),bg:tone.bg,tc:tone.tc,from,subj:m.subject||'(Senza oggetto)',prev:m.snippet||'',time:formatInboxTime(m.received_at),unread:labels.includes('UNREAD'),source:'Email'};});
-    if(inboxItems.length){setInboxStatus('Mailbox Gmail sincronizzata.','ok');}
-    else{setInboxStatus(null);}
-  }catch(err){
-    console.warn('Impossibile caricare inbox da backend:',err);
-    inboxItems=[];
-    setInboxStatus(null);
-  }
-}
-
-async function connectGoogleInbox(){
-  if(!currentUser?.id){setInboxStatus('Effettua il login prima di collegare Gmail.','warn');return;}
-  if(!getConfiguredApiBaseUrl()&&!IS_LOCAL_HOST){
-    setInboxStatus('Servizio mailbox non disponibile in questo momento. Riprova tra poco.','error');
-    return;
-  }
-  const btn=document.getElementById('btn-connect-inbox');
-  const original=btn?.textContent||'Collega Gmail';
-  if(btn){btn.textContent='Connessione…';btn.disabled=true;}
-  try{
-    const redirectUri=getGmailRedirectUri();
-    const state=`${currentUser.id}:${Date.now()}`;
-    sessionStorage.setItem('filo_inbox_oauth_state',state);
-    const res=await fetchApi('/api/v1/inbox/google/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,redirectUri,state})});
-    const payload=await res.json();
-    const authUrl=payload?.data?.authUrl;
-    if(!authUrl)throw new Error('Auth URL assente');
-    window.location.href=authUrl;
-  }catch(err){
-    console.error('Errore connect inbox:',err);
-    setInboxStatus(explainInboxConnectError(err),'error');
-    if(btn){btn.textContent=original;btn.disabled=false;}
-  }
-}
-
-async function maybeHandleInboxOAuthCallback(){
-  const url=new URL(window.location.href);
-  const code=url.searchParams.get('code');
-  const state=url.searchParams.get('state');
-  const error=url.searchParams.get('error');
-  if(error){setInboxStatus('Autorizzazione Gmail annullata o fallita.','error');url.searchParams.delete('error');url.searchParams.delete('state');window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));return;}
-  if(!code)return;
-  const expectedState=sessionStorage.getItem('filo_inbox_oauth_state');
-  if(expectedState&&state&&expectedState!==state){setInboxStatus('Stato OAuth non valido. Riprova il collegamento Gmail.','error');return;}
-  try{
-    const redirectUri=getGmailRedirectUri();
-    const res=await fetchApi('/api/v1/inbox/google/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,code,redirectUri})});
-    if(!res.ok){const text=await res.text();throw new Error(text||`HTTP ${res.status}`);}
-    sessionStorage.removeItem('filo_inbox_oauth_state');
-    setInboxStatus('Gmail collegata con successo. Sincronizzazione completata.','ok');
-    ['code','scope','authuser','prompt','state'].forEach((k)=>url.searchParams.delete(k));
-    window.history.replaceState({},document.title,url.pathname+(url.searchParams.toString()?`?${url.searchParams.toString()}`:''));
-  }catch(err){
-    console.error('Errore OAuth callback inbox:',err);
-    setInboxStatus('Errore durante il completamento OAuth Gmail.','error');
-  }
-}
-
 // ── MEMORIA ───────────────────────────────────────────────────────────────────
 function mem_get(key){try{return JSON.parse(localStorage.getItem('filo_'+key));}catch(e){return null;}}
 function mem_set(key,val){try{localStorage.setItem('filo_'+key,JSON.stringify(val));}catch(e){}}
@@ -763,30 +853,34 @@ function selectEnergy(val,el){todayEnergy=val;document.querySelectorAll('.e-btn'
 function selectSleep(val,el){todaySleep=val;document.querySelectorAll('.s-btn').forEach(b=>b.classList.remove('selected'));el.classList.add('selected');}
 function saveCheckin(){todayStress=parseInt(document.getElementById('stress-slider').value);const energy=todayEnergy||3;const sleep=todaySleep||'nella norma';saveCheckinToMemory(energy,sleep,todayStress);document.getElementById('checkin-overlay').style.display='none';updateEnergyDisplay(energy,sleep,todayStress);}
 function skipCheckin(){document.getElementById('checkin-overlay').style.display='none';}
-function updateEnergyDisplay(energy,sleep,stress){const el=document.getElementById('stat-energy');const sub=document.getElementById('stat-energy-sub');if(el){el.textContent=energy+'/5';el.style.color=ENERGY_COLORS[energy]||'#1A1A18';}if(sub)sub.textContent=ENERGY_LABELS[energy]||'';const banner=document.getElementById('energy-banner');if(banner){let msg='';if(energy<=2)msg=`<strong>Energia bassa oggi</strong> — suggerimenti focalizzati su 1-2 priorità.`;else if(energy>=4)msg=`<strong>Ottima energia oggi</strong> — momento ideale per attività impegnative.`;else msg=`<strong>Energia nella norma</strong> — sonno ${sleep}, stress ${stress}/5.`;banner.innerHTML=msg;banner.classList.add('active');}const checkins=mem_get('checkins')||[];const memBanner=document.getElementById('memory-banner');if(memBanner&&checkins.length>=3){const patterns=analyzePatterns()||[];if(patterns.length){memBanner.innerHTML=`<strong>Memoria:</strong> ${patterns[0].label}`;memBanner.classList.add('active');}}}
+function updateEnergyDisplay(energy,sleep,stress){const el=document.getElementById('stat-energy');const sub=document.getElementById('stat-energy-sub');if(el){el.textContent=energy+'/5';el.style.color=ENERGY_COLORS[energy]||'#1A1A18';}if(sub)sub.textContent=ENERGY_LABELS[energy]||'';const banner=document.getElementById('energy-banner');if(banner){let msg='';if(energy<=2)msg=`<strong>Energia bassa oggi</strong>. Concentrati su 1-2 priorità.`;else if(energy>=4)msg=`<strong>Ottima energia oggi.</strong> E' il momento ideale per attività impegnative.`;else msg=`<strong>Energia nella norma.</strong> Sonno ${sleep}, stress ${stress}/5.`;banner.innerHTML=msg;banner.classList.add('active');}const checkins=mem_get('checkins')||[];const memBanner=document.getElementById('memory-banner');if(memBanner&&checkins.length>=3){const patterns=analyzePatterns()||[];if(patterns.length){memBanner.innerHTML=`<strong>Memoria:</strong> ${patterns[0].label}`;memBanner.classList.add('active');}}}
 function initCheckin(){const today=new Date().toISOString().slice(0,10);const checkins=mem_get('checkins')||[];const doneToday=checkins.some(c=>c.date===today);if(!prefs.checkin||doneToday){document.getElementById('checkin-overlay').style.display='none';if(doneToday){const last=checkins[checkins.length-1];updateEnergyDisplay(last.energy,last.sleep,last.stress);}}else{document.getElementById('checkin-overlay').style.display='flex';}}
 
 // ── MEMORIA PAGE ──────────────────────────────────────────────────────────────
 function renderMemoryPage(){const checkins=mem_get('checkins')||[];const patterns=analyzePatterns()||[];const eh=document.getElementById('energy-history');if(eh){if(!checkins.length)eh.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">Nessun dato ancora.</div>';else eh.innerHTML=checkins.slice(-7).reverse().map(c=>`<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-size:12px;color:#9E9B94;width:80px;">${c.date}</span><span class="energy-dot" style="background:${ENERGY_COLORS[c.energy]||'#ccc'};"></span><span style="font-size:13px;">${ENERGY_LABELS[c.energy]||c.energy}</span><span style="margin-left:auto;font-size:12px;color:#9E9B94;">sonno: ${c.sleep} · stress: ${c.stress}/5</span></div>`).join('');}const pl=document.getElementById('pattern-list');if(pl){if(!patterns.length)pl.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">I pattern emergono dopo qualche giorno.</div>';else pl.innerHTML=patterns.map(p=>`<div class="mem-item"><div class="mem-icon" style="background:#F0EDE6;">${p.icon}</div><div><div class="mem-label">${p.label}</div><div class="mem-sub">${p.sub}</div></div></div>`).join('');}const ch=document.getElementById('checkin-history');if(ch)ch.innerHTML=`<div style="font-size:13px;color:#9E9B94;">${checkins.length} check-in registrati${checkins.length?' · ultimo: '+checkins[checkins.length-1].date:''}.</div>`;const sc=document.getElementById('stat-checkins');if(sc)sc.textContent=checkins.length;const nb=document.getElementById('nb-mem');if(nb)nb.style.display=patterns.length?'':'none';}
 
 // ── NAVIGAZIONE ───────────────────────────────────────────────────────────────
-const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Mercoledì 18 marzo · 3 eventi in programma"],inbox:["Inbox unificata","Collega Gmail per sincronizzare i messaggi"],task:["Task",""],note:["Note",""],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
-function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');if(el)el.classList.add('active');const m=PAGE_META[id];const firstName=currentUser?(currentUser.user_metadata?.full_name||currentUser.email).split(' ')[0]:'';document.getElementById('page-title').textContent=id==='suggerimenti'?'Buongiorno, '+firstName:m[0];document.getElementById('page-sub').textContent=m[1];document.getElementById('topbar-actions').innerHTML='';if(id==='task')updateTaskSubtitle();if(id==='note'){showNoteList();document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">＋ Nuova nota</button>';}if(id==='memoria')renderMemoryPage();if(id==='impostazioni')updateStatsPage();if(id==='inbox'){loadInboxFromApi().then(()=>renderAll());}renderAll();}
+const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Mercoledì 18 marzo · 3 eventi in programma"],inbox:["Inbox unificata","0 messaggi · 0 non letti"],task:["Task",""],note:["Note",""],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
+function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');if(el)el.classList.add('active');const m=PAGE_META[id];const firstName=currentUser?(currentUser.user_metadata?.full_name||currentUser.email).split(' ')[0]:'';document.getElementById('page-title').textContent=id==='suggerimenti'?'Buongiorno, '+firstName:m[0];document.getElementById('page-sub').textContent=m[1];document.getElementById('topbar-actions').innerHTML='';if(id==='task')updateTaskSubtitle();if(id==='note'){showNoteList();document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">＋ Nuova nota</button>';}if(id==='memoria')renderMemoryPage();if(id==='impostazioni')updateStatsPage();renderAll();}
 
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function tagBadge(tag,idx){const c=TAG_PALETTE[idx%TAG_PALETTE.length];return `<span style="font-size:10px;font-weight:500;padding:2px 7px;border-radius:8px;background:${c.bg};color:${c.tc};">${tag}</span>`;}
 function prioritaBadge(p){const m={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};const l={urgente:'Urgente',alta:'Alta',normale:'Normale',bassa:'Bassa'};return `<span class="badge ${m[p]||'b-normale'}">${l[p]||p}</span>`;}
-function renderAll(){renderInbox();renderCalendar();renderTasks();renderNotes();updateBadges();}
-function renderInbox(){const el=document.getElementById('inbox-list');if(!el)return;if(!inboxItems.length){el.innerHTML='<div class="empty-state"><div class="empty-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#9E9B94" stroke-width="1.4"><path d="M2 4h16v12H2z"/><path d="M2 5l8 6 8-6"/></svg></div><div class="empty-title">Nessuna email sincronizzata</div><div class="empty-sub">Clicca "Collega Gmail" per importare la tua inbox.</div></div>';return;}el.innerHTML=inboxItems.map(item=>`<div class="inbox-item"><div style="width:7px;height:7px;border-radius:50%;background:${item.unread?'#1A4FBF':'transparent'};margin-top:6px;flex-shrink:0;"></div><div class="av" style="background:${item.bg};color:${item.tc};">${item.initials}</div><div class="inbox-body"><div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span style="font-size:13px;font-weight:500;">${item.from}</span><span style="font-size:11px;color:#9E9B94;">${item.time}</span></div><div style="font-size:13px;margin-bottom:2px;">${item.subj}</div><div style="font-size:12px;color:#9E9B94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.prev}</div></div><span class="badge b-blue">${item.source}</span></div>`).join('');}
+function renderAll(){renderInboxControls();renderInbox();renderCalendar();renderTasks();renderNotes();updateBadges();}
+function renderInboxControls(){const state=document.getElementById('inbox-connection-state');const connectBtn=document.getElementById('inbox-connect-btn');const syncBtn=document.getElementById('inbox-sync-btn');if(!state||!connectBtn||!syncBtn)return;if(!mailboxConnected){state.textContent=mailboxConnectionError||'Mailbox non collegata';state.style.color=mailboxConnectionError?'#9B2525':'#6B6860';connectBtn.style.display='';connectBtn.textContent=mailboxSyncInProgress?'Connessione...':'Collega mailbox';connectBtn.disabled=mailboxSyncInProgress;syncBtn.style.display='none';return;}state.style.color='#6B6860';const last=mailboxLastSync?new Date(mailboxLastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'mai';state.textContent=`Mailbox collegata · ultima sync ${last}`;connectBtn.style.display='none';syncBtn.style.display='';syncBtn.disabled=mailboxSyncInProgress;syncBtn.innerHTML=mailboxSyncInProgress?'<span class="spinning">↻</span> Sincronizzo...':'Sincronizza';}
+function renderInbox(){const el=document.getElementById('inbox-list');if(!el)return;if(!mailboxConnected){el.innerHTML='<div class="empty-state"><div class="empty-title">Collega la mailbox</div><div class="empty-sub">Connettiti e poi premi "Sincronizza" per vedere i messaggi qui.</div></div>';return;}if(!INBOX.length){el.innerHTML='<div class="empty-state"><div class="empty-title">Nessun messaggio sincronizzato</div><div class="empty-sub">Premi "Sincronizza" per aggiornare la inbox.</div></div>';return;}el.innerHTML=INBOX.map(item=>`<div class="inbox-item"><div style="width:7px;height:7px;border-radius:50%;background:${item.unread?'#1A4FBF':'transparent'};margin-top:6px;flex-shrink:0;"></div><div class="av" style="background:${item.bg};color:${item.tc};">${item.initials}</div><div class="inbox-body"><div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span style="font-size:13px;font-weight:500;">${item.from}</span><span style="font-size:11px;color:#9E9B94;">${item.time}</span></div><div style="font-size:13px;margin-bottom:2px;">${item.subj}</div><div style="font-size:12px;color:#9E9B94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.prev}</div></div><span class="badge ${item.source==='Slack'?'b-slack':'b-blue'}">${item.source}</span></div>`).join('');}
 function renderCalendar(){const el=document.getElementById('cal-events');if(!el)return;el.innerHTML=CAL.map(ev=>`<div class="cal-slot" style="${ev.done?'opacity:0.45':''}"><div class="cal-time">${ev.time}</div><div class="cal-block ${ev.hl?'hl':''}"><div style="font-size:13px;font-weight:500;color:${ev.hl?'#0D2E7A':'#1A1A18'};margin-bottom:3px;">${ev.title}</div><div style="font-size:12px;color:${ev.hl?'#185FA5':'#9E9B94'};">${ev.meta}</div></div>${ev.done?'<div style="font-size:11px;color:#0E6B4A;align-self:center;flex-shrink:0;">✓ Fatto</div>':''}</div>`).join('');}
 function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filter(t=>t.done);const ol=document.getElementById('open-tasks-list');const dl=document.getElementById('done-tasks-list');const dc=document.getElementById('done-tasks-card');if(!ol)return;document.getElementById('open-tasks-label').textContent=`Aperti (${open.length})`;ol.innerHTML=open.length===0?'<div style="font-size:13px;color:#9E9B94;padding:8px 0;font-style:italic;">Nessun task aperto!</div>':open.map(t=>`<div class="task-row"><div class="checkbox" onclick="toggleTask(${t.id})"></div><span style="font-size:13px;flex:1;">${t.label}</span>${t.scadenza?`<span style="font-size:11px;color:#9E9B94;">${t.scadenza}</span>`:''} ${prioritaBadge(t.priorita)}<button class="btn-icon" onclick="deleteTask(${t.id})">✕</button></div>`).join('');if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>`<div class="task-row"><div class="checkbox done" onclick="toggleTask(${t.id})"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div><span style="font-size:13px;flex:1;color:#9E9B94;text-decoration:line-through;">${t.label}</span><button class="btn-icon" onclick="deleteTask(${t.id})">✕</button></div>`).join('');}else dc.style.display='none';updateTaskSubtitle();updateBadges();}
 function renderNotes(){const el=document.getElementById('notes-container');if(!el)return;if(!notes.length){el.innerHTML='<div class="empty-state"><div class="empty-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#9E9B94" stroke-width="1.4"><rect x="3" y="2" width="14" height="16" rx="2"/><line x1="7" y1="7" x2="13" y2="7"/><line x1="7" y1="10" x2="13" y2="10"/><line x1="7" y1="13" x2="10" y2="13"/></svg></div><div class="empty-title">Nessuna nota ancora</div></div>';return;}el.innerHTML=notes.map(n=>`<div class="note-card" onclick="openNoteEditor(${n.id})"><div style="font-size:14px;font-weight:500;margin-bottom:4px;">${n.title}</div><div style="font-size:12px;color:#6B6860;line-height:1.5;margin-bottom:8px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${n.body}</div><div style="display:flex;gap:5px;">${n.tags.map((t,j)=>tagBadge(t,j)).join('')}</div></div>`).join('');}
-function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=inboxItems.filter(i=>i.unread).length;const nb=document.getElementById('nb-task');if(nb){nb.textContent=open;nb.style.display=open?'':'none';}document.getElementById('nb-inbox').textContent=unread;document.getElementById('stat-inbox').textContent=unread;document.getElementById('stat-tasks').textContent=open;}
+function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=INBOX.filter(i=>i.unread).length;const nb=document.getElementById('nb-task');if(nb){nb.textContent=open;nb.style.display='';}document.getElementById('nb-inbox').textContent=unread;document.getElementById('stat-inbox').textContent=unread;document.getElementById('stat-tasks').textContent=open;updateInboxSubtitle();}
+function updateInboxSubtitle(){const total=INBOX.length;const unread=INBOX.filter(i=>i.unread).length;PAGE_META.inbox[1]=mailboxConnected?`${total} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
+async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;const res=await fetchApi('/api/v1/inbox/google/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,redirectUri:getInboxConnectRedirectUri(),state})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/connect fallita (${res.status}): ${txt}`);}const payload=await res.json();const authUrl=payload?.data?.authUrl;if(!authUrl)throw new Error('URL OAuth Google non disponibile');window.location.assign(authUrl);}catch(err){console.warn('Errore collegamento mailbox:',err);mailboxConnectionError='Connessione mailbox fallita. Controlla configurazione Google OAuth/API backend.';showError('Impossibile collegare la mailbox. Verifica la configurazione Google OAuth.');mailboxSyncInProgress=false;renderInboxControls();}}
+async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(String(err?.message||'').includes('(404)')){setInboxConnectionState(false,null);INBOX.length=0;}showError('Sincronizzazione mailbox non riuscita.');}finally{mailboxSyncInProgress=false;renderAll();}}
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────
-function toggleTaskForm(){const f=document.getElementById('task-form');const b=document.getElementById('task-form-toggle');const open=f.style.display==='none';f.style.display=open?'':'none';b.textContent=open?'✕  Annulla':'＋  Nuovo task';b.style.background=open?'#F0EDE6':'#1A4FBF';b.style.color=open?'#6B6860':'#fff';if(open)document.getElementById('new-task-label').focus();}
+function toggleTaskForm(){const f=document.getElementById('task-form');const b=document.getElementById('task-form-toggle');const open=f.style.display==='none';f.style.display=open?'':'none';b.textContent=open?'Annulla':'+ Nuovo task';b.style.background=open?'#F0EDE6':'#1A4FBF';b.style.color=open?'#6B6860':'#fff';if(open)document.getElementById('new-task-label').focus();}
 async function addTask() {
   const label = document.getElementById('new-task-label').value.trim();
   const priority = document.getElementById('new-task-pri').value;
@@ -849,7 +943,7 @@ function saveNote(){const title=document.getElementById('note-edit-title').value
 function deleteNote(id){notes=notes.filter(n=>n.id!==id);showNoteList();}
 
 // ── RICERCA ───────────────────────────────────────────────────────────────────
-function doSearch(q){const el=document.getElementById('search-results');if(!q.trim()){el.innerHTML='<div class="empty-state"><div class="empty-title">Inizia a digitare</div></div>';return;}const ql=q.toLowerCase();const rt=tasks.filter(t=>t.label.toLowerCase().includes(ql));const rn=notes.filter(n=>n.title.toLowerCase().includes(ql)||n.body.toLowerCase().includes(ql));const ri=inboxItems.filter(i=>i.from.toLowerCase().includes(ql)||i.subj.toLowerCase().includes(ql));if(!rt.length&&!rn.length&&!ri.length){el.innerHTML=`<div style="text-align:center;padding:32px;color:#9E9B94;font-size:13px;">Nessun risultato per "${q}"</div>`;return;}let html='';if(rt.length)html+=`<div class="card"><div class="sec-label">Task (${rt.length})</div>${rt.map(t=>`<div class="task-row"><span style="font-size:13px;flex:1;color:${t.done?'#9E9B94':'#1A1A18'};text-decoration:${t.done?'line-through':'none'};">${t.label}</span>${prioritaBadge(t.priorita)}</div>`).join('')}</div>`;if(rn.length)html+=`<div class="card"><div class="sec-label">Note (${rn.length})</div>${rn.map(n=>`<div style="padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);cursor:pointer;" onclick="showPage('note');openNoteEditor(${n.id})"><div style="font-size:13px;font-weight:500;margin-bottom:2px;">${n.title}</div><div style="font-size:12px;color:#9E9B94;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${n.body}</div></div>`).join('')}</div>`;if(ri.length)html+=`<div class="card"><div class="sec-label">Email (${ri.length})</div>${ri.map(item=>`<div style="display:flex;gap:10px;padding:9px 0;"><div class="av" style="width:28px;height:28px;font-size:10px;background:${item.bg};color:${item.tc};">${item.initials}</div><div><div style="font-size:13px;font-weight:500;">${item.from}</div><div style="font-size:12px;color:#9E9B94;">${item.subj}</div></div></div>`).join('')}</div>`;el.innerHTML=html;}
+function doSearch(q){const el=document.getElementById('search-results');if(!q.trim()){el.innerHTML='<div class="empty-state"><div class="empty-title">Inizia a digitare</div></div>';return;}const ql=q.toLowerCase();const rt=tasks.filter(t=>t.label.toLowerCase().includes(ql));const rn=notes.filter(n=>n.title.toLowerCase().includes(ql)||n.body.toLowerCase().includes(ql));const ri=INBOX.filter(i=>i.from.toLowerCase().includes(ql)||i.subj.toLowerCase().includes(ql));if(!rt.length&&!rn.length&&!ri.length){el.innerHTML=`<div style="text-align:center;padding:32px;color:#9E9B94;font-size:13px;">Nessun risultato per "${q}"</div>`;return;}let html='';if(rt.length)html+=`<div class="card"><div class="sec-label">Task (${rt.length})</div>${rt.map(t=>`<div class="task-row"><span style="font-size:13px;flex:1;color:${t.done?'#9E9B94':'#1A1A18'};text-decoration:${t.done?'line-through':'none'};">${t.label}</span>${prioritaBadge(t.priorita)}</div>`).join('')}</div>`;if(rn.length)html+=`<div class="card"><div class="sec-label">Note (${rn.length})</div>${rn.map(n=>`<div style="padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);cursor:pointer;" onclick="showPage('note');openNoteEditor(${n.id})"><div style="font-size:13px;font-weight:500;margin-bottom:2px;">${n.title}</div><div style="font-size:12px;color:#9E9B94;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${n.body}</div></div>`).join('')}</div>`;if(ri.length)html+=`<div class="card"><div class="sec-label">Email (${ri.length})</div>${ri.map(item=>`<div style="display:flex;gap:10px;padding:9px 0;"><div class="av" style="width:28px;height:28px;font-size:10px;background:${item.bg};color:${item.tc};">${item.initials}</div><div><div style="font-size:13px;font-weight:500;">${item.from}</div><div style="font-size:12px;color:#9E9B94;">${item.subj}</div></div></div>`).join('')}</div>`;el.innerHTML=html;}
 
 // ── IMPOSTAZIONI ──────────────────────────────────────────────────────────────
 function toggleEditProfile(){const v=document.getElementById('profile-view');const f=document.getElementById('profile-form');const b=document.getElementById('edit-profile-btn');const editing=f.style.display!=='none';v.style.display=editing?'':'none';f.style.display=editing?'none':'';b.textContent=editing?'Modifica':'Annulla';}
@@ -862,14 +956,20 @@ async function analyzeDay(){const agenda=document.getElementById('agenda-input')
 
 // ── START ──────────────────────────────────────────────────────────────────────
 async function init() {
-  const hash = window.location.hash;
-  const hasToken = hash && hash.includes('access_token');
-
-  // Se c'e' un token nell'URL, nascondi il login e aspetta
-  if (hasToken) {
-    document.getElementById('login-screen').style.display = 'none';
-    document.body.style.background = '#F7F5F0';
+  document.getElementById('login-password').value = '';
+  clearCorruptedPasswordAutofill();
+  let isAuthBootstrapping = true;
+  const pwd = document.getElementById('login-password');
+  if (pwd) {
+    pwd.addEventListener('focus', clearCorruptedPasswordAutofill);
+    setTimeout(clearCorruptedPasswordAutofill, 250);
+    setTimeout(clearCorruptedPasswordAutofill, 1000);
   }
+
+  await tryHandleMailboxOauthCallback();
+  await tryExchangeSupabaseCodeSession();
+  await trySetSupabaseSessionFromHash();
+  handleSupabaseAuthErrorInQuery();
 
   // Ascolta eventi auth
   supabaseClient.auth.onAuthStateChange((event, session) => {
@@ -877,39 +977,23 @@ async function init() {
     if (event === 'SIGNED_IN' && session) {
       window.history.replaceState({}, document.title, window.location.pathname);
       loginSuccess(session.user);
+      isAuthBootstrapping = false;
     }
-    if (event === 'SIGNED_OUT') showLoginScreen();
-    if (event === 'INITIAL_SESSION' && !session && !hasToken) {
-      // Solo se non stiamo aspettando un token
-      document.getElementById('login-screen').style.display = 'flex';
+    if (event === 'SIGNED_OUT') {
+      isAuthBootstrapping = false;
+      showLoginScreen();
+    }
+    if (event === 'INITIAL_SESSION') {
+      if (session) loginSuccess(session.user);
+      else if (!isAuthBootstrapping) showLoginScreen();
     }
   });
 
-  // Se non c'e' token nell'URL, controlla sessione esistente normalmente
-  if (!hasToken) {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    console.log('Existing session:', session ? 'yes' : 'no');
-    if (session) loginSuccess(session.user);
-    else document.getElementById('login-screen').style.display = 'flex';
-  } else {
-    // C'e' un token — aspetta fino a 5 secondi che Supabase lo processi
-    console.log('Token found in URL, waiting for Supabase to process...');
-    let attempts = 0;
-    const checkSession = setInterval(async () => {
-      attempts++;
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      console.log('Attempt', attempts, '- session:', session ? 'yes' : 'no');
-      if (session) {
-        clearInterval(checkSession);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        loginSuccess(session.user);
-      } else if (attempts >= 10) {
-        clearInterval(checkSession);
-        console.log('Timeout - showing login');
-        document.getElementById('login-screen').style.display = 'flex';
-      }
-    }, 500);
-  }
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  console.log('Existing session:', session ? 'yes' : 'no');
+  if (session) loginSuccess(session.user);
+  else showLoginScreen();
+  isAuthBootstrapping = false;
 }
 
 init();
