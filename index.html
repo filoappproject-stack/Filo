@@ -373,6 +373,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
           </div>
         </div>
         <div class="card" style="padding:4px 18px;" id="inbox-list"></div>
+        <div class="card" id="inbox-message-view" style="display:none;"></div>
       </div>
 
       <!-- TASK -->
@@ -711,10 +712,11 @@ async function tryHandleMailboxOauthCallback() {
   if (!userId) return false;
 
   try {
+    const redirectUri = sessionStorage.getItem(MAILBOX_REDIRECT_URI_KEY) || getInboxConnectRedirectUri();
     const res = await fetchApi('/api/v1/inbox/google/exchange', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, code, redirectUri: getInboxConnectRedirectUri() })
+      body: JSON.stringify({ userId, code, redirectUri })
     });
 
     if (!res.ok) {
@@ -904,6 +906,7 @@ async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=
 function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)mailboxConnectionError='';}
 async function requestMailboxConnectUrl(userId,state){
   const payload={userId,redirectUri:getInboxConnectRedirectUri(),state};
+  let lastDetail='';
   for(const base of API_BASES){
     const root=base.replace(/\/$/,'');
     const endpoint=`${root}/api/v1/inbox/google/connect`;
@@ -913,14 +916,28 @@ async function requestMailboxConnectUrl(userId,state){
         const qs=new URLSearchParams(payload);
         res=await fetch(`${endpoint}?${qs.toString()}`,{method:'GET'});
       }
-      if(!res.ok)continue;
+      if(!res.ok){
+        const txt=await res.text().catch(()=> '');
+        lastDetail=`${res.status} ${txt}`.trim();
+        continue;
+      }
       const ct=(res.headers.get('content-type')||'').toLowerCase();
-      if(!ct.includes('application/json'))continue;
+      if(!ct.includes('application/json')){
+        lastDetail=`Risposta non JSON da ${endpoint}`;
+        continue;
+      }
       const data=await res.json();
-      if(data?.data?.authUrl)return data.data.authUrl;
+      const authUrl=data?.data?.authUrl;
+      if(authUrl){
+        return {
+          authUrl,
+          redirectUri: data?.data?.redirectUri || payload.redirectUri
+        };
+      }
+      lastDetail='Risposta JSON senza authUrl';
     }catch(err){}
   }
-  throw new Error('Endpoint mailbox connect non raggiungibile');
+  throw new Error(lastDetail||'Endpoint mailbox connect non raggiungibile');
 }
 
 async function fetchApi(path,options={}){

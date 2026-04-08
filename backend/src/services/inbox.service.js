@@ -14,12 +14,25 @@ function requireGoogleOauthEnv() {
   }
 }
 
+function resolveRedirectUri(redirectUri) {
+  if (env.GOOGLE_REDIRECT_URI) {
+    return env.GOOGLE_REDIRECT_URI;
+  }
+
+  if (!redirectUri) {
+    throw new HttpError(400, 'Redirect URI Google mancante');
+  }
+
+  return redirectUri;
+}
+
 export function buildGoogleAuthUrl({ userId, redirectUri, state }) {
   requireGoogleOauthEnv();
+  const effectiveRedirectUri = resolveRedirectUri(redirectUri);
 
   const params = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
-    redirect_uri: redirectUri,
+    redirect_uri: effectiveRedirectUri,
     response_type: 'code',
     scope: GOOGLE_SCOPE,
     access_type: 'offline',
@@ -28,11 +41,15 @@ export function buildGoogleAuthUrl({ userId, redirectUri, state }) {
     state: state ?? userId
   });
 
-  return `${GOOGLE_AUTH_BASE}?${params.toString()}`;
+  return {
+    authUrl: `${GOOGLE_AUTH_BASE}?${params.toString()}`,
+    redirectUri: effectiveRedirectUri
+  };
 }
 
 async function exchangeGoogleCode({ code, redirectUri }) {
   requireGoogleOauthEnv();
+  const effectiveRedirectUri = resolveRedirectUri(redirectUri);
 
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
@@ -41,7 +58,7 @@ async function exchangeGoogleCode({ code, redirectUri }) {
       code,
       client_id: env.GOOGLE_CLIENT_ID,
       client_secret: env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: redirectUri,
+      redirect_uri: effectiveRedirectUri,
       grant_type: 'authorization_code'
     })
   });
@@ -108,15 +125,6 @@ async function gmailRequest(path, accessToken, queryParams = {}) {
   }
 
   return response.json();
-}
-
-function buildAfterQuery(lastSyncedAt) {
-  const fallbackDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const fromDate = lastSyncedAt ? new Date(lastSyncedAt) : fallbackDate;
-  const yyyy = fromDate.getUTCFullYear();
-  const mm = String(fromDate.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(fromDate.getUTCDate()).padStart(2, '0');
-  return `after:${yyyy}/${mm}/${dd}`;
 }
 
 function headerValue(headers = [], name) {
@@ -250,19 +258,21 @@ async function markLastSynced(accountId) {
 }
 
 async function syncInboxMessages(account, accessToken) {
-  const searchQuery = account.last_synced_at ? buildAfterQuery(account.last_synced_at) : null;
   const collectedIds = [];
+  const collectedIdSet = new Set();
 
   let pageToken;
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < 10; i += 1) {
     const listPayload = await gmailRequest('/users/me/messages', accessToken, {
-      q: searchQuery,
       maxResults: '100',
       pageToken
     });
 
     for (const message of listPayload.messages ?? []) {
-      collectedIds.push(message.id);
+      if (!collectedIdSet.has(message.id)) {
+        collectedIdSet.add(message.id);
+        collectedIds.push(message.id);
+      }
     }
 
     if (!listPayload.nextPageToken) {
@@ -319,6 +329,25 @@ async function syncInboxMessages(account, accessToken) {
       receivedAtIso,
       message.labelIds ?? []
     ]);
+  }
+
+  if (collectedIds.length === 0) {
+    await query(
+      `
+        DELETE FROM inbox_messages
+        WHERE account_id = $1
+      `,
+      [account.id]
+    );
+  } else {
+    await query(
+      `
+        DELETE FROM inbox_messages
+        WHERE account_id = $1
+          AND provider_message_id != ALL($2::text[])
+      `,
+      [account.id, collectedIds]
+    );
   }
 
   await markLastSynced(account.id);
