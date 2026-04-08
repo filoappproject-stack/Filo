@@ -833,6 +833,7 @@ async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=
 function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)mailboxConnectionError='';}
 async function requestMailboxConnectUrl(userId,state){
   const payload={userId,redirectUri:getInboxConnectRedirectUri(),state};
+  let lastDetail='';
   for(const base of API_BASES){
     const root=base.replace(/\/$/,'');
     const endpoint=`${root}/api/v1/inbox/google/connect`;
@@ -842,14 +843,22 @@ async function requestMailboxConnectUrl(userId,state){
         const qs=new URLSearchParams(payload);
         res=await fetch(`${endpoint}?${qs.toString()}`,{method:'GET'});
       }
-      if(!res.ok)continue;
+      if(!res.ok){
+        const txt=await res.text().catch(()=> '');
+        lastDetail=`${res.status} ${txt}`.trim();
+        continue;
+      }
       const ct=(res.headers.get('content-type')||'').toLowerCase();
-      if(!ct.includes('application/json'))continue;
+      if(!ct.includes('application/json')){
+        lastDetail=`Risposta non JSON da ${endpoint}`;
+        continue;
+      }
       const data=await res.json();
       if(data?.data?.authUrl)return data.data.authUrl;
+      lastDetail='Risposta JSON senza authUrl';
     }catch(err){}
   }
-  throw new Error('Endpoint mailbox connect non raggiungibile');
+  throw new Error(lastDetail||'Endpoint mailbox connect non raggiungibile');
 }
 
 async function fetchApi(path,options={}){
@@ -934,7 +943,7 @@ function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=
 function updateInboxSubtitle(){const total=INBOX.length;const unread=INBOX.filter(i=>i.unread).length;PAGE_META.inbox[1]=mailboxConnected?`${total} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
-async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;const authUrl=await requestMailboxConnectUrl(currentUser.id,state);window.location.assign(authUrl);}catch(err){console.warn('Errore collegamento mailbox:',err);mailboxConnectionError='Connessione mailbox non riuscita: backend API non raggiungibile.';showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
+async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;const authUrl=await requestMailboxConnectUrl(currentUser.id,state);window.location.assign(authUrl);}catch(err){console.warn('Errore collegamento mailbox:',err);mailboxConnectionError=`Connessione mailbox non riuscita: ${err?.message||'backend API non raggiungibile'}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);showError('Sincronizzazione mailbox non riuscita.');}finally{mailboxSyncInProgress=false;renderAll();}}
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────
