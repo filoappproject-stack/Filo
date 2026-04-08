@@ -3,19 +3,20 @@ import { HttpError } from '../utils/httpError.js';
 import {
   buildGoogleAuthUrl,
   exchangeGoogleCodeAndSync,
-  listInboxMessages
+  listInboxMessages,
+  syncGoogleInbox
 } from '../services/inbox.service.js';
 
 const ConnectSchema = z.object({
   userId: z.string().uuid(),
-  redirectUri: z.string().url(),
+  redirectUri: z.string().url().optional(),
   state: z.string().min(8).max(500).optional()
 });
 
 const ExchangeSchema = z.object({
   userId: z.string().uuid(),
   code: z.string().min(10),
-  redirectUri: z.string().url()
+  redirectUri: z.string().url().optional()
 });
 
 const MessagesQuerySchema = z.object({
@@ -24,13 +25,14 @@ const MessagesQuerySchema = z.object({
 });
 
 export async function getGoogleConnectUrl(req, res) {
-  const parsed = ConnectSchema.safeParse(req.body);
+  const source = req.method === 'GET' ? req.query : req.body;
+  const parsed = ConnectSchema.safeParse(source);
   if (!parsed.success) {
     throw new HttpError(400, 'Payload connect inbox non valido');
   }
 
-  const authUrl = buildGoogleAuthUrl(parsed.data);
-  res.json({ data: { authUrl } });
+  const auth = buildGoogleAuthUrl(parsed.data);
+  res.json({ data: auth });
 }
 
 export async function postGoogleCodeExchange(req, res) {
@@ -41,6 +43,20 @@ export async function postGoogleCodeExchange(req, res) {
 
   const result = await exchangeGoogleCodeAndSync(parsed.data);
   res.status(201).json({ data: result });
+}
+
+export async function postGoogleSync(req, res) {
+  const parsed = z
+    .object({
+      userId: z.string().uuid()
+    })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Payload sync inbox non valido');
+  }
+
+  const result = await syncGoogleInbox(parsed.data.userId);
+  res.json({ data: result });
 }
 
 export async function getInboxMessages(req, res) {
