@@ -19,7 +19,7 @@ const ExchangeSchema = z.object({
   redirectUri: z.string().url()
 });
 
-const SyncSchema = z.object({
+const InboxSyncSchema = z.object({
   userId: z.string().uuid()
 });
 
@@ -53,7 +53,7 @@ export async function postGoogleCodeExchange(req, res) {
 }
 
 export async function postGoogleSync(req, res) {
-  const parsed = SyncSchema.safeParse(req.body);
+  const parsed = InboxSyncSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(400, 'Payload sync inbox non valido');
   }
