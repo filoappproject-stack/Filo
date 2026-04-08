@@ -32,7 +32,8 @@ const SyncSchema = z.object({
 });
 
 export async function getGoogleConnectUrl(req, res) {
-  const parsed = ConnectSchema.safeParse(req.body);
+  const source = req.method === 'GET' ? req.query : req.body;
+  const parsed = ConnectSchema.safeParse(source);
   if (!parsed.success) {
     throw new HttpError(400, 'Payload connect inbox non valido');
   }
