@@ -322,7 +322,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
         <div class="stats-grid">
           <div class="stat-card"><div class="stat-label">Email non lette</div><div class="stat-value" id="stat-inbox">0</div><div class="stat-delta">0 da ieri</div></div>
           <div class="stat-card"><div class="stat-label">Task aperti</div><div class="stat-value" id="stat-tasks">0</div><div class="stat-delta">2 in scadenza oggi</div></div>
-          <div class="stat-card"><div class="stat-label">Energia oggi</div><div class="stat-value" id="stat-energy">â€”</div><div class="stat-delta" id="stat-energy-sub">non rilevata</div></div>
+          <div class="stat-card"><div class="stat-label">Energia oggi</div><div class="stat-value" id="stat-energy">-</div><div class="stat-delta" id="stat-energy-sub">non rilevata</div></div>
         </div>
         <div class="card">
           <div style="font-size:13px;font-weight:500;color:#6B6860;margin-bottom:12px;">Raccontami la tua giornata e ci penso io a ordinarla</div>
@@ -423,8 +423,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
             </div>
           </div>
           <div id="profile-view">
-            <div class="row"><span class="row-label">Nome</span><span class="row-value" id="pv-name">â€”</span></div>
-            <div class="row"><span class="row-label">Email</span><span class="row-value" id="pv-email">â€”</span></div>
+            <div class="row"><span class="row-label">Nome</span><span class="row-value" id="pv-name">-</span></div>
+            <div class="row"><span class="row-label">Email</span><span class="row-value" id="pv-email">-</span></div>
             <div class="row"><span class="row-label">Lingua</span><span class="row-value" id="pv-lingua">Italiano</span></div>
           </div>
           <div id="profile-form" style="display:none;">
@@ -736,7 +736,7 @@ const ENERGY_LABELS={1:"A pezzi",2:"Stanco",3:"Nella norma",4:"Bene",5:"Ottimo"}
 const ENERGY_COLORS={1:"#9B2525",2:"#8A5C00",3:"#6B6860",4:"#0E6B4A",5:"#0D2E7A"};
 let tasks=[];
 let nextTaskId=100;
-let notes=[{id:1,title:"Budget Q2 â€” bozza",body:"Marketing +15%, sviluppo stabile, ops da rivedere.",tags:["Budget","Q2"]},{id:2,title:"Note call Rossi â€” 10 marzo",body:"Vuole sconto 8% su volume. Ordine min. 500 unitÃ .",tags:["Clienti","Vendite"]},{id:3,title:"Idee roadmap H2",body:"Onboarding semplificato, dashboard analytics v2.",tags:["Prodotto"]},{id:4,title:"Riflessioni pricing",body:"Seat-based vs usage-based. Competitor cambiato a gennaio.",tags:["Strategia"]}];
+let notes=[{id:1,title:"Budget Q2 - bozza",body:"Marketing +15%, sviluppo stabile, ops da rivedere.",tags:["Budget","Q2"]},{id:2,title:"Note call Rossi - 10 marzo",body:"Vuole sconto 8% su volume. Ordine min. 500 unità.",tags:["Clienti","Vendite"]},{id:3,title:"Idee roadmap H2",body:"Onboarding semplificato, dashboard analytics v2.",tags:["Prodotto"]},{id:4,title:"Riflessioni pricing",body:"Seat-based vs usage-based. Competitor cambiato a gennaio.",tags:["Strategia"]}];
 let nextNoteId=100;
 let currentNoteId=null;
 let prefs={checkin:true,memoria:true,ai:true};
