@@ -639,7 +639,9 @@ async function tryExchangeSupabaseCodeSession() {
   }
 
   const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
   if (!code) return false;
+  if (isMailboxOauthState(state)) return false;
 
   try {
     const { data, error } = await supabaseClient.auth.exchangeCodeForSession(code);
@@ -659,6 +661,53 @@ async function tryExchangeSupabaseCodeSession() {
   } catch (err) {
     console.warn('Errore durante exchangeCodeForSession:', err);
     showError('Login Google non completato. Riprova.');
+    return false;
+  }
+}
+
+async function tryHandleMailboxOauthCallback() {
+  let url;
+  try {
+    url = new URL(window.location.href);
+  } catch (e) {
+    return false;
+  }
+
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  if (!code || !isMailboxOauthState(state)) return false;
+
+  const userId = extractUserIdFromMailboxState(state);
+  if (!userId) return false;
+
+  try {
+    const res = await fetchApi('/api/v1/inbox/google/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, code, redirectUri: getInboxConnectRedirectUri() })
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`POST /inbox/google/exchange fallita (${res.status}): ${txt}`);
+    }
+
+    const payload = await res.json();
+    const syncedAt = payload?.data?.account?.last_synced_at || new Date().toISOString();
+    setInboxConnectionState(true, syncedAt);
+    await loadInboxMessages();
+
+    url.searchParams.delete('code');
+    url.searchParams.delete('state');
+    window.history.replaceState(
+      {},
+      document.title,
+      url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '')
+    );
+    return true;
+  } catch (err) {
+    console.warn('Errore callback mailbox OAuth:', err);
+    showError('Connessione mailbox non completata. Riprova.');
     return false;
   }
 }
@@ -732,6 +781,15 @@ async function loginSuccess(user) {
   document.getElementById('page-title').textContent = 'Buongiorno, ' + firstName;
 
   await loadTasksFromApi();
+  try{
+    await loadInboxMessages();
+    if(INBOX.length){
+      setInboxConnectionState(true,Date.now());
+    }
+  }catch(err){
+    setInboxConnectionState(false,null);
+    INBOX.length=0;
+  }
   initCheckin();
   renderAll();
   analyzePatterns();
@@ -739,12 +797,6 @@ async function loginSuccess(user) {
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────
 const INBOX=[];
-const INBOX_SEED=[
-  {from:"Giulia Ferri",subj:"Conferma meeting roadmap",prev:"Perfetto per domani alle 10:30. Ti mando agenda tra poco.",source:"Email",initials:"GF",bg:"#E8EEFB",tc:"#0D2E7A"},
-  {from:"Team Prodotto",subj:"Aggiornamento sprint #14",prev:"Ho caricato il recap su Notion con i blocchi principali.",source:"Slack",initials:"TP",bg:"#F0EAF8",tc:"#5B2D8E"},
-  {from:"Luca Bianchi",subj:"Budget Q2: ultima revisione",prev:"Ci sono due numeri da riallineare prima della call.",source:"Email",initials:"LB",bg:"#FDF3DC",tc:"#8A5C00"},
-  {from:"Supporto Cliente",subj:"Ticket #4821 risolto",prev:"Il cliente ha confermato che il problema è rientrato.",source:"Email",initials:"SC",bg:"#E4F4EE",tc:"#0E6B4A"}
-];
 const CAL=[{time:"09:00",title:"Standup team prodotto",meta:"15 min · Google Meet",done:true,hl:false},{time:"10:30",title:"Call con cliente Rossi",meta:"45 min · Zoom · 3 email non lette",done:false,hl:true},{time:"12:00",title:"Pausa pranzo",meta:"Blocco personale",done:false,hl:false},{time:"14:30",title:"Revisione roadmap Q2",meta:"60 min · Sala B · 6 partecipanti",done:false,hl:false},{time:"17:00",title:"Riepilogo team",meta:"Ricorrente ogni mercoledì",done:false,hl:false}];
 const TAG_PALETTE=[{bg:"#E8EEFB",tc:"#0D2E7A"},{bg:"#E4F4EE",tc:"#0E6B4A"},{bg:"#FDF3DC",tc:"#8A5C00"},{bg:"#FDECEC",tc:"#9B2525"},{bg:"#F0EAF8",tc:"#5B2D8E"},{bg:"#F0EDE6",tc:"#6B6860"}];
 const ENERGY_LABELS={1:"A pezzi",2:"Stanco",3:"Nella norma",4:"Bene",5:"Ottimo"};
@@ -754,7 +806,6 @@ let nextTaskId=100;
 let mailboxConnected=false;
 let mailboxLastSync=null;
 let mailboxSyncInProgress=false;
-let mailboxSyncCount=0;
 let notes=[{id:1,title:"Budget Q2 - bozza",body:"Marketing +15%, sviluppo stabile, ops da rivedere.",tags:["Budget","Q2"]},{id:2,title:"Note call Rossi - 10 marzo",body:"Vuole sconto 8% su volume. Ordine min. 500 unità.",tags:["Clienti","Vendite"]},{id:3,title:"Idee roadmap H2",body:"Onboarding semplificato, dashboard analytics v2.",tags:["Prodotto"]},{id:4,title:"Riflessioni pricing",body:"Seat-based vs usage-based. Competitor cambiato a gennaio.",tags:["Strategia"]}];
 let nextNoteId=100;
 let currentNoteId=null;
@@ -768,6 +819,15 @@ function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale
 function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
 function saveTasksToCache(){const key=getTaskCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(tasks));}catch(e){}}
 function loadTasksFromCache(){const key=getTaskCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
+function getInboxConnectRedirectUri(){return `${window.location.origin}${window.location.pathname}`;}
+function getInboxStatePrefix(){return 'mailbox:';}
+function isMailboxOauthState(state){return typeof state==='string'&&state.startsWith(getInboxStatePrefix());}
+function extractUserIdFromMailboxState(state){if(!isMailboxOauthState(state))return null;const [,userId]=state.split(':');return userId||null;}
+function formatInboxTime(ts){if(!ts)return '';const d=new Date(ts);if(Number.isNaN(d.getTime()))return '';return d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});}
+function avatarFromSender(sender){const raw=(sender||'').replace(/<[^>]+>/g,'').replace(/["']/g,'').trim();const display=raw||'Sconosciuto';const initials=display.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'?';return{display,initials};}
+function mapInboxMessageToUi(item){const labels=Array.isArray(item?.labels)?item.labels:[];const unread=labels.includes('UNREAD');const sender=avatarFromSender(item?.sender);return{id:item?.id,from:sender.display,subj:item?.subject||'(Senza oggetto)',prev:item?.snippet||'',time:formatInboxTime(item?.received_at||item?.created_at),source:'Email',initials:sender.initials,bg:'#E8EEFB',tc:'#0D2E7A',unread};}
+async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));}
+function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;}
 
 async function fetchApi(path,options={}){
   let lastError=null;
@@ -840,9 +900,8 @@ function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=
 function updateInboxSubtitle(){const total=INBOX.length;const unread=INBOX.filter(i=>i.unread).length;PAGE_META.inbox[1]=mailboxConnected?`${total} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
-function generateInboxFromSync(){const now=new Date();INBOX.length=0;INBOX_SEED.forEach((item,idx)=>{const minsAgo=((idx+1)*7)+(mailboxSyncCount%3)*2;const ts=new Date(now.getTime()-minsAgo*60000);INBOX.push({...item,time:ts.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}),unread:idx<Math.max(1,(mailboxSyncCount%4)+1)});});}
-function connectMailbox(){if(mailboxConnected)return;mailboxConnected=true;mailboxLastSync=null;renderAll();}
-async function syncMailbox(){if(!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();await new Promise(resolve=>setTimeout(resolve,450));mailboxSyncCount+=1;generateInboxFromSync();mailboxLastSync=Date.now();mailboxSyncInProgress=false;renderAll();}
+async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;const res=await fetchApi('/api/v1/inbox/google/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,redirectUri:getInboxConnectRedirectUri(),state})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/connect fallita (${res.status}): ${txt}`);}const payload=await res.json();const authUrl=payload?.data?.authUrl;if(!authUrl)throw new Error('URL OAuth Google non disponibile');window.location.assign(authUrl);}catch(err){console.warn('Errore collegamento mailbox:',err);showError('Impossibile collegare la mailbox. Verifica la configurazione Google OAuth.');mailboxSyncInProgress=false;renderInboxControls();}}
+async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(String(err?.message||'').includes('(404)')){setInboxConnectionState(false,null);INBOX.length=0;}showError('Sincronizzazione mailbox non riuscita.');}finally{mailboxSyncInProgress=false;renderAll();}}
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────
 function toggleTaskForm(){const f=document.getElementById('task-form');const b=document.getElementById('task-form-toggle');const open=f.style.display==='none';f.style.display=open?'':'none';b.textContent=open?'Annulla':'+ Nuovo task';b.style.background=open?'#F0EDE6':'#1A4FBF';b.style.color=open?'#6B6860':'#fff';if(open)document.getElementById('new-task-label').focus();}
@@ -931,6 +990,7 @@ async function init() {
     setTimeout(clearCorruptedPasswordAutofill, 1000);
   }
 
+  await tryHandleMailboxOauthCallback();
   await tryExchangeSupabaseCodeSession();
   await trySetSupabaseSessionFromHash();
   handleSupabaseAuthErrorInQuery();

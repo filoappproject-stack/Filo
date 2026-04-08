@@ -444,7 +444,43 @@ export async function listInboxMessages(userId, limit) {
   return rows;
 }
 
-export async function syncInboxForUser(userId) {
+export async function syncGoogleInbox(userId) {
   await ensureInboxSchema();
-  return maybeSyncInboxForUser(userId, { force: true });
+
+  const { rows } = await query(
+    `
+      SELECT *
+      FROM inbox_accounts
+      WHERE user_id = $1 AND provider = 'google'
+      LIMIT 1
+    `,
+    [userId]
+  );
+
+  const account = rows[0];
+  if (!account) {
+    throw new HttpError(404, 'Nessun account Google collegato');
+  }
+
+  const accessToken = await resolveAccountAccessToken(account);
+  const importedCount = await syncInboxMessages(account, accessToken);
+
+  const { rows: refreshedRows } = await query(
+    `
+      SELECT id, provider_email, last_synced_at
+      FROM inbox_accounts
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [account.id]
+  );
+
+  return {
+    importedCount,
+    account: refreshedRows[0] ?? {
+      id: account.id,
+      provider_email: account.provider_email,
+      last_synced_at: new Date().toISOString()
+    }
+  };
 }
