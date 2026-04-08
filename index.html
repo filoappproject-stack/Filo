@@ -42,7 +42,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 .nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:#6B6860;margin-bottom:3px;transition:background 0.12s;}
 .nav-item:hover{background:#F0EDE6;color:#1A1A18;}
 .nav-item.active{background:#E8EEFB;color:#0D2E7A;font-weight:500;}
-.nav-badge{margin-left:auto;font-size:10px;font-weight:500;padding:1px 6px;border-radius:10px;}
+.nav-badge{margin-left:auto;font-size:10px;font-weight:500;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center;}
+.nav-item.active .nav-badge{background:#D7E3FF;color:#0D2E7A;}
 .nb-red{background:#FDECEC;color:#9B2525;}.nb-blue{background:#E8EEFB;color:#0D2E7A;}.nb-green{background:#E4F4EE;color:#0E6B4A;}
 .sidebar-footer{margin-top:auto;padding:12px 10px;border-top:1px solid rgba(0,0,0,0.06);display:flex;align-items:center;gap:8px;}
 .av-sm{width:30px;height:30px;border-radius:50%;background:#E8EEFB;color:#0D2E7A;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0;}
@@ -269,7 +270,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
     <div class="nav-item" onclick="showPage('inbox',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 2.5h13L7.5 8 1 2.5z"/><path d="M1 2.5v9a1 1 0 001 1h11a1 1 0 001-1v-9"/></svg>
       Inbox
-      <span class="nav-badge nb-red" id="nb-inbox">0</span>
+      <span class="nav-badge nb-blue" id="nb-inbox">0</span>
     </div>
     <div class="nav-item" onclick="showPage('task',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="13" height="13" rx="2"/><path d="M4.5 7.5l2 2 4-4"/></svg>
@@ -279,6 +280,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
     <div class="nav-item" onclick="showPage('note',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="1" width="11" height="13" rx="1.5"/><line x1="4.5" y1="4.5" x2="10.5" y2="4.5"/><line x1="4.5" y1="7" x2="10.5" y2="7"/><line x1="4.5" y1="9.5" x2="8" y2="9.5"/></svg>
       Note
+      <span class="nav-badge nb-blue" id="nb-note">0</span>
     </div>
     <div class="nav-sec">Strumenti</div>
     <div class="nav-item" onclick="showPage('memoria',this)">
@@ -366,12 +368,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
         <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
           <div style="font-size:13px;color:#6B6860;" id="inbox-connection-state">Mailbox non collegata</div>
           <div style="display:flex;gap:8px;">
-            <button class="btn-ghost" id="inbox-diagnose-btn" onclick="diagnoseMailboxApi()">Diagnostica API</button>
             <button class="btn-ghost" id="inbox-connect-btn" onclick="connectMailbox()">Collega mailbox</button>
             <button class="btn-primary" id="inbox-sync-btn" onclick="syncMailbox()" style="display:none;">Sincronizza</button>
           </div>
         </div>
         <div class="card" style="padding:4px 18px;" id="inbox-list"></div>
+        <div class="card" id="inbox-message-view" style="display:none;"></div>
       </div>
 
       <!-- TASK -->
@@ -480,7 +482,7 @@ const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
 
     const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
     const matchesExpectedState = !!(expectedState && state && expectedState === state);
-    const hasInboxStatePrefix = typeof state === 'string' && state.startsWith('inbox:');
+    const hasInboxStatePrefix = typeof state === 'string' && state.startsWith('mailbox:');
     const isInboxOAuthCallback = matchesExpectedState || hasInboxStatePrefix;
     if(!isInboxOAuthCallback) return;
 
@@ -493,7 +495,7 @@ const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
       prompt: url.searchParams.get('prompt')
     };
     sessionStorage.setItem(INBOX_OAUTH_QUERY_STORAGE_KEY, JSON.stringify(payload));
-    ['code','error','state','scope','authuser','prompt'].forEach((k)=>url.searchParams.delete(k));
+    ['code','error','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash);
   }catch(e){}
 })();
@@ -674,8 +676,22 @@ async function tryHandleMailboxOauthCallback() {
     return false;
   }
 
-  const code = url.searchParams.get('code');
-  const state = url.searchParams.get('state');
+  let code = url.searchParams.get('code');
+  let state = url.searchParams.get('state');
+  if (!code || !isMailboxOauthState(state)) {
+    try {
+      const raw = sessionStorage.getItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
+      if (raw) {
+        const stored = JSON.parse(raw);
+        const storedCode = typeof stored?.code === 'string' ? stored.code : '';
+        const storedState = typeof stored?.state === 'string' ? stored.state : '';
+        if (storedCode && isMailboxOauthState(storedState)) {
+          code = storedCode;
+          state = storedState;
+        }
+      }
+    } catch (e) {}
+  }
   if (!code || !isMailboxOauthState(state)) return false;
 
   const userId = extractUserIdFromMailboxState(state);
@@ -698,17 +714,19 @@ async function tryHandleMailboxOauthCallback() {
     setInboxConnectionState(true, syncedAt);
     await loadInboxMessages();
 
-    url.searchParams.delete('code');
-    url.searchParams.delete('state');
+    ['code','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     window.history.replaceState(
       {},
       document.title,
       url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '')
     );
+    sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
+    sessionStorage.removeItem('filo_inbox_oauth_state');
     return true;
   } catch (err) {
     console.warn('Errore callback mailbox OAuth:', err);
     showError('Connessione mailbox non completata. Riprova.');
+    sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
     return false;
   }
 }
@@ -762,6 +780,10 @@ async function loginSuccess(user) {
 
   activeSessionUserId = user.id;
   currentUser = user;
+  const cachedNotes = loadNotesFromCache();
+  if (cachedNotes) notes = cachedNotes;
+  const numericNoteIds = notes.map(n=>parseInt(n.id,10)).filter(n=>Number.isFinite(n));
+  nextNoteId = numericNoteIds.length ? Math.max(...numericNoteIds)+1 : 100;
   tasks = [];
   nextTaskId = 100;
   document.getElementById('login-screen').style.display = 'none';
@@ -781,17 +803,38 @@ async function loginSuccess(user) {
   document.getElementById('pf-name').value = name;
   document.getElementById('page-title').textContent = 'Buongiorno, ' + firstName;
 
+  const cachedTasks = loadTasksFromCache();
+  if (cachedTasks) {
+    tasks = cachedTasks;
+    const numericTaskIds = tasks.map(t=>parseInt(t.id,10)).filter(n=>Number.isFinite(n));
+    nextTaskId = numericTaskIds.length ? Math.max(...numericTaskIds)+1 : 100;
+  }
+  const cachedInbox = loadInboxFromCache();
+  if (cachedInbox) {
+    INBOX.length=0;
+    cachedInbox.messages.forEach(m=>INBOX.push(m));
+    setInboxConnectionState(cachedInbox.connected,cachedInbox.lastSync);
+  }
+  initCheckin();
+  renderAll();
+  restorePostOauthPage();
   await loadTasksFromApi();
+  mailboxBackgroundSyncInProgress=true;
+  renderAll();
   try{
     await loadInboxMessages();
     if(INBOX.length){
       setInboxConnectionState(true,Date.now());
+      saveInboxToCache();
     }
   }catch(err){
-    setInboxConnectionState(false,null);
-    INBOX.length=0;
+    if(!cachedInbox){
+      setInboxConnectionState(false,null);
+      INBOX.length=0;
+    }
+  }finally{
+    mailboxBackgroundSyncInProgress=false;
   }
-  initCheckin();
   renderAll();
   analyzePatterns();
 }
@@ -807,31 +850,44 @@ let nextTaskId=100;
 let mailboxConnected=false;
 let mailboxLastSync=null;
 let mailboxSyncInProgress=false;
+let mailboxBackgroundSyncInProgress=false;
 let mailboxConnectionError='';
 let notes=[{id:1,title:"Budget Q2 - bozza",body:"Marketing +15%, sviluppo stabile, ops da rivedere.",tags:["Budget","Q2"]},{id:2,title:"Note call Rossi - 10 marzo",body:"Vuole sconto 8% su volume. Ordine min. 500 unità.",tags:["Clienti","Vendite"]},{id:3,title:"Idee roadmap H2",body:"Onboarding semplificato, dashboard analytics v2.",tags:["Prodotto"]},{id:4,title:"Riflessioni pricing",body:"Seat-based vs usage-based. Competitor cambiato a gennaio.",tags:["Strategia"]}];
 let nextNoteId=100;
 let currentNoteId=null;
+let inboxSelectedId=null;
 let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
 const LOCAL_API_BASES=['http://localhost:4000','http://127.0.0.1:4000'];
 const SHOULD_TRY_LOCAL_API=['localhost','127.0.0.1'].includes(window.location.hostname);
-function buildApiBaseCandidates(){const out=[];const configured=(window.FILO_API_BASE_URL||'').trim();if(configured)out.push(configured);const host=window.location.hostname;const origin=window.location.origin;if(/\.vercel\.app$/.test(host)){const project=host.replace(/\.vercel\.app$/,'');const root=project.replace(/-new$/,'');out.push(`https://${root}-api.vercel.app`);out.push(`https://${project}-api.vercel.app`);}if(SHOULD_TRY_LOCAL_API)out.push(...LOCAL_API_BASES);out.push(origin);return out.filter((v,i,a)=>v&&a.indexOf(v)===i);}
+function buildApiBaseCandidates(){const out=[];const origin=window.location.origin;out.push(origin);const configured=(window.FILO_API_BASE_URL||'').trim();if(configured)out.push(configured);if(SHOULD_TRY_LOCAL_API)out.push(...LOCAL_API_BASES);return out.filter((v,i,a)=>v&&a.indexOf(v)===i);}
 const API_BASES=buildApiBaseCandidates();
 const TASKS_CACHE_PREFIX='filo_tasks_cache_';
+const NOTES_CACHE_PREFIX='filo_notes_cache_';
+const INBOX_CACHE_PREFIX='filo_inbox_cache_';
+const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
 
 function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
 function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
 function saveTasksToCache(){const key=getTaskCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(tasks));}catch(e){}}
 function loadTasksFromCache(){const key=getTaskCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
+function getNotesCacheKey(){return currentUser?.id?`${NOTES_CACHE_PREFIX}${currentUser.id}`:null;}
+function saveNotesToCache(){const key=getNotesCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(notes));}catch(e){}}
+function loadNotesFromCache(){const key=getNotesCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
+function getInboxCacheKey(){return currentUser?.id?`${INBOX_CACHE_PREFIX}${currentUser.id}`:null;}
+function saveInboxToCache(){const key=getInboxCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify({connected:mailboxConnected,lastSync:mailboxLastSync,messages:INBOX}));}catch(e){}}
+function loadInboxFromCache(){const key=getInboxCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;if(!parsed||!Array.isArray(parsed.messages))return null;return parsed;}catch(e){return null;}}
+function restorePostOauthPage(){const id=sessionStorage.getItem(POST_OAUTH_PAGE_KEY);if(!id)return;sessionStorage.removeItem(POST_OAUTH_PAGE_KEY);const pageEl=document.getElementById(`page-${id}`);if(!pageEl)return;const navEl=Array.from(document.querySelectorAll('.nav-item')).find(el=>el.getAttribute('onclick')===`showPage('${id}',this)`);showPage(id,navEl||null);}
 function getInboxConnectRedirectUri(){return `${window.location.origin}${window.location.pathname}`;}
 function getInboxStatePrefix(){return 'mailbox:';}
 function isMailboxOauthState(state){return typeof state==='string'&&state.startsWith(getInboxStatePrefix());}
 function extractUserIdFromMailboxState(state){if(!isMailboxOauthState(state))return null;const [,userId]=state.split(':');return userId||null;}
 function formatInboxTime(ts){if(!ts)return '';const d=new Date(ts);if(Number.isNaN(d.getTime()))return '';return d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});}
+function escapeHtml(str){return String(str??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');}
 function avatarFromSender(sender){const raw=(sender||'').replace(/<[^>]+>/g,'').replace(/["']/g,'').trim();const display=raw||'Sconosciuto';const initials=display.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'?';return{display,initials};}
 function mapInboxMessageToUi(item){const labels=Array.isArray(item?.labels)?item.labels:[];const unread=labels.includes('UNREAD');const sender=avatarFromSender(item?.sender);return{id:item?.id,from:sender.display,subj:item?.subject||'(Senza oggetto)',prev:item?.snippet||'',time:formatInboxTime(item?.received_at||item?.created_at),source:'Email',initials:sender.initials,bg:'#E8EEFB',tc:'#0D2E7A',unread};}
-async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));}
+async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));saveInboxToCache();}
 function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)mailboxConnectionError='';}
 async function requestMailboxConnectUrl(userId,state){
   const payload={userId,redirectUri:getInboxConnectRedirectUri(),state};
@@ -926,19 +982,21 @@ function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classLi
 // â”€â”€ RENDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function tagBadge(tag,idx){const c=TAG_PALETTE[idx%TAG_PALETTE.length];return `<span style="font-size:10px;font-weight:500;padding:2px 7px;border-radius:8px;background:${c.bg};color:${c.tc};">${tag}</span>`;}
 function prioritaBadge(p){const m={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};const l={urgente:'Urgente',alta:'Alta',normale:'Normale',bassa:'Bassa'};return `<span class="badge ${m[p]||'b-normale'}">${l[p]||p}</span>`;}
-function renderAll(){renderInboxControls();renderInbox();renderCalendar();renderTasks();renderNotes();updateBadges();}
-function renderInboxControls(){const state=document.getElementById('inbox-connection-state');const connectBtn=document.getElementById('inbox-connect-btn');const syncBtn=document.getElementById('inbox-sync-btn');const diagBtn=document.getElementById('inbox-diagnose-btn');if(!state||!connectBtn||!syncBtn||!diagBtn)return;diagBtn.disabled=mailboxSyncInProgress;if(!mailboxConnected){state.textContent=mailboxConnectionError||'Mailbox non collegata';state.style.color=mailboxConnectionError?'#9B2525':'#6B6860';connectBtn.style.display='';connectBtn.textContent=mailboxSyncInProgress?'Connessione...':'Collega mailbox';connectBtn.disabled=mailboxSyncInProgress;syncBtn.style.display='none';return;}state.style.color='#6B6860';const last=mailboxLastSync?new Date(mailboxLastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'mai';state.textContent=`Mailbox collegata · ultima sync ${last}`;connectBtn.style.display='none';syncBtn.style.display='';syncBtn.disabled=mailboxSyncInProgress;syncBtn.innerHTML=mailboxSyncInProgress?'<span class="spinning">↻</span> Sincronizzo...':'Sincronizza';}
-function renderInbox(){const el=document.getElementById('inbox-list');if(!el)return;if(!mailboxConnected){el.innerHTML='<div class="empty-state"><div class="empty-title">Collega la mailbox</div><div class="empty-sub">Connettiti e poi premi "Sincronizza" per vedere i messaggi qui.</div></div>';return;}if(!INBOX.length){el.innerHTML='<div class="empty-state"><div class="empty-title">Nessun messaggio sincronizzato</div><div class="empty-sub">Premi "Sincronizza" per aggiornare la inbox.</div></div>';return;}el.innerHTML=INBOX.map(item=>`<div class="inbox-item"><div style="width:7px;height:7px;border-radius:50%;background:${item.unread?'#1A4FBF':'transparent'};margin-top:6px;flex-shrink:0;"></div><div class="av" style="background:${item.bg};color:${item.tc};">${item.initials}</div><div class="inbox-body"><div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span style="font-size:13px;font-weight:500;">${item.from}</span><span style="font-size:11px;color:#9E9B94;">${item.time}</span></div><div style="font-size:13px;margin-bottom:2px;">${item.subj}</div><div style="font-size:12px;color:#9E9B94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.prev}</div></div><span class="badge ${item.source==='Slack'?'b-slack':'b-blue'}">${item.source}</span></div>`).join('');}
+function renderAll(){renderInboxControls();renderInbox();renderInboxDetail();renderCalendar();renderTasks();renderNotes();updateBadges();}
+function openInboxMessage(id){inboxSelectedId=id;const item=INBOX.find(i=>i.id===id);if(item&&item.unread){item.unread=false;saveInboxToCache();}renderAll();}
+function closeInboxMessage(){inboxSelectedId=null;renderInboxDetail();updateBadges();}
+function renderInboxControls(){const state=document.getElementById('inbox-connection-state');const connectBtn=document.getElementById('inbox-connect-btn');const syncBtn=document.getElementById('inbox-sync-btn');if(!state||!connectBtn||!syncBtn)return;if(!mailboxConnected){if(mailboxBackgroundSyncInProgress){state.textContent='Sincronizzazione mailbox in corso... potrebbe richiedere alcuni minuti.';state.style.color='#0D2E7A';connectBtn.style.display='';connectBtn.textContent='Sincronizzazione...';connectBtn.disabled=true;syncBtn.style.display='none';return;}state.textContent=mailboxConnectionError||'Mailbox non collegata';state.style.color=mailboxConnectionError?'#9B2525':'#6B6860';connectBtn.style.display='';connectBtn.textContent=mailboxSyncInProgress?'Connessione...':'Collega mailbox';connectBtn.disabled=mailboxSyncInProgress;syncBtn.style.display='none';return;}state.style.color='#6B6860';const last=mailboxLastSync?new Date(mailboxLastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'mai';state.textContent=`Mailbox collegata · ultima sync ${last}`;connectBtn.style.display='none';syncBtn.style.display='';syncBtn.disabled=mailboxSyncInProgress;syncBtn.innerHTML=mailboxSyncInProgress?'<span class="spinning">↻</span> Sincronizzo...':'Sincronizza';}
+function renderInbox(){const el=document.getElementById('inbox-list');if(!el)return;if(!mailboxConnected){if(mailboxBackgroundSyncInProgress){el.innerHTML='<div class="empty-state"><div class="empty-title"><span class="spinning">↻</span> Sincronizzazione in corso</div><div class="empty-sub">Stiamo collegando la mailbox e recuperando i messaggi. L\'operazione può richiedere qualche minuto.</div></div>';return;}el.innerHTML='<div class="empty-state"><div class="empty-title">Collega la mailbox</div><div class="empty-sub">Connettiti e poi premi "Sincronizza" per vedere i messaggi qui.</div></div>';return;}if(!INBOX.length){el.innerHTML='<div class="empty-state"><div class="empty-title">Nessun messaggio sincronizzato</div><div class="empty-sub">Premi "Sincronizza" per aggiornare la inbox.</div></div>';return;}el.innerHTML=INBOX.map(item=>`<div class="inbox-item" onclick="openInboxMessage('${item.id}')" style="cursor:pointer;${inboxSelectedId===item.id?'background:#F7FAFF;':''}"><div style="width:7px;height:7px;border-radius:50%;background:${item.unread?'#1A4FBF':'transparent'};margin-top:6px;flex-shrink:0;"></div><div class="av" style="background:${item.bg};color:${item.tc};">${item.initials}</div><div class="inbox-body"><div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span style="font-size:13px;font-weight:500;">${escapeHtml(item.from)}</span><span style="font-size:11px;color:#9E9B94;">${item.time}</span></div><div style="font-size:13px;margin-bottom:2px;">${escapeHtml(item.subj)}</div><div style="font-size:12px;color:#9E9B94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.prev)}</div></div><span class="badge ${item.source==='Slack'?'b-slack':'b-blue'}">${item.source}</span></div>`).join('');}
+function renderInboxDetail(){const el=document.getElementById('inbox-message-view');if(!el)return;const item=INBOX.find(i=>i.id===inboxSelectedId);if(!item||!mailboxConnected){el.style.display='none';el.innerHTML='';return;}el.style.display='';el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;"><div><div style="font-size:12px;color:#9E9B94;margin-bottom:4px;">Da: ${escapeHtml(item.from)}</div><div style="font-size:16px;font-weight:600;margin-bottom:6px;">${escapeHtml(item.subj)}</div><div style="font-size:12px;color:#9E9B94;">Ricevuta alle ${item.time||'--:--'}</div></div><button class="btn-ghost" onclick="closeInboxMessage()">Chiudi</button></div><div style="margin-top:14px;font-size:13px;line-height:1.6;color:#3A3936;">${escapeHtml(item.prev)||'(Nessun contenuto disponibile)'}</div>`;}
 function renderCalendar(){const el=document.getElementById('cal-events');if(!el)return;el.innerHTML=CAL.map(ev=>`<div class="cal-slot" style="${ev.done?'opacity:0.45':''}"><div class="cal-time">${ev.time}</div><div class="cal-block ${ev.hl?'hl':''}"><div style="font-size:13px;font-weight:500;color:${ev.hl?'#0D2E7A':'#1A1A18'};margin-bottom:3px;">${ev.title}</div><div style="font-size:12px;color:${ev.hl?'#185FA5':'#9E9B94'};">${ev.meta}</div></div>${ev.done?'<div style="font-size:11px;color:#0E6B4A;align-self:center;flex-shrink:0;">✓ Fatto</div>':''}</div>`).join('');}
 function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filter(t=>t.done);const ol=document.getElementById('open-tasks-list');const dl=document.getElementById('done-tasks-list');const dc=document.getElementById('done-tasks-card');if(!ol)return;document.getElementById('open-tasks-label').textContent=`Aperti (${open.length})`;ol.innerHTML=open.length===0?'<div style="font-size:13px;color:#9E9B94;padding:8px 0;font-style:italic;">Nessun task aperto!</div>':open.map(t=>`<div class="task-row"><div class="checkbox" onclick="toggleTask(${t.id})"></div><span style="font-size:13px;flex:1;">${t.label}</span>${t.scadenza?`<span style="font-size:11px;color:#9E9B94;">${t.scadenza}</span>`:''} ${prioritaBadge(t.priorita)}<button class="btn-icon" onclick="deleteTask(${t.id})">✕</button></div>`).join('');if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>`<div class="task-row"><div class="checkbox done" onclick="toggleTask(${t.id})"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div><span style="font-size:13px;flex:1;color:#9E9B94;text-decoration:line-through;">${t.label}</span><button class="btn-icon" onclick="deleteTask(${t.id})">✕</button></div>`).join('');}else dc.style.display='none';updateTaskSubtitle();updateBadges();}
 function renderNotes(){const el=document.getElementById('notes-container');if(!el)return;if(!notes.length){el.innerHTML='<div class="empty-state"><div class="empty-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#9E9B94" stroke-width="1.4"><rect x="3" y="2" width="14" height="16" rx="2"/><line x1="7" y1="7" x2="13" y2="7"/><line x1="7" y1="10" x2="13" y2="10"/><line x1="7" y1="13" x2="10" y2="13"/></svg></div><div class="empty-title">Nessuna nota ancora</div></div>';return;}el.innerHTML=notes.map(n=>`<div class="note-card" onclick="openNoteEditor(${n.id})"><div style="font-size:14px;font-weight:500;margin-bottom:4px;">${n.title}</div><div style="font-size:12px;color:#6B6860;line-height:1.5;margin-bottom:8px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${n.body}</div><div style="display:flex;gap:5px;">${n.tags.map((t,j)=>tagBadge(t,j)).join('')}</div></div>`).join('');}
-function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=INBOX.filter(i=>i.unread).length;const nb=document.getElementById('nb-task');if(nb){nb.textContent=open;nb.style.display='';}document.getElementById('nb-inbox').textContent=unread;document.getElementById('stat-inbox').textContent=unread;document.getElementById('stat-tasks').textContent=open;updateInboxSubtitle();}
+function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=INBOX.filter(i=>i.unread).length;const noteCount=notes.length;const nb=document.getElementById('nb-task');if(nb){nb.textContent=open;nb.style.display='';}const noteBadge=document.getElementById('nb-note');if(noteBadge){noteBadge.textContent=noteCount;noteBadge.style.display='';}document.getElementById('nb-inbox').textContent=unread;document.getElementById('stat-inbox').textContent=unread;document.getElementById('stat-tasks').textContent=open;updateInboxSubtitle();}
 function updateInboxSubtitle(){const total=INBOX.length;const unread=INBOX.filter(i=>i.unread).length;PAGE_META.inbox[1]=mailboxConnected?`${total} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
-async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;const authUrl=await requestMailboxConnectUrl(currentUser.id,state);window.location.assign(authUrl);}catch(err){console.warn('Errore collegamento mailbox:',err);mailboxConnectionError='Connessione mailbox non riuscita: backend API non raggiungibile.';showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
+async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const authUrl=await requestMailboxConnectUrl(currentUser.id,state);window.location.assign(authUrl);}catch(err){console.warn('Errore collegamento mailbox:',err);mailboxConnectionError='Connessione mailbox non riuscita: backend API non raggiungibile.';showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);showError('Sincronizzazione mailbox non riuscita.');}finally{mailboxSyncInProgress=false;renderAll();}}
-async function diagnoseMailboxApi(){const userId=currentUser?.id||'11111111-1111-1111-1111-111111111111';const redirectUri=getInboxConnectRedirectUri();const rows=[];for(const base of API_BASES){const root=base.replace(/\/$/,'');const connectUrl=`${root}/api/v1/inbox/google/connect?`+new URLSearchParams({userId,redirectUri,state:`${getInboxStatePrefix()}diag`}).toString();const tasksUrl=`${root}/api/v1/tasks?userId=${encodeURIComponent(userId)}`;for(const [kind,url] of [['connect',connectUrl],['tasks',tasksUrl]]){try{const res=await fetch(url,{method:'GET'});rows.push({base,endpoint:kind,status:res.status,contentType:res.headers.get('content-type')||''});}catch(err){rows.push({base,endpoint:kind,status:'NETWORK_ERR',contentType:String(err?.message||err)});}}}console.table(rows);const summary=rows.map(r=>`${r.base} · ${r.endpoint}: ${r.status} (${r.contentType||'n/a'})`).join('\n');alert(`Diagnostica API completata. Vedi console per dettagli.\n\n${summary}`);}
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────
 function toggleTaskForm(){const f=document.getElementById('task-form');const b=document.getElementById('task-form-toggle');const open=f.style.display==='none';f.style.display=open?'':'none';b.textContent=open?'Annulla':'+ Nuovo task';b.style.background=open?'#F0EDE6':'#1A4FBF';b.style.color=open?'#6B6860':'#fff';if(open)document.getElementById('new-task-label').focus();}
@@ -1000,8 +1058,8 @@ function deleteTask(id){tasks=tasks.filter(t=>t.id!==id);saveTasksToCache();rend
 // â”€â”€ NOTE CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function showNoteList(){document.getElementById('note-list-view').style.display='';document.getElementById('note-editor-view').style.display='none';document.getElementById('page-sub').textContent=notes.length+' note';renderNotes();}
 function openNoteEditor(id){currentNoteId=id;const n=id?notes.find(n=>n.id===id):null;document.getElementById('note-edit-title').value=n?n.title:'';document.getElementById('note-edit-body').value=n?n.body:'';document.getElementById('note-edit-tags').value=n?n.tags.join(', '):'';document.getElementById('note-list-view').style.display='none';document.getElementById('note-editor-view').style.display='';document.getElementById('page-sub').textContent=id?'Modifica e salva':'Nuova nota';document.getElementById('topbar-actions').innerHTML=`<div style="display:flex;gap:8px;"><button class="btn-primary" onclick="saveNote()">Salva</button><button class="btn-ghost" onclick="showNoteList()">Annulla</button>${id?'<button class="btn-danger" onclick="deleteNote('+id+')">Elimina</button>':''}</div>`;}
-function saveNote(){const title=document.getElementById('note-edit-title').value.trim()||'Nota senza titolo';const body=document.getElementById('note-edit-body').value.trim();const tags=document.getElementById('note-edit-tags').value.split(',').map(t=>t.trim()).filter(Boolean);if(currentNoteId){const n=notes.find(n=>n.id===currentNoteId);if(n){n.title=title;n.body=body;n.tags=tags;}}else{notes.push({id:nextNoteId++,title,body,tags});}showNoteList();}
-function deleteNote(id){notes=notes.filter(n=>n.id!==id);showNoteList();}
+function saveNote(){const title=document.getElementById('note-edit-title').value.trim()||'Nota senza titolo';const body=document.getElementById('note-edit-body').value.trim();const tags=document.getElementById('note-edit-tags').value.split(',').map(t=>t.trim()).filter(Boolean);if(currentNoteId){const n=notes.find(n=>n.id===currentNoteId);if(n){n.title=title;n.body=body;n.tags=tags;}}else{notes.push({id:nextNoteId++,title,body,tags});}saveNotesToCache();showNoteList();}
+function deleteNote(id){notes=notes.filter(n=>n.id!==id);saveNotesToCache();showNoteList();}
 
 // ── RICERCA ───────────────────────────────────────────────────────────────────
 function doSearch(q){const el=document.getElementById('search-results');if(!q.trim()){el.innerHTML='<div class="empty-state"><div class="empty-title">Inizia a digitare</div></div>';return;}const ql=q.toLowerCase();const rt=tasks.filter(t=>t.label.toLowerCase().includes(ql));const rn=notes.filter(n=>n.title.toLowerCase().includes(ql)||n.body.toLowerCase().includes(ql));const ri=INBOX.filter(i=>i.from.toLowerCase().includes(ql)||i.subj.toLowerCase().includes(ql));if(!rt.length&&!rn.length&&!ri.length){el.innerHTML=`<div style="text-align:center;padding:32px;color:#9E9B94;font-size:13px;">Nessun risultato per "${q}"</div>`;return;}let html='';if(rt.length)html+=`<div class="card"><div class="sec-label">Task (${rt.length})</div>${rt.map(t=>`<div class="task-row"><span style="font-size:13px;flex:1;color:${t.done?'#9E9B94':'#1A1A18'};text-decoration:${t.done?'line-through':'none'};">${t.label}</span>${prioritaBadge(t.priorita)}</div>`).join('')}</div>`;if(rn.length)html+=`<div class="card"><div class="sec-label">Note (${rn.length})</div>${rn.map(n=>`<div style="padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);cursor:pointer;" onclick="showPage('note');openNoteEditor(${n.id})"><div style="font-size:13px;font-weight:500;margin-bottom:2px;">${n.title}</div><div style="font-size:12px;color:#9E9B94;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${n.body}</div></div>`).join('')}</div>`;if(ri.length)html+=`<div class="card"><div class="sec-label">Email (${ri.length})</div>${ri.map(item=>`<div style="display:flex;gap:10px;padding:9px 0;"><div class="av" style="width:28px;height:28px;font-size:10px;background:${item.bg};color:${item.tc};">${item.initials}</div><div><div style="font-size:13px;font-weight:500;">${item.from}</div><div style="font-size:12px;color:#9E9B94;">${item.subj}</div></div></div>`).join('')}</div>`;el.innerHTML=html;}
@@ -1061,4 +1119,3 @@ init();
 </script>
 </body>
 </html>
-
