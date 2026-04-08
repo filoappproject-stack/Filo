@@ -3,7 +3,8 @@ import { HttpError } from '../utils/httpError.js';
 import {
   buildGoogleAuthUrl,
   exchangeGoogleCodeAndSync,
-  listInboxMessages
+  listInboxMessages,
+  syncGoogleInbox
 } from '../services/inbox.service.js';
 
 const ConnectSchema = z.object({
@@ -16,6 +17,10 @@ const ExchangeSchema = z.object({
   userId: z.string().uuid(),
   code: z.string().min(10),
   redirectUri: z.string().url()
+});
+
+const SyncSchema = z.object({
+  userId: z.string().uuid()
 });
 
 const MessagesQuerySchema = z.object({
@@ -41,6 +46,16 @@ export async function postGoogleCodeExchange(req, res) {
 
   const result = await exchangeGoogleCodeAndSync(parsed.data);
   res.status(201).json({ data: result });
+}
+
+export async function postGoogleSync(req, res) {
+  const parsed = SyncSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Payload sync inbox non valido');
+  }
+
+  const result = await syncGoogleInbox(parsed.data.userId);
+  res.json({ data: result });
 }
 
 export async function getInboxMessages(req, res) {
