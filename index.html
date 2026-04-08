@@ -696,10 +696,11 @@ async function tryHandleMailboxOauthCallback() {
   if (!userId) return false;
 
   try {
+    const redirectUri = sessionStorage.getItem(MAILBOX_REDIRECT_URI_KEY) || getInboxConnectRedirectUri();
     const res = await fetchApi('/api/v1/inbox/google/exchange', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, code, redirectUri: getInboxConnectRedirectUri() })
+      body: JSON.stringify({ userId, code, redirectUri })
     });
 
     if (!res.ok) {
@@ -835,6 +836,7 @@ const SHOULD_TRY_LOCAL_API=['localhost','127.0.0.1'].includes(window.location.ho
 function buildApiBaseCandidates(){const out=[];const origin=window.location.origin;out.push(origin);const configured=(window.FILO_API_BASE_URL||'').trim();if(configured)out.push(configured);if(SHOULD_TRY_LOCAL_API)out.push(...LOCAL_API_BASES);return out.filter((v,i,a)=>v&&a.indexOf(v)===i);}
 const API_BASES=buildApiBaseCandidates();
 const TASKS_CACHE_PREFIX='filo_tasks_cache_';
+const MAILBOX_REDIRECT_URI_KEY='filo_mailbox_redirect_uri';
 
 function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
 function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
@@ -851,6 +853,7 @@ async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=
 function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)mailboxConnectionError='';}
 async function requestMailboxConnectUrl(userId,state){
   const payload={userId,redirectUri:getInboxConnectRedirectUri(),state};
+  let lastDetail='';
   for(const base of API_BASES){
     const root=base.replace(/\/$/,'');
     const endpoint=`${root}/api/v1/inbox/google/connect`;
@@ -860,14 +863,28 @@ async function requestMailboxConnectUrl(userId,state){
         const qs=new URLSearchParams(payload);
         res=await fetch(`${endpoint}?${qs.toString()}`,{method:'GET'});
       }
-      if(!res.ok)continue;
+      if(!res.ok){
+        const txt=await res.text().catch(()=> '');
+        lastDetail=`${res.status} ${txt}`.trim();
+        continue;
+      }
       const ct=(res.headers.get('content-type')||'').toLowerCase();
-      if(!ct.includes('application/json'))continue;
+      if(!ct.includes('application/json')){
+        lastDetail=`Risposta non JSON da ${endpoint}`;
+        continue;
+      }
       const data=await res.json();
-      if(data?.data?.authUrl)return data.data.authUrl;
+      const authUrl=data?.data?.authUrl;
+      if(authUrl){
+        return {
+          authUrl,
+          redirectUri: data?.data?.redirectUri || payload.redirectUri
+        };
+      }
+      lastDetail='Risposta JSON senza authUrl';
     }catch(err){}
   }
-  throw new Error('Endpoint mailbox connect non raggiungibile');
+  throw new Error(lastDetail||'Endpoint mailbox connect non raggiungibile');
 }
 
 async function fetchApi(path,options={}){
