@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="UTF-8">
@@ -347,7 +347,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
         <div class="error-box" id="ai-error"></div>
         <div class="loader" id="ai-loader">
           <div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>
-          <div style="font-size:13px;color:#9E9B94;font-style:italic;">Sto analizzando la tua giornata…</div>
+          <div style="font-size:13px;color:#9E9B94;font-style:italic;">Sto analizzando la tua giornataâ€¦</div>
         </div>
         <div id="suggestions-container">
           <div class="empty-state">
@@ -464,9 +464,39 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 </div>
 
 <script>
-// ── SUPABASE ──────────────────────────────────────────────────────────────────
+// â”€â”€ SUPABASE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SUPABASE_URL = 'https://xkdniukhksfiuromnmtv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_UdRD3JHIa14slQ_0ltkNTA_0Xkdkfn4';
+const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
+
+(function preserveInboxOAuthQueryBeforeSupabaseInit(){
+  try{
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    const error = url.searchParams.get('error');
+    const state = url.searchParams.get('state');
+    if(!code && !error) return;
+
+    const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
+    const matchesExpectedState = !!(expectedState && state && expectedState === state);
+    const hasInboxStatePrefix = typeof state === 'string' && state.startsWith('inbox:');
+    const isInboxOAuthCallback = matchesExpectedState || hasInboxStatePrefix;
+    if(!isInboxOAuthCallback) return;
+
+    const payload = {
+      code,
+      error,
+      state,
+      scope: url.searchParams.get('scope'),
+      authuser: url.searchParams.get('authuser'),
+      prompt: url.searchParams.get('prompt')
+    };
+    sessionStorage.setItem(INBOX_OAUTH_QUERY_STORAGE_KEY, JSON.stringify(payload));
+    ['code','error','state','scope','authuser','prompt'].forEach((k)=>url.searchParams.delete(k));
+    window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash);
+  }catch(e){}
+})();
+
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: {
     persistSession: true,
@@ -475,8 +505,11 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, 
   }
 });
 
-// ── AUTH ──────────────────────────────────────────────────────────────────────
+// â”€â”€ AUTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let currentUser = null;
+let authTransitionInFlight = false;
+let lastAuthenticatedUserId = null;
+const handledInboxOAuthCodes = new Set();
 
 
 
@@ -510,7 +543,7 @@ async function doEmailLogin() {
   const password = document.getElementById('login-password').value;
   if (!email || !password) { showError('Inserisci email e password.'); return; }
   const btn = document.getElementById('btn-email-login');
-  btn.textContent = 'Accesso in corso…'; btn.disabled = true;
+  btn.textContent = 'Accesso in corsoâ€¦'; btn.disabled = true;
   const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
   btn.textContent = 'Accedi'; btn.disabled = false;
   if (error) showError('Email o password non corretti.');
@@ -523,7 +556,7 @@ async function doRegister() {
   if (!name || !email || !password) { showError('Compila tutti i campi.'); return; }
   if (password.length < 6) { showError('La password deve avere almeno 6 caratteri.'); return; }
   const btn = document.getElementById('btn-register');
-  btn.textContent = 'Creazione account…'; btn.disabled = true;
+  btn.textContent = 'Creazione accountâ€¦'; btn.disabled = true;
   const { error } = await supabaseClient.auth.signUp({ email, password, options: { data: { full_name: name } } });
   btn.textContent = 'Crea account'; btn.disabled = false;
   if (error) showError(error.message);
@@ -713,6 +746,9 @@ async function trySetSupabaseSessionFromHash() {
 function showLoginScreen() {
   activeSessionUserId = null;
   currentUser = null;
+  authTransitionInFlight = false;
+  lastAuthenticatedUserId = null;
+  handledInboxOAuthCodes.clear();
   document.getElementById('app-shell').classList.remove('active');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('checkin-overlay').style.display = 'none';
@@ -832,11 +868,11 @@ function mem_set(key,val){try{localStorage.setItem('filo_'+key,JSON.stringify(va
 function saveCheckinToMemory(energy,sleep,stress){const today=new Date().toISOString().slice(0,10);let h=mem_get('checkins')||[];h=h.filter(c=>c.date!==today);h.push({date:today,energy,sleep,stress});if(h.length>30)h=h.slice(-30);mem_set('checkins',h);analyzePatterns();}
 function recordTaskCompleted(task){if(!prefs.memoria)return;let h=mem_get('tasks_done')||[];h.push({label:task.label,priorita:task.priorita,ts:Date.now()});if(h.length>200)h=h.slice(-200);mem_set('tasks_done',h);analyzePatterns();}
 function recordTaskPostponed(task){if(!prefs.memoria)return;let p=mem_get('tasks_postponed')||{};p[task.label]=(p[task.label]||0)+1;mem_set('tasks_postponed',p);}
-function analyzePatterns(){if(!prefs.memoria)return;const checkins=mem_get('checkins')||[];const done=mem_get('tasks_done')||[];const postponed=mem_get('tasks_postponed')||{};const patterns=[];if(checkins.length>=3){const avg=checkins.slice(-7).reduce((s,c)=>s+c.energy,0)/Math.min(checkins.length,7);if(avg<3)patterns.push({icon:"⚡",label:"Energia sotto la media",sub:`Media: ${avg.toFixed(1)}/5`});else if(avg>=4)patterns.push({icon:"🚀",label:"Settimana ad alta energia",sub:`Media: ${avg.toFixed(1)}/5`});}const chronic=Object.entries(postponed).filter(([k,v])=>v>=3).map(([k,v])=>`"${k}" (${v}x)`);if(chronic.length)patterns.push({icon:"🔁",label:"Task rimandati frequentemente",sub:chronic.slice(0,2).join(', ')});if(done.length>=5){const u=done.filter(t=>t.priorita==='urgente').length;patterns.push({icon:"✓",label:`${done.length} task completati`,sub:`${Math.round(u/done.length*100)}% urgenti`});}mem_set('patterns',patterns);return patterns;}
+function analyzePatterns(){if(!prefs.memoria)return;const checkins=mem_get('checkins')||[];const done=mem_get('tasks_done')||[];const postponed=mem_get('tasks_postponed')||{};const patterns=[];if(checkins.length>=3){const avg=checkins.slice(-7).reduce((s,c)=>s+c.energy,0)/Math.min(checkins.length,7);if(avg<3)patterns.push({icon:"âš¡",label:"Energia sotto la media",sub:`Media: ${avg.toFixed(1)}/5`});else if(avg>=4)patterns.push({icon:"ðŸš€",label:"Settimana ad alta energia",sub:`Media: ${avg.toFixed(1)}/5`});}const chronic=Object.entries(postponed).filter(([k,v])=>v>=3).map(([k,v])=>`"${k}" (${v}x)`);if(chronic.length)patterns.push({icon:"ðŸ”",label:"Task rimandati frequentemente",sub:chronic.slice(0,2).join(', ')});if(done.length>=5){const u=done.filter(t=>t.priorita==='urgente').length;patterns.push({icon:"âœ“",label:`${done.length} task completati`,sub:`${Math.round(u/done.length*100)}% urgenti`});}mem_set('patterns',patterns);return patterns;}
 function getMemoryContext(){const checkins=mem_get('checkins')||[];const patterns=mem_get('patterns')||[];const postponed=mem_get('tasks_postponed')||{};let ctx='';if(checkins.length>0){const last=checkins[checkins.length-1];ctx+=`Dati recenti: energia ${last.energy}/5, sonno "${last.sleep}", stress ${last.stress}/5. `;}if(todayEnergy)ctx+=`Energia oggi: ${todayEnergy}/5. `;const chronic=Object.entries(postponed).filter(([k,v])=>v>=3).map(([k])=>k);if(chronic.length)ctx+=`Task che tende a rimandare: ${chronic.join(', ')}. `;if(patterns.length)ctx+=`Pattern: ${patterns.map(p=>p.label).join('; ')}. `;return ctx;}
 function clearMemory(){if(!confirm('Cancellare tutta la memoria?'))return;['checkins','tasks_done','tasks_postponed','patterns'].forEach(k=>localStorage.removeItem('filo_'+k));renderMemoryPage();}
 
-// ── CHECK-IN ──────────────────────────────────────────────────────────────────
+// â”€â”€ CHECK-IN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function selectEnergy(val,el){todayEnergy=val;document.querySelectorAll('.e-btn').forEach(b=>b.classList.remove('selected'));el.classList.add('selected');}
 function selectSleep(val,el){todaySleep=val;document.querySelectorAll('.s-btn').forEach(b=>b.classList.remove('selected'));el.classList.add('selected');}
 function saveCheckin(){todayStress=parseInt(document.getElementById('stress-slider').value);const energy=todayEnergy||3;const sleep=todaySleep||'nella norma';saveCheckinToMemory(energy,sleep,todayStress);document.getElementById('checkin-overlay').style.display='none';updateEnergyDisplay(energy,sleep,todayStress);}
@@ -844,14 +880,14 @@ function skipCheckin(){document.getElementById('checkin-overlay').style.display=
 function updateEnergyDisplay(energy,sleep,stress){const el=document.getElementById('stat-energy');const sub=document.getElementById('stat-energy-sub');if(el){el.textContent=energy+'/5';el.style.color=ENERGY_COLORS[energy]||'#1A1A18';}if(sub)sub.textContent=ENERGY_LABELS[energy]||'';const banner=document.getElementById('energy-banner');if(banner){let msg='';if(energy<=2)msg=`<strong>Energia bassa oggi</strong>. Concentrati su 1-2 priorità.`;else if(energy>=4)msg=`<strong>Ottima energia oggi.</strong> E' il momento ideale per attività impegnative.`;else msg=`<strong>Energia nella norma.</strong> Sonno ${sleep}, stress ${stress}/5.`;banner.innerHTML=msg;banner.classList.add('active');}const checkins=mem_get('checkins')||[];const memBanner=document.getElementById('memory-banner');if(memBanner&&checkins.length>=3){const patterns=analyzePatterns()||[];if(patterns.length){memBanner.innerHTML=`<strong>Memoria:</strong> ${patterns[0].label}`;memBanner.classList.add('active');}}}
 function initCheckin(){const today=new Date().toISOString().slice(0,10);const checkins=mem_get('checkins')||[];const doneToday=checkins.some(c=>c.date===today);if(!prefs.checkin||doneToday){document.getElementById('checkin-overlay').style.display='none';if(doneToday){const last=checkins[checkins.length-1];updateEnergyDisplay(last.energy,last.sleep,last.stress);}}else{document.getElementById('checkin-overlay').style.display='flex';}}
 
-// ── MEMORIA PAGE ──────────────────────────────────────────────────────────────
-function renderMemoryPage(){const checkins=mem_get('checkins')||[];const patterns=analyzePatterns()||[];const eh=document.getElementById('energy-history');if(eh){if(!checkins.length)eh.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">Nessun dato ancora.</div>';else eh.innerHTML=checkins.slice(-7).reverse().map(c=>`<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-size:12px;color:#9E9B94;width:80px;">${c.date}</span><span class="energy-dot" style="background:${ENERGY_COLORS[c.energy]||'#ccc'};"></span><span style="font-size:13px;">${ENERGY_LABELS[c.energy]||c.energy}</span><span style="margin-left:auto;font-size:12px;color:#9E9B94;">sonno: ${c.sleep} · stress: ${c.stress}/5</span></div>`).join('');}const pl=document.getElementById('pattern-list');if(pl){if(!patterns.length)pl.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">I pattern emergono dopo qualche giorno.</div>';else pl.innerHTML=patterns.map(p=>`<div class="mem-item"><div class="mem-icon" style="background:#F0EDE6;">${p.icon}</div><div><div class="mem-label">${p.label}</div><div class="mem-sub">${p.sub}</div></div></div>`).join('');}const ch=document.getElementById('checkin-history');if(ch)ch.innerHTML=`<div style="font-size:13px;color:#9E9B94;">${checkins.length} check-in registrati${checkins.length?' · ultimo: '+checkins[checkins.length-1].date:''}.</div>`;const sc=document.getElementById('stat-checkins');if(sc)sc.textContent=checkins.length;const nb=document.getElementById('nb-mem');if(nb)nb.style.display=patterns.length?'':'none';}
+// â”€â”€ MEMORIA PAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function renderMemoryPage(){const checkins=mem_get('checkins')||[];const patterns=analyzePatterns()||[];const eh=document.getElementById('energy-history');if(eh){if(!checkins.length)eh.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">Nessun dato ancora.</div>';else eh.innerHTML=checkins.slice(-7).reverse().map(c=>`<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-size:12px;color:#9E9B94;width:80px;">${c.date}</span><span class="energy-dot" style="background:${ENERGY_COLORS[c.energy]||'#ccc'};"></span><span style="font-size:13px;">${ENERGY_LABELS[c.energy]||c.energy}</span><span style="margin-left:auto;font-size:12px;color:#9E9B94;">sonno: ${c.sleep} Â· stress: ${c.stress}/5</span></div>`).join('');}const pl=document.getElementById('pattern-list');if(pl){if(!patterns.length)pl.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">I pattern emergono dopo qualche giorno.</div>';else pl.innerHTML=patterns.map(p=>`<div class="mem-item"><div class="mem-icon" style="background:#F0EDE6;">${p.icon}</div><div><div class="mem-label">${p.label}</div><div class="mem-sub">${p.sub}</div></div></div>`).join('');}const ch=document.getElementById('checkin-history');if(ch)ch.innerHTML=`<div style="font-size:13px;color:#9E9B94;">${checkins.length} check-in registrati${checkins.length?' Â· ultimo: '+checkins[checkins.length-1].date:''}.</div>`;const sc=document.getElementById('stat-checkins');if(sc)sc.textContent=checkins.length;const nb=document.getElementById('nb-mem');if(nb)nb.style.display=patterns.length?'':'none';}
 
 // ── NAVIGAZIONE ───────────────────────────────────────────────────────────────
 const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Mercoledì 18 marzo · 3 eventi in programma"],inbox:["Inbox unificata","0 messaggi · 0 non letti"],task:["Task",""],note:["Note",""],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
 function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');if(el)el.classList.add('active');const m=PAGE_META[id];const firstName=currentUser?(currentUser.user_metadata?.full_name||currentUser.email).split(' ')[0]:'';document.getElementById('page-title').textContent=id==='suggerimenti'?'Buongiorno, '+firstName:m[0];document.getElementById('page-sub').textContent=m[1];document.getElementById('topbar-actions').innerHTML='';if(id==='task')updateTaskSubtitle();if(id==='note'){showNoteList();document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">＋ Nuova nota</button>';}if(id==='memoria')renderMemoryPage();if(id==='impostazioni')updateStatsPage();renderAll();}
 
-// ── RENDER ────────────────────────────────────────────────────────────────────
+// â”€â”€ RENDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function tagBadge(tag,idx){const c=TAG_PALETTE[idx%TAG_PALETTE.length];return `<span style="font-size:10px;font-weight:500;padding:2px 7px;border-radius:8px;background:${c.bg};color:${c.tc};">${tag}</span>`;}
 function prioritaBadge(p){const m={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};const l={urgente:'Urgente',alta:'Alta',normale:'Normale',bassa:'Bassa'};return `<span class="badge ${m[p]||'b-normale'}">${l[p]||p}</span>`;}
 function renderAll(){renderInboxControls();renderInbox();renderCalendar();renderTasks();renderNotes();updateBadges();}
@@ -924,7 +960,7 @@ function addTaskFromSuggestion(titolo){tasks.push({id:nextTaskId++,label:titolo,
 function toggleTask(id){const t=tasks.find(t=>t.id===id);if(t){if(!t.done)recordTaskPostponed(t);else{t.done=false;saveTasksToCache();renderTasks();return;}t.done=true;recordTaskCompleted(t);}saveTasksToCache();renderTasks();}
 function deleteTask(id){tasks=tasks.filter(t=>t.id!==id);saveTasksToCache();renderTasks();}
 
-// ── NOTE CRUD ─────────────────────────────────────────────────────────────────
+// â”€â”€ NOTE CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function showNoteList(){document.getElementById('note-list-view').style.display='';document.getElementById('note-editor-view').style.display='none';document.getElementById('page-sub').textContent=notes.length+' note';renderNotes();}
 function openNoteEditor(id){currentNoteId=id;const n=id?notes.find(n=>n.id===id):null;document.getElementById('note-edit-title').value=n?n.title:'';document.getElementById('note-edit-body').value=n?n.body:'';document.getElementById('note-edit-tags').value=n?n.tags.join(', '):'';document.getElementById('note-list-view').style.display='none';document.getElementById('note-editor-view').style.display='';document.getElementById('page-sub').textContent=id?'Modifica e salva':'Nuova nota';document.getElementById('topbar-actions').innerHTML=`<div style="display:flex;gap:8px;"><button class="btn-primary" onclick="saveNote()">Salva</button><button class="btn-ghost" onclick="showNoteList()">Annulla</button>${id?'<button class="btn-danger" onclick="deleteNote('+id+')">Elimina</button>':''}</div>`;}
 function saveNote(){const title=document.getElementById('note-edit-title').value.trim()||'Nota senza titolo';const body=document.getElementById('note-edit-body').value.trim();const tags=document.getElementById('note-edit-tags').value.split(',').map(t=>t.trim()).filter(Boolean);if(currentNoteId){const n=notes.find(n=>n.id===currentNoteId);if(n){n.title=title;n.body=body;n.tags=tags;}}else{notes.push({id:nextNoteId++,title,body,tags});}showNoteList();}
@@ -933,16 +969,16 @@ function deleteNote(id){notes=notes.filter(n=>n.id!==id);showNoteList();}
 // ── RICERCA ───────────────────────────────────────────────────────────────────
 function doSearch(q){const el=document.getElementById('search-results');if(!q.trim()){el.innerHTML='<div class="empty-state"><div class="empty-title">Inizia a digitare</div></div>';return;}const ql=q.toLowerCase();const rt=tasks.filter(t=>t.label.toLowerCase().includes(ql));const rn=notes.filter(n=>n.title.toLowerCase().includes(ql)||n.body.toLowerCase().includes(ql));const ri=INBOX.filter(i=>i.from.toLowerCase().includes(ql)||i.subj.toLowerCase().includes(ql));if(!rt.length&&!rn.length&&!ri.length){el.innerHTML=`<div style="text-align:center;padding:32px;color:#9E9B94;font-size:13px;">Nessun risultato per "${q}"</div>`;return;}let html='';if(rt.length)html+=`<div class="card"><div class="sec-label">Task (${rt.length})</div>${rt.map(t=>`<div class="task-row"><span style="font-size:13px;flex:1;color:${t.done?'#9E9B94':'#1A1A18'};text-decoration:${t.done?'line-through':'none'};">${t.label}</span>${prioritaBadge(t.priorita)}</div>`).join('')}</div>`;if(rn.length)html+=`<div class="card"><div class="sec-label">Note (${rn.length})</div>${rn.map(n=>`<div style="padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);cursor:pointer;" onclick="showPage('note');openNoteEditor(${n.id})"><div style="font-size:13px;font-weight:500;margin-bottom:2px;">${n.title}</div><div style="font-size:12px;color:#9E9B94;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${n.body}</div></div>`).join('')}</div>`;if(ri.length)html+=`<div class="card"><div class="sec-label">Email (${ri.length})</div>${ri.map(item=>`<div style="display:flex;gap:10px;padding:9px 0;"><div class="av" style="width:28px;height:28px;font-size:10px;background:${item.bg};color:${item.tc};">${item.initials}</div><div><div style="font-size:13px;font-weight:500;">${item.from}</div><div style="font-size:12px;color:#9E9B94;">${item.subj}</div></div></div>`).join('')}</div>`;el.innerHTML=html;}
 
-// ── IMPOSTAZIONI ──────────────────────────────────────────────────────────────
+// â”€â”€ IMPOSTAZIONI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function toggleEditProfile(){const v=document.getElementById('profile-view');const f=document.getElementById('profile-form');const b=document.getElementById('edit-profile-btn');const editing=f.style.display!=='none';v.style.display=editing?'':'none';f.style.display=editing?'none':'';b.textContent=editing?'Modifica':'Annulla';}
 function saveProfile(){const name=document.getElementById('pf-name').value.trim();document.getElementById('pv-name').textContent=name;document.getElementById('profile-name-disp').textContent=name;const ini=name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();document.getElementById('profile-av-big').textContent=ini;document.getElementById('sidebar-initials').textContent=ini;document.getElementById('sidebar-name').textContent=name;toggleEditProfile();}
 function togglePref(key){prefs[key]=!prefs[key];const on=prefs[key];document.getElementById('toggle-'+key).style.background=on?'#1A4FBF':'#D0CCC6';document.getElementById('knob-'+key).style.left=on?'19px':'3px';}
 
-// ── AI ────────────────────────────────────────────────────────────────────────
-function fillExample(){document.getElementById('agenda-input').value="Call con il cliente Rossi alle 10:30, revisione roadmap Q2 alle 14:30, riepilogo team alle 17:00.";document.getElementById('pending-input').value="Rispondere a Bianchi sul contratto, approvare budget Q2 entro venerdì, 3 email non lette di Rossi.";}
-async function analyzeDay(){const agenda=document.getElementById('agenda-input').value.trim();const pending=document.getElementById('pending-input').value.trim();if(!agenda&&!pending)return;const btn=document.getElementById('analyze-btn');const loader=document.getElementById('ai-loader');const errBox=document.getElementById('ai-error');const container=document.getElementById('suggestions-container');btn.disabled=true;loader.classList.add('active');errBox.classList.remove('active');container.innerHTML='';const memCtx=getMemoryContext();const energyCtx=todayEnergy?`Energia utente oggi: ${todayEnergy}/5, stress ${todayStress}/5. ${todayEnergy<=2?'Max 2 suggerimenti.':todayEnergy>=4?'Energia alta.':''} `:'';const prompt=`Sei Filo, assistente per manager.\n${energyCtx}${memCtx}\nAgenda: ${agenda||"non specificata"}\nIn sospeso: ${pending||"nessuna"}\nRispondi SOLO con JSON valido:\n{"suggerimenti":[{"titolo":"azione","perche":"perché adesso in 1-2 frasi","priorita":"urgente|alta|normale|bassa","azioni":["Inizia","Rimanda"]}]}\nDai 3-5 suggerimenti per urgenza.`;try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:prompt}]})});const data=await res.json();const text=data.content.map(i=>i.text||"").join("");const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());const suggestions=parsed.suggerimenti||[];loader.classList.remove('active');btn.disabled=false;if(!suggestions.length){container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';return;}const nb=document.getElementById('nb-sugg');nb.textContent=suggestions.length;nb.style.display='';const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${s.titolo}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${s.perche}</div><div class="sugg-actions">${(s.azioni||[]).map((a,j)=>`<button style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${a}</button>`).join('')}<button onclick="addTaskFromSuggestion('${s.titolo.replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#9E9B94;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');}catch(e){loader.classList.remove('active');btn.disabled=false;errBox.textContent="Errore nell'analisi. Riprova.";errBox.classList.add('active');}}
+// â”€â”€ AI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function fillExample(){document.getElementById('agenda-input').value="Call con il cliente Rossi alle 10:30, revisione roadmap Q2 alle 14:30, riepilogo team alle 17:00.";document.getElementById('pending-input').value="Rispondere a Bianchi sul contratto, approvare budget Q2 entro venerdÃ¬, 3 email non lette di Rossi.";}
+async function analyzeDay(){const agenda=document.getElementById('agenda-input').value.trim();const pending=document.getElementById('pending-input').value.trim();if(!agenda&&!pending)return;const btn=document.getElementById('analyze-btn');const loader=document.getElementById('ai-loader');const errBox=document.getElementById('ai-error');const container=document.getElementById('suggestions-container');btn.disabled=true;loader.classList.add('active');errBox.classList.remove('active');container.innerHTML='';const memCtx=getMemoryContext();const energyCtx=todayEnergy?`Energia utente oggi: ${todayEnergy}/5, stress ${todayStress}/5. ${todayEnergy<=2?'Max 2 suggerimenti.':todayEnergy>=4?'Energia alta.':''} `:'';const prompt=`Sei Filo, assistente per manager.\n${energyCtx}${memCtx}\nAgenda: ${agenda||"non specificata"}\nIn sospeso: ${pending||"nessuna"}\nRispondi SOLO con JSON valido:\n{"suggerimenti":[{"titolo":"azione","perche":"perchÃ© adesso in 1-2 frasi","priorita":"urgente|alta|normale|bassa","azioni":["Inizia","Rimanda"]}]}\nDai 3-5 suggerimenti per urgenza.`;try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:prompt}]})});const data=await res.json();const text=data.content.map(i=>i.text||"").join("");const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());const suggestions=parsed.suggerimenti||[];loader.classList.remove('active');btn.disabled=false;if(!suggestions.length){container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';return;}const nb=document.getElementById('nb-sugg');nb.textContent=suggestions.length;nb.style.display='';const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};const PLBL={urgente:'Urgente',alta:'Alta prioritÃ ',normale:'Normale',bassa:'Bassa'};container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${s.titolo}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${s.perche}</div><div class="sugg-actions">${(s.azioni||[]).map((a,j)=>`<button style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${a}</button>`).join('')}<button onclick="addTaskFromSuggestion('${s.titolo.replace(/'/g,"\\'")}');this.textContent='âœ“ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#9E9B94;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');}catch(e){loader.classList.remove('active');btn.disabled=false;errBox.textContent="Errore nell'analisi. Riprova.";errBox.classList.add('active');}}
 
-// ── START ──────────────────────────────────────────────────────────────────────
+// â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
   document.getElementById('login-password').value = '';
   clearCorruptedPasswordAutofill();
@@ -988,3 +1024,4 @@ init();
 </script>
 </body>
 </html>
+
