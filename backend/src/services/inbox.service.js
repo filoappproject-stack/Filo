@@ -110,15 +110,6 @@ async function gmailRequest(path, accessToken, queryParams = {}) {
   return response.json();
 }
 
-function buildAfterQuery(lastSyncedAt) {
-  const fallbackDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const fromDate = lastSyncedAt ? new Date(lastSyncedAt) : fallbackDate;
-  const yyyy = fromDate.getUTCFullYear();
-  const mm = String(fromDate.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(fromDate.getUTCDate()).padStart(2, '0');
-  return `after:${yyyy}/${mm}/${dd}`;
-}
-
 function headerValue(headers = [], name) {
   return headers.find((item) => item.name?.toLowerCase() === name.toLowerCase())?.value ?? null;
 }
@@ -250,19 +241,21 @@ async function markLastSynced(accountId) {
 }
 
 async function syncInboxMessages(account, accessToken) {
-  const searchQuery = account.last_synced_at ? buildAfterQuery(account.last_synced_at) : null;
   const collectedIds = [];
+  const collectedIdSet = new Set();
 
   let pageToken;
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < 10; i += 1) {
     const listPayload = await gmailRequest('/users/me/messages', accessToken, {
-      q: searchQuery,
       maxResults: '100',
       pageToken
     });
 
     for (const message of listPayload.messages ?? []) {
-      collectedIds.push(message.id);
+      if (!collectedIdSet.has(message.id)) {
+        collectedIdSet.add(message.id);
+        collectedIds.push(message.id);
+      }
     }
 
     if (!listPayload.nextPageToken) {
@@ -319,6 +312,25 @@ async function syncInboxMessages(account, accessToken) {
       receivedAtIso,
       message.labelIds ?? []
     ]);
+  }
+
+  if (collectedIds.length === 0) {
+    await query(
+      `
+        DELETE FROM inbox_messages
+        WHERE account_id = $1
+      `,
+      [account.id]
+    );
+  } else {
+    await query(
+      `
+        DELETE FROM inbox_messages
+        WHERE account_id = $1
+          AND provider_message_id != ALL($2::text[])
+      `,
+      [account.id, collectedIds]
+    );
   }
 
   await markLastSynced(account.id);
