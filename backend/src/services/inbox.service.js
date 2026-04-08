@@ -14,12 +14,25 @@ function requireGoogleOauthEnv() {
   }
 }
 
+function resolveRedirectUri(redirectUri) {
+  if (env.GOOGLE_REDIRECT_URI) {
+    return env.GOOGLE_REDIRECT_URI;
+  }
+
+  if (!redirectUri) {
+    throw new HttpError(400, 'Redirect URI Google mancante');
+  }
+
+  return redirectUri;
+}
+
 export function buildGoogleAuthUrl({ userId, redirectUri, state }) {
   requireGoogleOauthEnv();
+  const effectiveRedirectUri = resolveRedirectUri(redirectUri);
 
   const params = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
-    redirect_uri: redirectUri,
+    redirect_uri: effectiveRedirectUri,
     response_type: 'code',
     scope: GOOGLE_SCOPE,
     access_type: 'offline',
@@ -28,11 +41,15 @@ export function buildGoogleAuthUrl({ userId, redirectUri, state }) {
     state: state ?? userId
   });
 
-  return `${GOOGLE_AUTH_BASE}?${params.toString()}`;
+  return {
+    authUrl: `${GOOGLE_AUTH_BASE}?${params.toString()}`,
+    redirectUri: effectiveRedirectUri
+  };
 }
 
 async function exchangeGoogleCode({ code, redirectUri }) {
   requireGoogleOauthEnv();
+  const effectiveRedirectUri = resolveRedirectUri(redirectUri);
 
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
@@ -41,7 +58,7 @@ async function exchangeGoogleCode({ code, redirectUri }) {
       code,
       client_id: env.GOOGLE_CLIENT_ID,
       client_secret: env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: redirectUri,
+      redirect_uri: effectiveRedirectUri,
       grant_type: 'authorization_code'
     })
   });

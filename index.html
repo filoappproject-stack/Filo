@@ -681,10 +681,11 @@ async function tryHandleMailboxOauthCallback() {
   if (!userId) return false;
 
   try {
+    const redirectUri = sessionStorage.getItem(MAILBOX_REDIRECT_URI_KEY) || getInboxConnectRedirectUri();
     const res = await fetchApi('/api/v1/inbox/google/exchange', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, code, redirectUri: getInboxConnectRedirectUri() })
+      body: JSON.stringify({ userId, code, redirectUri })
     });
 
     if (!res.ok) {
@@ -699,6 +700,7 @@ async function tryHandleMailboxOauthCallback() {
 
     url.searchParams.delete('code');
     url.searchParams.delete('state');
+    sessionStorage.removeItem(MAILBOX_REDIRECT_URI_KEY);
     window.history.replaceState(
       {},
       document.title,
@@ -817,6 +819,7 @@ const LOCAL_API_BASES=['http://localhost:4000','http://127.0.0.1:4000'];
 const SHOULD_TRY_LOCAL_API=['localhost','127.0.0.1'].includes(window.location.hostname);
 const API_BASES=[window.location.origin,...(SHOULD_TRY_LOCAL_API?LOCAL_API_BASES:[])].filter((v,i,a)=>v&&a.indexOf(v)===i);
 const TASKS_CACHE_PREFIX='filo_tasks_cache_';
+const MAILBOX_REDIRECT_URI_KEY='filo_mailbox_redirect_uri';
 
 function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
 function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
@@ -854,7 +857,13 @@ async function requestMailboxConnectUrl(userId,state){
         continue;
       }
       const data=await res.json();
-      if(data?.data?.authUrl)return data.data.authUrl;
+      const authUrl=data?.data?.authUrl;
+      if(authUrl){
+        return {
+          authUrl,
+          redirectUri: data?.data?.redirectUri || payload.redirectUri
+        };
+      }
       lastDetail='Risposta JSON senza authUrl';
     }catch(err){}
   }
@@ -943,7 +952,7 @@ function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=
 function updateInboxSubtitle(){const total=INBOX.length;const unread=INBOX.filter(i=>i.unread).length;PAGE_META.inbox[1]=mailboxConnected?`${total} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
-async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;const authUrl=await requestMailboxConnectUrl(currentUser.id,state);window.location.assign(authUrl);}catch(err){console.warn('Errore collegamento mailbox:',err);mailboxConnectionError=`Connessione mailbox non riuscita: ${err?.message||'backend API non raggiungibile'}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
+async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;const connect=await requestMailboxConnectUrl(currentUser.id,state);if(connect?.redirectUri)sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,connect.redirectUri);window.location.assign(connect.authUrl);}catch(err){console.warn('Errore collegamento mailbox:',err);mailboxConnectionError=`Connessione mailbox non riuscita: ${err?.message||'backend API non raggiungibile'}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);showError('Sincronizzazione mailbox non riuscita.');}finally{mailboxSyncInProgress=false;renderAll();}}
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────

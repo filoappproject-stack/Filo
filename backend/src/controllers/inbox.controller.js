@@ -9,14 +9,18 @@ import {
 
 const ConnectSchema = z.object({
   userId: z.string().uuid(),
-  redirectUri: z.string().url(),
+  redirectUri: z.string().url().optional(),
   state: z.string().min(8).max(500).optional()
 });
 
 const ExchangeSchema = z.object({
   userId: z.string().uuid(),
   code: z.string().min(10),
-  redirectUri: z.string().url()
+  redirectUri: z.string().url().optional()
+});
+
+const InboxSyncSchema = z.object({
+  userId: z.string().uuid()
 });
 
 const InboxSyncSchema = z.object({
@@ -38,8 +42,8 @@ export async function getGoogleConnectUrl(req, res) {
     throw new HttpError(400, 'Payload connect inbox non valido');
   }
 
-  const authUrl = buildGoogleAuthUrl(parsed.data);
-  res.json({ data: { authUrl } });
+  const auth = buildGoogleAuthUrl(parsed.data);
+  res.json({ data: auth });
 }
 
 export async function postGoogleCodeExchange(req, res) {
