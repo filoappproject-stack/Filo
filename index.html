@@ -791,6 +791,7 @@ function showLoginScreen() {
   authTransitionInFlight = false;
   lastAuthenticatedUserId = null;
   handledInboxOAuthCodes.clear();
+  clearMessages();
   document.getElementById('app-shell').classList.remove('active');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('checkin-overlay').style.display = 'none';
