@@ -511,7 +511,8 @@ const MAILBOX_REDIRECT_URI_KEY = 'filo_inbox_redirect_uri';
     };
     sessionStorage.setItem(INBOX_OAUTH_QUERY_STORAGE_KEY, JSON.stringify(payload));
     ['code','error','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
-    window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash);
+    const cleanUrl = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash;
+    window.location.replace(cleanUrl);
   }catch(e){}
 })();
 
@@ -1154,7 +1155,18 @@ async function init() {
   isAuthBootstrapping = false;
 }
 
-init();
+init().catch((err) => {
+  console.error('Init fallita:', err);
+  const shell = document.getElementById('app-shell');
+  if (shell) shell.classList.remove('active');
+  const login = document.getElementById('login-screen');
+  if (login) login.style.display = 'flex';
+  const errorBox = document.getElementById('login-error');
+  if (errorBox) {
+    errorBox.textContent = 'Errore inizializzazione app. Ricarica la pagina.';
+    errorBox.classList.add('active');
+  }
+});
 </script>
 </body>
 </html>
