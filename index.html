@@ -485,6 +485,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 const SUPABASE_URL = 'https://xkdniukhksfiuromnmtv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_UdRD3JHIa14slQ_0ltkNTA_0Xkdkfn4';
 const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
+const MAILBOX_REDIRECT_URI_KEY = 'filo_inbox_redirect_uri';
 
 (function preserveInboxOAuthQueryBeforeSupabaseInit(){
   try{
@@ -737,11 +738,17 @@ async function tryHandleMailboxOauthCallback() {
     );
     sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
     sessionStorage.removeItem('filo_inbox_oauth_state');
+    sessionStorage.removeItem(MAILBOX_REDIRECT_URI_KEY);
     return true;
   } catch (err) {
-    console.warn('Errore callback mailbox OAuth:', err);
+    const reason = err?.message ? String(err.message) : 'errore sconosciuto';
+    console.warn('Errore callback mailbox OAuth:', reason, err);
+    mailboxConnectionError = `Connessione mailbox non completata: ${reason}`;
     showError('Connessione mailbox non completata. Riprova.');
     sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
+    sessionStorage.removeItem('filo_inbox_oauth_state');
+    sessionStorage.removeItem(MAILBOX_REDIRECT_URI_KEY);
+    renderInboxControls();
     return false;
   }
 }
@@ -867,7 +874,7 @@ let mailboxLastSync=null;
 let mailboxSyncInProgress=false;
 let mailboxBackgroundSyncInProgress=false;
 let mailboxConnectionError='';
-let notes=[{id:1,title:"Budget Q2 - bozza",body:"Marketing +15%, sviluppo stabile, ops da rivedere.",tags:["Budget","Q2"]},{id:2,title:"Note call Rossi - 10 marzo",body:"Vuole sconto 8% su volume. Ordine min. 500 unità.",tags:["Clienti","Vendite"]},{id:3,title:"Idee roadmap H2",body:"Onboarding semplificato, dashboard analytics v2.",tags:["Prodotto"]},{id:4,title:"Riflessioni pricing",body:"Seat-based vs usage-based. Competitor cambiato a gennaio.",tags:["Strategia"]}];
+let notes=[];
 let nextNoteId=100;
 let currentNoteId=null;
 let inboxSelectedId=null;
@@ -935,7 +942,10 @@ async function requestMailboxConnectUrl(userId,state){
         };
       }
       lastDetail='Risposta JSON senza authUrl';
-    }catch(err){}
+    }catch(err){
+      const msg = err?.message ? String(err.message) : 'Errore rete';
+      lastDetail = `${endpoint}: ${msg}`;
+    }
   }
   throw new Error(lastDetail||'Endpoint mailbox connect non raggiungibile');
 }
@@ -1024,7 +1034,7 @@ function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=
 function updateInboxSubtitle(){const total=INBOX.length;const unread=INBOX.filter(i=>i.unread).length;PAGE_META.inbox[1]=mailboxConnected?`${total} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
-async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const authUrl=await requestMailboxConnectUrl(currentUser.id,state);window.location.assign(authUrl);}catch(err){console.warn('Errore collegamento mailbox:',err);mailboxConnectionError='Connessione mailbox non riuscita: backend API non raggiungibile.';showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
+async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);showError('Sincronizzazione mailbox non riuscita.');}finally{mailboxSyncInProgress=false;renderAll();}}
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────
