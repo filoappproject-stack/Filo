@@ -349,7 +349,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
         <div class="error-box" id="ai-error"></div>
         <div class="loader" id="ai-loader">
           <div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>
-          <div style="font-size:13px;color:#9E9B94;font-style:italic;">Sto analizzando la tua giornataâ€¦</div>
+          <div style="font-size:13px;color:#9E9B94;font-style:italic;">Sto analizzando la tua giornata...</div>
         </div>
         <div id="suggestions-container">
           <div class="empty-state">
@@ -562,7 +562,7 @@ async function doEmailLogin() {
   const password = document.getElementById('login-password').value;
   if (!email || !password) { showError('Inserisci email e password.'); return; }
   const btn = document.getElementById('btn-email-login');
-  btn.textContent = 'Accesso in corsoâ€¦'; btn.disabled = true;
+  btn.textContent = 'Accesso in corso...'; btn.disabled = true;
   const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
   btn.textContent = 'Accedi'; btn.disabled = false;
   if (error) showError('Email o password non corretti.');
@@ -575,7 +575,7 @@ async function doRegister() {
   if (!name || !email || !password) { showError('Compila tutti i campi.'); return; }
   if (password.length < 6) { showError('La password deve avere almeno 6 caratteri.'); return; }
   const btn = document.getElementById('btn-register');
-  btn.textContent = 'Creazione accountâ€¦'; btn.disabled = true;
+  btn.textContent = 'Creazione account...'; btn.disabled = true;
   const { error } = await supabaseClient.auth.signUp({ email, password, options: { data: { full_name: name } } });
   btn.textContent = 'Crea account'; btn.disabled = false;
   if (error) showError(error.message);
