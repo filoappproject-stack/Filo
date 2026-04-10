@@ -741,10 +741,14 @@ async function tryHandleMailboxOauthCallback() {
     sessionStorage.removeItem(MAILBOX_REDIRECT_URI_KEY);
     return true;
   } catch (err) {
-    console.warn('Errore callback mailbox OAuth:', err);
+    const reason = err?.message ? String(err.message) : 'errore sconosciuto';
+    console.warn('Errore callback mailbox OAuth:', reason, err);
+    mailboxConnectionError = `Connessione mailbox non completata: ${reason}`;
     showError('Connessione mailbox non completata. Riprova.');
     sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
+    sessionStorage.removeItem('filo_inbox_oauth_state');
     sessionStorage.removeItem(MAILBOX_REDIRECT_URI_KEY);
+    renderInboxControls();
     return false;
   }
 }
