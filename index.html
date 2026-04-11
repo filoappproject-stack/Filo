@@ -349,7 +349,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
         <div class="error-box" id="ai-error"></div>
         <div class="loader" id="ai-loader">
           <div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>
-          <div style="font-size:13px;color:#9E9B94;font-style:italic;">Sto analizzando la tua giornataâ€¦</div>
+          <div style="font-size:13px;color:#9E9B94;font-style:italic;">Sto analizzando la tua giornata...</div>
         </div>
         <div id="suggestions-container">
           <div class="empty-state">
@@ -485,6 +485,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 const SUPABASE_URL = 'https://xkdniukhksfiuromnmtv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_UdRD3JHIa14slQ_0ltkNTA_0Xkdkfn4';
 const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
+const MAILBOX_REDIRECT_URI_KEY = 'filo_inbox_redirect_uri';
 
 (function preserveInboxOAuthQueryBeforeSupabaseInit(){
   try{
@@ -510,7 +511,8 @@ const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
     };
     sessionStorage.setItem(INBOX_OAUTH_QUERY_STORAGE_KEY, JSON.stringify(payload));
     ['code','error','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
-    window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash);
+    const cleanUrl = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash;
+    window.location.replace(cleanUrl);
   }catch(e){}
 })();
 
@@ -560,7 +562,7 @@ async function doEmailLogin() {
   const password = document.getElementById('login-password').value;
   if (!email || !password) { showError('Inserisci email e password.'); return; }
   const btn = document.getElementById('btn-email-login');
-  btn.textContent = 'Accesso in corsoâ€¦'; btn.disabled = true;
+  btn.textContent = 'Accesso in corso...'; btn.disabled = true;
   const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
   btn.textContent = 'Accedi'; btn.disabled = false;
   if (error) showError('Email o password non corretti.');
@@ -573,7 +575,7 @@ async function doRegister() {
   if (!name || !email || !password) { showError('Compila tutti i campi.'); return; }
   if (password.length < 6) { showError('La password deve avere almeno 6 caratteri.'); return; }
   const btn = document.getElementById('btn-register');
-  btn.textContent = 'Creazione accountâ€¦'; btn.disabled = true;
+  btn.textContent = 'Creazione account...'; btn.disabled = true;
   const { error } = await supabaseClient.auth.signUp({ email, password, options: { data: { full_name: name } } });
   btn.textContent = 'Crea account'; btn.disabled = false;
   if (error) showError(error.message);
@@ -737,11 +739,17 @@ async function tryHandleMailboxOauthCallback() {
     );
     sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
     sessionStorage.removeItem('filo_inbox_oauth_state');
+    sessionStorage.removeItem(MAILBOX_REDIRECT_URI_KEY);
     return true;
   } catch (err) {
-    console.warn('Errore callback mailbox OAuth:', err);
+    const reason = err?.message ? String(err.message) : 'errore sconosciuto';
+    console.warn('Errore callback mailbox OAuth:', reason, err);
+    mailboxConnectionError = `Connessione mailbox non completata: ${reason}`;
     showError('Connessione mailbox non completata. Riprova.');
     sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
+    sessionStorage.removeItem('filo_inbox_oauth_state');
+    sessionStorage.removeItem(MAILBOX_REDIRECT_URI_KEY);
+    renderInboxControls();
     return false;
   }
 }
@@ -783,6 +791,7 @@ function showLoginScreen() {
   authTransitionInFlight = false;
   lastAuthenticatedUserId = null;
   handledInboxOAuthCodes.clear();
+  clearMessages();
   document.getElementById('app-shell').classList.remove('active');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('checkin-overlay').style.display = 'none';
@@ -830,6 +839,7 @@ async function loginSuccess(user) {
     cachedInbox.messages.forEach(m=>INBOX.push(m));
     setInboxConnectionState(cachedInbox.connected,cachedInbox.lastSync);
   }
+  await hydrateLatestCheckinFromApi();
   initCheckin();
   renderAll();
   restorePostOauthPage();
@@ -867,7 +877,7 @@ let mailboxLastSync=null;
 let mailboxSyncInProgress=false;
 let mailboxBackgroundSyncInProgress=false;
 let mailboxConnectionError='';
-let notes=[{id:1,title:"Budget Q2 - bozza",body:"Marketing +15%, sviluppo stabile, ops da rivedere.",tags:["Budget","Q2"]},{id:2,title:"Note call Rossi - 10 marzo",body:"Vuole sconto 8% su volume. Ordine min. 500 unità.",tags:["Clienti","Vendite"]},{id:3,title:"Idee roadmap H2",body:"Onboarding semplificato, dashboard analytics v2.",tags:["Prodotto"]},{id:4,title:"Riflessioni pricing",body:"Seat-based vs usage-based. Competitor cambiato a gennaio.",tags:["Strategia"]}];
+let notes=[];
 let nextNoteId=100;
 let currentNoteId=null;
 let inboxSelectedId=null;
@@ -935,7 +945,10 @@ async function requestMailboxConnectUrl(userId,state){
         };
       }
       lastDetail='Risposta JSON senza authUrl';
-    }catch(err){}
+    }catch(err){
+      const msg = err?.message ? String(err.message) : 'Errore rete';
+      lastDetail = `${endpoint}: ${msg}`;
+    }
   }
   throw new Error(lastDetail||'Endpoint mailbox connect non raggiungibile');
 }
@@ -987,7 +1000,28 @@ async function loadTasksFromApi(){
 // ── MEMORIA ───────────────────────────────────────────────────────────────────
 function mem_get(key){try{return JSON.parse(localStorage.getItem('filo_'+key));}catch(e){return null;}}
 function mem_set(key,val){try{localStorage.setItem('filo_'+key,JSON.stringify(val));}catch(e){}}
-function saveCheckinToMemory(energy,sleep,stress){const today=new Date().toISOString().slice(0,10);let h=mem_get('checkins')||[];h=h.filter(c=>c.date!==today);h.push({date:today,energy,sleep,stress});if(h.length>30)h=h.slice(-30);mem_set('checkins',h);analyzePatterns();}
+function upsertCheckinInMemory(date,energy,sleep,stress){let h=mem_get('checkins')||[];h=h.filter(c=>c.date!==date);h.push({date,energy,sleep,stress});if(h.length>30)h=h.slice(-30);mem_set('checkins',h);analyzePatterns();}
+function formatLocalDate(date=new Date()){
+  const y=date.getFullYear();
+  const m=String(date.getMonth()+1).padStart(2,'0');
+  const d=String(date.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
+function normalizeApiCheckinDate(raw){
+  if(typeof raw==='string'){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(raw))return raw;
+    const parsed=new Date(raw);
+    if(Number.isFinite(parsed.getTime()))return formatLocalDate(parsed);
+    return null;
+  }
+  if(raw instanceof Date&&Number.isFinite(raw.getTime()))return formatLocalDate(raw);
+  return null;
+}
+function saveCheckinToMemory(energy,sleep,stress){upsertCheckinInMemory(formatLocalDate(),energy,sleep,stress);}
+function sleepToApiQuality(sleep){const map={'male':'poor','così così':'fair','bene':'good','benissimo':'excellent'};return map[sleep]||'fair';}
+function sleepFromApiQuality(sleepQuality){const map={poor:'male',fair:'così così',good:'bene',excellent:'benissimo'};return map[sleepQuality]||'così così';}
+async function saveCheckinToApi(energy,sleep,stress){if(!currentUser?.id)return;const today=formatLocalDate();const res=await fetchApi('/api/v1/checkins/daily',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,checkinDate:today,energyLevel:energy,stressLevel:stress,sleepQuality:sleepToApiQuality(sleep)})});if(!res.ok){const txt=await res.text().catch(()=> '');throw new Error(`PUT /checkins/daily fallita (${res.status}): ${txt}`);}return res.json();}
+async function hydrateLatestCheckinFromApi(){if(!currentUser?.id)return;try{const res=await fetchApi(`/api/v1/checkins/latest?userId=${encodeURIComponent(currentUser.id)}`);if(!res.ok)return;const payload=await res.json();const c=payload?.data;if(!c)return;const energy=Number(c.energy_level);const stress=Number(c.stress_level);const sleep=sleepFromApiQuality(c.sleep_quality);const checkinDate=normalizeApiCheckinDate(c.checkin_date);if(!Number.isFinite(energy)||!Number.isFinite(stress)||!checkinDate)return;upsertCheckinInMemory(checkinDate,energy,sleep,stress);todayEnergy=energy;todayStress=stress;todaySleep=sleep;}catch(err){console.warn('Impossibile caricare latest checkin da API:',err);}}
 function recordTaskCompleted(task){if(!prefs.memoria)return;let h=mem_get('tasks_done')||[];h.push({label:task.label,priorita:task.priorita,ts:Date.now()});if(h.length>200)h=h.slice(-200);mem_set('tasks_done',h);analyzePatterns();}
 function recordTaskPostponed(task){if(!prefs.memoria)return;let p=mem_get('tasks_postponed')||{};p[task.label]=(p[task.label]||0)+1;mem_set('tasks_postponed',p);}
 function analyzePatterns(){if(!prefs.memoria)return;const checkins=mem_get('checkins')||[];const done=mem_get('tasks_done')||[];const postponed=mem_get('tasks_postponed')||{};const patterns=[];if(checkins.length>=3){const avg=checkins.slice(-7).reduce((s,c)=>s+c.energy,0)/Math.min(checkins.length,7);if(avg<3)patterns.push({icon:"âš¡",label:"Energia sotto la media",sub:`Media: ${avg.toFixed(1)}/5`});else if(avg>=4)patterns.push({icon:"ðŸš€",label:"Settimana ad alta energia",sub:`Media: ${avg.toFixed(1)}/5`});}const chronic=Object.entries(postponed).filter(([k,v])=>v>=3).map(([k,v])=>`"${k}" (${v}x)`);if(chronic.length)patterns.push({icon:"ðŸ”",label:"Task rimandati frequentemente",sub:chronic.slice(0,2).join(', ')});if(done.length>=5){const u=done.filter(t=>t.priorita==='urgente').length;patterns.push({icon:"âœ“",label:`${done.length} task completati`,sub:`${Math.round(u/done.length*100)}% urgenti`});}mem_set('patterns',patterns);return patterns;}
@@ -997,10 +1031,10 @@ function clearMemory(){if(!confirm('Cancellare tutta la memoria?'))return;['chec
 // â”€â”€ CHECK-IN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function selectEnergy(val,el){todayEnergy=val;document.querySelectorAll('.e-btn').forEach(b=>b.classList.remove('selected'));el.classList.add('selected');}
 function selectSleep(val,el){todaySleep=val;document.querySelectorAll('.s-btn').forEach(b=>b.classList.remove('selected'));el.classList.add('selected');}
-function saveCheckin(){todayStress=parseInt(document.getElementById('stress-slider').value);const energy=todayEnergy||3;const sleep=todaySleep||'nella norma';saveCheckinToMemory(energy,sleep,todayStress);document.getElementById('checkin-overlay').style.display='none';updateEnergyDisplay(energy,sleep,todayStress);}
+async function saveCheckin(){todayStress=parseInt(document.getElementById('stress-slider').value);const energy=todayEnergy||3;const sleep=todaySleep||'così così';saveCheckinToMemory(energy,sleep,todayStress);document.getElementById('checkin-overlay').style.display='none';updateEnergyDisplay(energy,sleep,todayStress);try{await saveCheckinToApi(energy,sleep,todayStress);}catch(err){console.warn('Persistenza check-in API fallita:',err);alert('Check-in salvato solo in locale. Verifica connessione/API.');}}
 function skipCheckin(){document.getElementById('checkin-overlay').style.display='none';}
 function updateEnergyDisplay(energy,sleep,stress){const el=document.getElementById('stat-energy');const sub=document.getElementById('stat-energy-sub');if(el){el.textContent=energy+'/5';el.style.color=ENERGY_COLORS[energy]||'#1A1A18';}if(sub)sub.textContent=ENERGY_LABELS[energy]||'';const banner=document.getElementById('energy-banner');if(banner){let msg='';if(energy<=2)msg=`<strong>Energia bassa oggi</strong>. Concentrati su 1-2 priorità.`;else if(energy>=4)msg=`<strong>Ottima energia oggi.</strong> E' il momento ideale per attività impegnative.`;else msg=`<strong>Energia nella norma.</strong> Sonno ${sleep}, stress ${stress}/5.`;banner.innerHTML=msg;banner.classList.add('active');}const checkins=mem_get('checkins')||[];const memBanner=document.getElementById('memory-banner');if(memBanner&&checkins.length>=3){const patterns=analyzePatterns()||[];if(patterns.length){memBanner.innerHTML=`<strong>Memoria:</strong> ${patterns[0].label}`;memBanner.classList.add('active');}}}
-function initCheckin(){const today=new Date().toISOString().slice(0,10);const checkins=mem_get('checkins')||[];const doneToday=checkins.some(c=>c.date===today);if(!prefs.checkin||doneToday){document.getElementById('checkin-overlay').style.display='none';if(doneToday){const last=checkins[checkins.length-1];updateEnergyDisplay(last.energy,last.sleep,last.stress);}}else{document.getElementById('checkin-overlay').style.display='flex';}}
+function initCheckin(){const today=formatLocalDate();const checkins=mem_get('checkins')||[];const checkinToday=checkins.find(c=>c.date===today);const doneToday=!!checkinToday;if(!prefs.checkin||doneToday){document.getElementById('checkin-overlay').style.display='none';if(checkinToday){updateEnergyDisplay(checkinToday.energy,checkinToday.sleep,checkinToday.stress);}}else{document.getElementById('checkin-overlay').style.display='flex';}}
 
 // â”€â”€ MEMORIA PAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderMemoryPage(){const checkins=mem_get('checkins')||[];const patterns=analyzePatterns()||[];const eh=document.getElementById('energy-history');if(eh){if(!checkins.length)eh.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">Nessun dato ancora.</div>';else eh.innerHTML=checkins.slice(-7).reverse().map(c=>`<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-size:12px;color:#9E9B94;width:80px;">${c.date}</span><span class="energy-dot" style="background:${ENERGY_COLORS[c.energy]||'#ccc'};"></span><span style="font-size:13px;">${ENERGY_LABELS[c.energy]||c.energy}</span><span style="margin-left:auto;font-size:12px;color:#9E9B94;">sonno: ${c.sleep} Â· stress: ${c.stress}/5</span></div>`).join('');}const pl=document.getElementById('pattern-list');if(pl){if(!patterns.length)pl.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">I pattern emergono dopo qualche giorno.</div>';else pl.innerHTML=patterns.map(p=>`<div class="mem-item"><div class="mem-icon" style="background:#F0EDE6;">${p.icon}</div><div><div class="mem-label">${p.label}</div><div class="mem-sub">${p.sub}</div></div></div>`).join('');}const ch=document.getElementById('checkin-history');if(ch)ch.innerHTML=`<div style="font-size:13px;color:#9E9B94;">${checkins.length} check-in registrati${checkins.length?' Â· ultimo: '+checkins[checkins.length-1].date:''}.</div>`;const sc=document.getElementById('stat-checkins');if(sc)sc.textContent=checkins.length;const nb=document.getElementById('nb-mem');if(nb)nb.style.display=patterns.length?'':'none';}
@@ -1018,14 +1052,14 @@ function closeInboxMessage(){const modal=document.getElementById('inbox-message-
 function renderInboxControls(){const state=document.getElementById('inbox-connection-state');const connectBtn=document.getElementById('inbox-connect-btn');const syncBtn=document.getElementById('inbox-sync-btn');if(!state||!connectBtn||!syncBtn)return;if(!mailboxConnected){if(mailboxBackgroundSyncInProgress){state.textContent='Sincronizzazione mailbox in corso... potrebbe richiedere alcuni minuti.';state.style.color='#0D2E7A';connectBtn.style.display='';connectBtn.textContent='Sincronizzazione...';connectBtn.disabled=true;syncBtn.style.display='none';return;}state.textContent=mailboxConnectionError||'Mailbox non collegata';state.style.color=mailboxConnectionError?'#9B2525':'#6B6860';connectBtn.style.display='';connectBtn.textContent=mailboxSyncInProgress?'Connessione...':'Collega mailbox';connectBtn.disabled=mailboxSyncInProgress;syncBtn.style.display='none';return;}state.style.color='#6B6860';const last=mailboxLastSync?new Date(mailboxLastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'mai';state.textContent=`Mailbox collegata · ultima sync ${last}`;connectBtn.style.display='none';syncBtn.style.display='';syncBtn.disabled=mailboxSyncInProgress;syncBtn.innerHTML=mailboxSyncInProgress?'<span class="spinning">↻</span> Sincronizzo...':'Sincronizza';}
 function renderInbox(){const el=document.getElementById('inbox-list');if(!el)return;if(!mailboxConnected){if(mailboxBackgroundSyncInProgress){el.innerHTML='<div class="empty-state"><div class="empty-title"><span class="spinning">↻</span> Sincronizzazione in corso</div><div class="empty-sub">Stiamo collegando la mailbox e recuperando i messaggi. L\'operazione può richiedere qualche minuto.</div></div>';return;}el.innerHTML='<div class="empty-state"><div class="empty-title">Collega la mailbox</div><div class="empty-sub">Connettiti e poi premi "Sincronizza" per vedere i messaggi qui.</div></div>';return;}if(!INBOX.length){el.innerHTML='<div class="empty-state"><div class="empty-title">Nessun messaggio sincronizzato</div><div class="empty-sub">Premi "Sincronizza" per aggiornare la inbox.</div></div>';return;}el.innerHTML=INBOX.map(item=>`<div class="inbox-item" onclick="openInboxMessage('${item.id}')" style="cursor:pointer;${inboxSelectedId===item.id?'background:#F7FAFF;':''}"><div style="width:7px;height:7px;border-radius:50%;background:${item.unread?'#1A4FBF':'transparent'};margin-top:6px;flex-shrink:0;"></div><div class="av" style="background:${item.bg};color:${item.tc};">${item.initials}</div><div class="inbox-body"><div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span style="font-size:13px;font-weight:500;">${escapeHtml(item.from)}</span><span style="font-size:11px;color:#9E9B94;">${item.time}</span></div><div style="font-size:13px;margin-bottom:2px;">${escapeHtml(item.subj)}</div><div style="font-size:12px;color:#9E9B94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.prev)}</div></div><span class="badge ${item.source==='Slack'?'b-slack':'b-blue'}">${item.source}</span></div>`).join('');}
 function renderCalendar(){const el=document.getElementById('cal-events');if(!el)return;el.innerHTML=CAL.map(ev=>`<div class="cal-slot" style="${ev.done?'opacity:0.45':''}"><div class="cal-time">${ev.time}</div><div class="cal-block ${ev.hl?'hl':''}"><div style="font-size:13px;font-weight:500;color:${ev.hl?'#0D2E7A':'#1A1A18'};margin-bottom:3px;">${ev.title}</div><div style="font-size:12px;color:${ev.hl?'#185FA5':'#9E9B94'};">${ev.meta}</div></div>${ev.done?'<div style="font-size:11px;color:#0E6B4A;align-self:center;flex-shrink:0;">✓ Fatto</div>':''}</div>`).join('');}
-function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filter(t=>t.done);const ol=document.getElementById('open-tasks-list');const dl=document.getElementById('done-tasks-list');const dc=document.getElementById('done-tasks-card');if(!ol)return;document.getElementById('open-tasks-label').textContent=`Aperti (${open.length})`;ol.innerHTML=open.length===0?'<div style="font-size:13px;color:#9E9B94;padding:8px 0;font-style:italic;">Nessun task aperto!</div>':open.map(t=>`<div class="task-row"><div class="checkbox" onclick="toggleTask(${t.id})"></div><span style="font-size:13px;flex:1;">${t.label}</span>${t.scadenza?`<span style="font-size:11px;color:#9E9B94;">${t.scadenza}</span>`:''} ${prioritaBadge(t.priorita)}<button class="btn-icon" onclick="deleteTask(${t.id})">✕</button></div>`).join('');if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>`<div class="task-row"><div class="checkbox done" onclick="toggleTask(${t.id})"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div><span style="font-size:13px;flex:1;color:#9E9B94;text-decoration:line-through;">${t.label}</span><button class="btn-icon" onclick="deleteTask(${t.id})">✕</button></div>`).join('');}else dc.style.display='none';updateTaskSubtitle();updateBadges();}
+function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filter(t=>t.done);const ol=document.getElementById('open-tasks-list');const dl=document.getElementById('done-tasks-list');const dc=document.getElementById('done-tasks-card');if(!ol)return;document.getElementById('open-tasks-label').textContent=`Aperti (${open.length})`;ol.innerHTML=open.length===0?'<div style="font-size:13px;color:#9E9B94;padding:8px 0;font-style:italic;">Nessun task aperto!</div>':open.map(t=>`<div class="task-row"><div class="checkbox" onclick="toggleTask('${String(t.id).replace(/'/g,"\\'")}')"></div><span style="font-size:13px;flex:1;">${t.label}</span>${t.scadenza?`<span style="font-size:11px;color:#9E9B94;">${t.scadenza}</span>`:''} ${prioritaBadge(t.priorita)}<button class="btn-icon" onclick="deleteTask('${String(t.id).replace(/'/g,"\\'")}')">✕</button></div>`).join('');if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>`<div class="task-row"><div class="checkbox done" onclick="toggleTask('${String(t.id).replace(/'/g,"\\'")}')"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div><span style="font-size:13px;flex:1;color:#9E9B94;text-decoration:line-through;">${t.label}</span><button class="btn-icon" onclick="deleteTask('${String(t.id).replace(/'/g,"\\'")}')">✕</button></div>`).join('');}else dc.style.display='none';updateTaskSubtitle();updateBadges();}
 function renderNotes(){const el=document.getElementById('notes-container');if(!el)return;if(!notes.length){el.innerHTML='<div class="empty-state"><div class="empty-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#9E9B94" stroke-width="1.4"><rect x="3" y="2" width="14" height="16" rx="2"/><line x1="7" y1="7" x2="13" y2="7"/><line x1="7" y1="10" x2="13" y2="10"/><line x1="7" y1="13" x2="10" y2="13"/></svg></div><div class="empty-title">Nessuna nota ancora</div></div>';return;}el.innerHTML=notes.map(n=>`<div class="note-card" onclick="openNoteEditor(${n.id})"><div style="font-size:14px;font-weight:500;margin-bottom:4px;">${n.title}</div><div style="font-size:12px;color:#6B6860;line-height:1.5;margin-bottom:8px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${n.body}</div><div style="display:flex;gap:5px;">${n.tags.map((t,j)=>tagBadge(t,j)).join('')}</div></div>`).join('');}
 function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=INBOX.filter(i=>i.unread).length;const noteCount=notes.length;const nb=document.getElementById('nb-task');if(nb){nb.textContent=open;nb.style.display='';}const noteBadge=document.getElementById('nb-note');if(noteBadge){noteBadge.textContent=noteCount;noteBadge.style.display='';}document.getElementById('nb-inbox').textContent=unread;document.getElementById('stat-inbox').textContent=unread;document.getElementById('stat-tasks').textContent=open;updateInboxSubtitle();}
 function updateInboxSubtitle(){const total=INBOX.length;const unread=INBOX.filter(i=>i.unread).length;PAGE_META.inbox[1]=mailboxConnected?`${total} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
-async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const authUrl=await requestMailboxConnectUrl(currentUser.id,state);window.location.assign(authUrl);}catch(err){console.warn('Errore collegamento mailbox:',err);mailboxConnectionError='Connessione mailbox non riuscita: backend API non raggiungibile.';showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
-async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);showError('Sincronizzazione mailbox non riuscita.');}finally{mailboxSyncInProgress=false;renderAll();}}
+async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
+async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}finally{mailboxSyncInProgress=false;renderAll();}}
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────
 function toggleTaskForm(){const f=document.getElementById('task-form');const b=document.getElementById('task-form-toggle');const open=f.style.display==='none';f.style.display=open?'':'none';b.textContent=open?'Annulla':'+ Nuovo task';b.style.background=open?'#F0EDE6':'#1A4FBF';b.style.color=open?'#6B6860':'#fff';if(open)document.getElementById('new-task-label').focus();}
@@ -1081,14 +1115,14 @@ async function addTask() {
   toggleTaskForm();
 }
 function addTaskFromSuggestion(titolo){tasks.push({id:nextTaskId++,label:titolo,done:false,priorita:'urgente',scadenza:'Oggi'});saveTasksToCache();renderTasks();showPage('task',document.querySelectorAll('.nav-item')[3]);}
-function toggleTask(id){const t=tasks.find(t=>t.id===id);if(t){if(!t.done)recordTaskPostponed(t);else{t.done=false;saveTasksToCache();renderTasks();return;}t.done=true;recordTaskCompleted(t);}saveTasksToCache();renderTasks();}
-function deleteTask(id){tasks=tasks.filter(t=>t.id!==id);saveTasksToCache();renderTasks();}
+function toggleTask(id){const idKey=String(id);const t=tasks.find(t=>String(t.id)===idKey);if(t){if(!t.done)recordTaskPostponed(t);else{t.done=false;saveTasksToCache();renderTasks();return;}t.done=true;recordTaskCompleted(t);}saveTasksToCache();renderTasks();}
+function deleteTask(id){const idKey=String(id);tasks=tasks.filter(t=>String(t.id)!==idKey);saveTasksToCache();renderTasks();}
 
 // â”€â”€ NOTE CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function showNoteList(){document.getElementById('note-list-view').style.display='';document.getElementById('note-editor-view').style.display='none';document.getElementById('page-sub').textContent=notes.length+' note';renderNotes();}
+function showNoteList(){document.getElementById('note-list-view').style.display='';document.getElementById('note-editor-view').style.display='none';document.getElementById('page-sub').textContent=notes.length+' note';document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">＋ Nuova nota</button>';renderNotes();updateBadges();}
 function openNoteEditor(id){currentNoteId=id;const n=id?notes.find(n=>n.id===id):null;document.getElementById('note-edit-title').value=n?n.title:'';document.getElementById('note-edit-body').value=n?n.body:'';document.getElementById('note-edit-tags').value=n?n.tags.join(', '):'';document.getElementById('note-list-view').style.display='none';document.getElementById('note-editor-view').style.display='';document.getElementById('page-sub').textContent=id?'Modifica e salva':'Nuova nota';document.getElementById('topbar-actions').innerHTML=`<div style="display:flex;gap:8px;"><button class="btn-primary" onclick="saveNote()">Salva</button><button class="btn-ghost" onclick="showNoteList()">Annulla</button>${id?'<button class="btn-danger" onclick="deleteNote('+id+')">Elimina</button>':''}</div>`;}
-function saveNote(){const title=document.getElementById('note-edit-title').value.trim()||'Nota senza titolo';const body=document.getElementById('note-edit-body').value.trim();const tags=document.getElementById('note-edit-tags').value.split(',').map(t=>t.trim()).filter(Boolean);if(currentNoteId){const n=notes.find(n=>n.id===currentNoteId);if(n){n.title=title;n.body=body;n.tags=tags;}}else{notes.push({id:nextNoteId++,title,body,tags});}saveNotesToCache();showNoteList();}
-function deleteNote(id){notes=notes.filter(n=>n.id!==id);saveNotesToCache();showNoteList();}
+function saveNote(){const title=document.getElementById('note-edit-title').value.trim()||'Nota senza titolo';const body=document.getElementById('note-edit-body').value.trim();const tags=document.getElementById('note-edit-tags').value.split(',').map(t=>t.trim()).filter(Boolean);if(currentNoteId){const n=notes.find(n=>n.id===currentNoteId);if(n){n.title=title;n.body=body;n.tags=tags;}}else{notes.push({id:nextNoteId++,title,body,tags});}saveNotesToCache();showNoteList();updateBadges();}
+function deleteNote(id){notes=notes.filter(n=>n.id!==id);saveNotesToCache();showNoteList();updateBadges();}
 
 // ── RICERCA ───────────────────────────────────────────────────────────────────
 function doSearch(q){const el=document.getElementById('search-results');if(!q.trim()){el.innerHTML='<div class="empty-state"><div class="empty-title">Inizia a digitare</div></div>';return;}const ql=q.toLowerCase();const rt=tasks.filter(t=>t.label.toLowerCase().includes(ql));const rn=notes.filter(n=>n.title.toLowerCase().includes(ql)||n.body.toLowerCase().includes(ql));const ri=INBOX.filter(i=>i.from.toLowerCase().includes(ql)||i.subj.toLowerCase().includes(ql));if(!rt.length&&!rn.length&&!ri.length){el.innerHTML=`<div style="text-align:center;padding:32px;color:#9E9B94;font-size:13px;">Nessun risultato per "${q}"</div>`;return;}let html='';if(rt.length)html+=`<div class="card"><div class="sec-label">Task (${rt.length})</div>${rt.map(t=>`<div class="task-row"><span style="font-size:13px;flex:1;color:${t.done?'#9E9B94':'#1A1A18'};text-decoration:${t.done?'line-through':'none'};">${t.label}</span>${prioritaBadge(t.priorita)}</div>`).join('')}</div>`;if(rn.length)html+=`<div class="card"><div class="sec-label">Note (${rn.length})</div>${rn.map(n=>`<div style="padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);cursor:pointer;" onclick="showPage('note');openNoteEditor(${n.id})"><div style="font-size:13px;font-weight:500;margin-bottom:2px;">${n.title}</div><div style="font-size:12px;color:#9E9B94;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${n.body}</div></div>`).join('')}</div>`;if(ri.length)html+=`<div class="card"><div class="sec-label">Email (${ri.length})</div>${ri.map(item=>`<div style="display:flex;gap:10px;padding:9px 0;"><div class="av" style="width:28px;height:28px;font-size:10px;background:${item.bg};color:${item.tc};">${item.initials}</div><div><div style="font-size:13px;font-weight:500;">${item.from}</div><div style="font-size:12px;color:#9E9B94;">${item.subj}</div></div></div>`).join('')}</div>`;el.innerHTML=html;}
@@ -1144,7 +1178,18 @@ async function init() {
   isAuthBootstrapping = false;
 }
 
-init();
+init().catch((err) => {
+  console.error('Init fallita:', err);
+  const shell = document.getElementById('app-shell');
+  if (shell) shell.classList.remove('active');
+  const login = document.getElementById('login-screen');
+  if (login) login.style.display = 'flex';
+  const errorBox = document.getElementById('login-error');
+  if (errorBox) {
+    errorBox.textContent = 'Errore inizializzazione app. Ricarica la pagina.';
+    errorBox.classList.add('active');
+  }
+});
 </script>
 </body>
 </html>
