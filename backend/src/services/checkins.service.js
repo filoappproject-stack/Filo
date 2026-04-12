@@ -1,6 +1,21 @@
 import { query } from '../config/db.js';
 
+function resolveInternalUserEmail(userId) {
+  return `user-${userId}@filo.local`;
+}
+
+async function ensureUserExists(userId) {
+  const sql = `
+    INSERT INTO users (id, email)
+    VALUES ($1, $2)
+    ON CONFLICT (id)
+    DO NOTHING
+  `;
+  await query(sql, [userId, resolveInternalUserEmail(userId)]);
+}
+
 export async function upsertDailyCheckin(input) {
+  await ensureUserExists(input.userId);
   const sql = `
     INSERT INTO daily_checkins (user_id, checkin_date, energy_level, stress_level, sleep_quality)
     VALUES ($1, $2, $3, $4, $5)
