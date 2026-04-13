@@ -6,6 +6,7 @@ const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 const GOOGLE_AUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_CALENDAR_BASE = 'https://www.googleapis.com/calendar/v3';
+const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
 let calendarSchemaReady = false;
 
 function requireGoogleOauthEnv() {
@@ -104,6 +105,18 @@ async function calendarRequest(path, accessToken, queryParams = {}) {
     throw new HttpError(502, `Errore API Calendar: ${payload}`);
   }
   return response.json();
+}
+
+async function getGoogleUserEmail(accessToken) {
+  const response = await fetch(GOOGLE_USERINFO_URL, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!response.ok) {
+    const payload = await response.text();
+    throw new HttpError(502, `Errore API Google UserInfo: ${payload}`);
+  }
+  const payload = await response.json();
+  return typeof payload?.email === 'string' && payload.email ? payload.email : null;
 }
 
 async function ensureCalendarSchema() {
@@ -332,7 +345,9 @@ export async function exchangeGoogleCalendarCodeAndSync({ userId, code, redirect
   const expiresAt = new Date(Date.now() + (oauthPayload.expires_in ?? 3600) * 1000).toISOString();
 
   await calendarRequest('/users/me/calendarList', oauthPayload.access_token, { maxResults: '1' });
-  const providerEmail = resolveInternalUserEmail(userId);
+  const providerEmail =
+    (await getGoogleUserEmail(oauthPayload.access_token).catch(() => null)) ??
+    resolveInternalUserEmail(userId);
 
   await ensureUserExists(userId, resolveInternalUserEmail(userId));
   const account = await upsertCalendarAccount({
@@ -404,4 +419,22 @@ export async function listCalendarEvents(userId, options = {}) {
     [userId, fromIso, toIso, limit]
   );
   return rows;
+}
+
+export async function getGoogleCalendarStatus(userId) {
+  await ensureCalendarSchema();
+  const account = await findGoogleCalendarAccount(userId);
+  if (!account) {
+    return {
+      connected: false,
+      provider_email: null,
+      last_synced_at: null
+    };
+  }
+
+  return {
+    connected: true,
+    provider_email: account.provider_email,
+    last_synced_at: account.last_synced_at
+  };
 }

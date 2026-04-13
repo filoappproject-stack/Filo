@@ -3,6 +3,7 @@ import { HttpError } from '../utils/httpError.js';
 import {
   buildGoogleCalendarAuthUrl,
   exchangeGoogleCalendarCodeAndSync,
+  getGoogleCalendarStatus,
   listCalendarEvents,
   syncGoogleCalendar
 } from '../services/calendar.service.js';
@@ -58,4 +59,16 @@ export async function getCalendarEvents(req, res) {
   const events = await listCalendarEvents(parsed.data.userId, parsed.data);
   res.set('Cache-Control', 'no-store');
   res.json({ data: events });
+}
+
+export async function getGoogleCalendarConnectionStatus(req, res) {
+  const parsed = z
+    .object({
+      userId: z.string().uuid()
+    })
+    .safeParse(req.query);
+  if (!parsed.success) throw new HttpError(400, 'Query stato calendario non valida');
+  const status = await getGoogleCalendarStatus(parsed.data.userId);
+  res.set('Cache-Control', 'no-store');
+  res.json({ data: status });
 }

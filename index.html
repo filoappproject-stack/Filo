@@ -840,7 +840,11 @@ async function tryHandleCalendarOauthCallback() {
     const payload = await res.json();
     const syncedAt = payload?.data?.account?.last_synced_at || new Date().toISOString();
     setCalendarConnectionState(true, syncedAt);
-    await loadCalendarEvents();
+    try{
+      await loadCalendarEvents();
+    }catch(loadErr){
+      console.warn('Exchange calendario completato ma fetch eventi fallito:',loadErr);
+    }
     ['code','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''));
     sessionStorage.removeItem(CALENDAR_OAUTH_QUERY_STORAGE_KEY);
@@ -968,11 +972,17 @@ async function loginSuccess(user) {
     mailboxBackgroundSyncInProgress=false;
   }
   try{
+    await loadCalendarStatus();
+  }catch(err){
+    console.warn('Impossibile caricare stato calendario da backend:',err);
+  }
+  try{
     await loadCalendarEvents();
-    if(calendarEvents.length){
-      setCalendarConnectionState(true,Date.now());
+    if(calendarEvents.length&&!calendarConnected){
+      setCalendarConnectionState(true,null);
     }
   }catch(err){
+    console.warn('Impossibile caricare eventi calendario da backend:',err);
     calendarEvents=[];
   }
   renderAll();
@@ -1067,6 +1077,14 @@ async function loadCalendarEvents(limit=100){
   const payload=await res.json();
   const events=Array.isArray(payload?.data)?payload.data:[];
   calendarEvents=events.map(mapCalendarEventToUi);
+}
+async function loadCalendarStatus(){
+  if(!currentUser?.id)return;
+  const res=await fetchApi(`/api/v1/calendar/google/status?userId=${encodeURIComponent(currentUser.id)}`);
+  if(!res.ok){const txt=await res.text().catch(()=> '');throw new Error(`GET /calendar/google/status fallita (${res.status}): ${txt}`);}
+  const payload=await res.json();
+  const data=payload?.data||{};
+  setCalendarConnectionState(!!data.connected,data.last_synced_at||null);
 }
 async function requestMailboxConnectUrl(userId,state){
   const payload={userId,redirectUri:getInboxConnectRedirectUri(),state};
@@ -1335,7 +1353,7 @@ function renderCalendarControls(){
 }
 function renderCalendar(){
   const el=document.getElementById('cal-events');if(!el)return;
-  const source=calendarEvents.length?calendarEvents:CAL;
+  const source=calendarConnected?calendarEvents:CAL;
   if(!source.length){
     el.innerHTML='<div class="empty-state"><div class="empty-title">Nessun evento oggi</div></div>';
     return;
