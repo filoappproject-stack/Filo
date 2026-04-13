@@ -82,3 +82,40 @@ CREATE TABLE IF NOT EXISTS inbox_messages (
 
 CREATE INDEX IF NOT EXISTS idx_inbox_accounts_user_provider ON inbox_accounts(user_id, provider);
 CREATE INDEX IF NOT EXISTS idx_inbox_messages_user_received ON inbox_messages(user_id, received_at DESC);
+
+CREATE TABLE IF NOT EXISTS calendar_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider IN ('google')),
+  provider_email TEXT NOT NULL,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT,
+  token_expires_at TIMESTAMPTZ,
+  scope TEXT NOT NULL,
+  last_synced_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, provider)
+);
+
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id UUID NOT NULL REFERENCES calendar_accounts(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider_event_id TEXT NOT NULL,
+  calendar_id TEXT NOT NULL DEFAULT 'primary',
+  title TEXT NOT NULL DEFAULT '(Senza titolo)',
+  description TEXT NOT NULL DEFAULT '',
+  starts_at TIMESTAMPTZ,
+  ends_at TIMESTAMPTZ,
+  all_day BOOLEAN NOT NULL DEFAULT FALSE,
+  status TEXT NOT NULL DEFAULT 'confirmed',
+  html_link TEXT,
+  updated_remote_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (account_id, provider_event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_calendar_accounts_user_provider ON calendar_accounts(user_id, provider);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_user_starts ON calendar_events(user_id, starts_at ASC);
