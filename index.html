@@ -361,7 +361,19 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
       </div>
 
       <!-- CALENDARIO -->
-      <div id="page-calendario" class="page"><div class="card"><div id="cal-events"></div></div></div>
+      <div id="page-calendario" class="page">
+        <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <div>
+            <div style="font-size:13px;color:#6B6860;" id="calendar-connection-state">Google Calendar non collegato</div>
+            <div style="font-size:11px;color:#9E9B94;margin-top:4px;" id="calendar-diagnostic">Ultimo tentativo connessione: --</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-ghost" id="calendar-connect-btn" onclick="connectCalendar()">Collega Google Calendar</button>
+            <button class="btn-primary" id="calendar-sync-btn" onclick="syncCalendar()" style="display:none;">Sincronizza</button>
+          </div>
+        </div>
+        <div class="card"><div id="cal-events"></div></div>
+      </div>
 
       <!-- INBOX -->
       <div id="page-inbox" class="page">
@@ -486,6 +498,14 @@ const SUPABASE_URL = 'https://xkdniukhksfiuromnmtv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_UdRD3JHIa14slQ_0ltkNTA_0Xkdkfn4';
 const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
 const MAILBOX_REDIRECT_URI_KEY = 'filo_inbox_redirect_uri';
+const CALENDAR_OAUTH_QUERY_STORAGE_KEY = 'filo_calendar_oauth_query_payload';
+const CALENDAR_REDIRECT_URI_KEY = 'filo_calendar_redirect_uri';
+const CALENDAR_OAUTH_PENDING_KEY = 'filo_calendar_oauth_pending';
+const CALENDAR_OAUTH_USER_ID_KEY = 'filo_calendar_oauth_user_id';
+const CALENDAR_DIAG_PREFIX = 'filo_calendar_diag_';
+function setCalendarTransient(key,value){try{sessionStorage.setItem(key,value);}catch(e){}try{localStorage.setItem(key,value);}catch(e){}}
+function getCalendarTransient(key){try{const v=sessionStorage.getItem(key);if(v)return v;}catch(e){}try{return localStorage.getItem(key);}catch(e){return null;}}
+function removeCalendarTransient(key){try{sessionStorage.removeItem(key);}catch(e){}try{localStorage.removeItem(key);}catch(e){}}
 
 (function preserveInboxOAuthQueryBeforeSupabaseInit(){
   try{
@@ -495,11 +515,18 @@ const MAILBOX_REDIRECT_URI_KEY = 'filo_inbox_redirect_uri';
     const state = url.searchParams.get('state');
     if(!code && !error) return;
 
-    const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
-    const matchesExpectedState = !!(expectedState && state && expectedState === state);
+    const expectedInboxState = sessionStorage.getItem('filo_inbox_oauth_state');
+    const expectedCalendarState = getCalendarTransient('filo_calendar_oauth_state');
+    const matchesInboxState = !!(expectedInboxState && state && expectedInboxState === state);
+    const matchesCalendarState = !!(expectedCalendarState && state && expectedCalendarState === state);
     const hasInboxStatePrefix = typeof state === 'string' && state.startsWith('mailbox:');
-    const isInboxOAuthCallback = matchesExpectedState || hasInboxStatePrefix;
-    if(!isInboxOAuthCallback) return;
+    const hasCalendarStatePrefix = typeof state === 'string' && state.startsWith('calendar:');
+    const isInboxOAuthCallback = matchesInboxState || hasInboxStatePrefix;
+    const hasCalendarPendingMarker = getCalendarTransient(CALENDAR_OAUTH_PENDING_KEY) === '1';
+    const scopeRaw = url.searchParams.get('scope') || '';
+    const hasCalendarScope = scopeRaw.includes('calendar');
+    const isCalendarOAuthCallback = matchesCalendarState || hasCalendarStatePrefix || hasCalendarPendingMarker || hasCalendarScope;
+    if(!isInboxOAuthCallback && !isCalendarOAuthCallback) return;
 
     const payload = {
       code,
@@ -509,7 +536,12 @@ const MAILBOX_REDIRECT_URI_KEY = 'filo_inbox_redirect_uri';
       authuser: url.searchParams.get('authuser'),
       prompt: url.searchParams.get('prompt')
     };
-    sessionStorage.setItem(INBOX_OAUTH_QUERY_STORAGE_KEY, JSON.stringify(payload));
+    const storageKey = isCalendarOAuthCallback ? CALENDAR_OAUTH_QUERY_STORAGE_KEY : INBOX_OAUTH_QUERY_STORAGE_KEY;
+    if(storageKey===CALENDAR_OAUTH_QUERY_STORAGE_KEY){
+      setCalendarTransient(storageKey,JSON.stringify(payload));
+    }else{
+      sessionStorage.setItem(storageKey, JSON.stringify(payload));
+    }
     ['code','error','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     const cleanUrl = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash;
     window.location.replace(cleanUrl);
@@ -789,6 +821,131 @@ async function tryHandleMailboxOauthCallback() {
   }
 }
 
+async function tryHandleCalendarOauthCallback() {
+  let url;
+  try { url = new URL(window.location.href); } catch (e) { return false; }
+
+  let code = url.searchParams.get('code');
+  let state = url.searchParams.get('state');
+  const urlScope = url.searchParams.get('scope') || '';
+  let hasCalendarIntent =
+    isCalendarOauthState(state) ||
+    getCalendarTransient(CALENDAR_OAUTH_PENDING_KEY) === '1' ||
+    urlScope.includes('calendar');
+  if (!code || !hasCalendarIntent) {
+    try {
+      const raw = getCalendarTransient(CALENDAR_OAUTH_QUERY_STORAGE_KEY);
+      if (raw) {
+        const stored = JSON.parse(raw);
+        const storedCode = typeof stored?.code === 'string' ? stored.code : '';
+        const storedState = typeof stored?.state === 'string' ? stored.state : '';
+        const storedScope = typeof stored?.scope === 'string' ? stored.scope : '';
+        if (storedCode) {
+          code = storedCode;
+          state = storedState || state;
+          hasCalendarIntent =
+            isCalendarOauthState(storedState) ||
+            getCalendarTransient(CALENDAR_OAUTH_PENDING_KEY) === '1' ||
+            storedScope.includes('calendar');
+        }
+      }
+    } catch (e) {}
+  }
+  if (!code || !hasCalendarIntent) return false;
+  const userId =
+    extractUserIdFromCalendarState(state) ||
+    getCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY) ||
+    currentUser?.id ||
+    null;
+  if (!userId) return false;
+
+  try {
+    setCalendarDiagnostic('IN CORSO','exchange OAuth');
+    const redirectUri = getCalendarTransient(CALENDAR_REDIRECT_URI_KEY) || getCalendarConnectRedirectUri();
+    const res = await fetchApi('/api/v1/calendar/google/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, code, redirectUri })
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`POST /calendar/google/exchange fallita (${res.status}): ${txt}`);
+    }
+    const payload = await res.json();
+    const syncedAt = payload?.data?.account?.last_synced_at || new Date().toISOString();
+    setCalendarConnectionState(true, syncedAt);
+    setCalendarDiagnostic('OK','account collegato');
+    try{
+      await loadCalendarEvents();
+    }catch(loadErr){
+      console.warn('Exchange calendario completato ma fetch eventi fallito:',loadErr);
+      setCalendarDiagnostic('OK','collegato (fetch eventi non riuscito)');
+    }
+    ['code','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
+    window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''));
+    removeCalendarTransient(CALENDAR_OAUTH_QUERY_STORAGE_KEY);
+    removeCalendarTransient('filo_calendar_oauth_state');
+    removeCalendarTransient(CALENDAR_REDIRECT_URI_KEY);
+    removeCalendarTransient(CALENDAR_OAUTH_PENDING_KEY);
+    removeCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY);
+    return true;
+  } catch (err) {
+    const reason = err?.message ? String(err.message) : 'errore sconosciuto';
+    console.warn('Errore callback calendario OAuth:', reason, err);
+    calendarConnectionError = `Connessione calendario non completata: ${reason}`;
+    setCalendarDiagnostic('KO',reason);
+    showError('Connessione Google Calendar non completata. Riprova.');
+    removeCalendarTransient(CALENDAR_OAUTH_QUERY_STORAGE_KEY);
+    removeCalendarTransient('filo_calendar_oauth_state');
+    removeCalendarTransient(CALENDAR_REDIRECT_URI_KEY);
+    removeCalendarTransient(CALENDAR_OAUTH_PENDING_KEY);
+    removeCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY);
+    return false;
+  }
+}
+
+function resolveCalendarCallbackPayloadPresence() {
+  try {
+    const raw = getCalendarTransient(CALENDAR_OAUTH_QUERY_STORAGE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return typeof parsed?.code === 'string' && parsed.code.length > 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+function markCalendarPendingAsFailedIfNoCallbackDetected() {
+  const pending = getCalendarTransient(CALENDAR_OAUTH_PENDING_KEY) === '1';
+  if (!pending) return;
+  const hasStoredPayload = resolveCalendarCallbackPayloadPresence();
+  let hasCodeInUrl = false;
+  try {
+    const url = new URL(window.location.href);
+    hasCodeInUrl = !!url.searchParams.get('code');
+  } catch (e) {}
+  if (hasStoredPayload || hasCodeInUrl) return;
+
+  const reason = 'callback OAuth non rilevato (controlla redirect URI Google)';
+  setCalendarDiagnostic('KO', reason);
+  calendarConnectionError = reason;
+  removeCalendarTransient(CALENDAR_OAUTH_PENDING_KEY);
+  removeCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY);
+}
+
+function handleCalendarOAuthPageShow(event){
+  const pending=getCalendarTransient(CALENDAR_OAUTH_PENDING_KEY)==='1';
+  if(!pending)return;
+  if(event?.persisted){
+    const reason='ritorno da cache browser (OAuth non completato o redirect URI non raggiunta)';
+    setCalendarDiagnostic('KO',reason);
+    calendarConnectionError=reason;
+    removeCalendarTransient(CALENDAR_OAUTH_PENDING_KEY);
+    removeCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY);
+    renderCalendarControls();
+  }
+}
+
 
 function clearSupabaseAuthHashFromUrl() {
   if (!window.location.hash) return;
@@ -861,6 +1018,8 @@ async function loginSuccess(user) {
   document.getElementById('profile-role-disp').textContent = user.email;
   document.getElementById('pf-name').value = name;
   document.getElementById('page-title').textContent = 'Buongiorno, ' + firstName;
+  const calendarDiag = loadCalendarDiagnostic();
+  if(calendarDiag)setCalendarDiagnostic(calendarDiag.status,calendarDiag.message);
 
   const cachedTasks = loadTasksFromCache();
   if (cachedTasks) {
@@ -897,13 +1056,26 @@ async function loginSuccess(user) {
   }finally{
     mailboxBackgroundSyncInProgress=false;
   }
+  try{
+    await loadCalendarStatus();
+  }catch(err){
+    console.warn('Impossibile caricare stato calendario da backend:',err);
+  }
+  try{
+    await loadCalendarEvents();
+    if(calendarEvents.length&&!calendarConnected){
+      setCalendarConnectionState(true,null);
+    }
+  }catch(err){
+    console.warn('Impossibile caricare eventi calendario da backend:',err);
+    calendarEvents=[];
+  }
   renderAll();
   analyzePatterns();
 }
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────
 const INBOX=[];
-const CAL=[{time:"09:00",title:"Standup team prodotto",meta:"15 min · Google Meet",done:true,hl:false},{time:"10:30",title:"Call con cliente Rossi",meta:"45 min · Zoom · 3 email non lette",done:false,hl:true},{time:"12:00",title:"Pausa pranzo",meta:"Blocco personale",done:false,hl:false},{time:"14:30",title:"Revisione roadmap Q2",meta:"60 min · Sala B · 6 partecipanti",done:false,hl:false},{time:"17:00",title:"Riepilogo team",meta:"Ricorrente ogni mercoledì",done:false,hl:false}];
 const TAG_PALETTE=[{bg:"#E8EEFB",tc:"#0D2E7A"},{bg:"#E4F4EE",tc:"#0E6B4A"},{bg:"#FDF3DC",tc:"#8A5C00"},{bg:"#FDECEC",tc:"#9B2525"},{bg:"#F0EAF8",tc:"#5B2D8E"},{bg:"#F0EDE6",tc:"#6B6860"}];
 const ENERGY_LABELS={1:"A pezzi",2:"Stanco",3:"Nella norma",4:"Bene",5:"Ottimo"};
 const ENERGY_COLORS={1:"#9B2525",2:"#8A5C00",3:"#6B6860",4:"#0E6B4A",5:"#0D2E7A"};
@@ -914,6 +1086,13 @@ let mailboxLastSync=null;
 let mailboxSyncInProgress=false;
 let mailboxBackgroundSyncInProgress=false;
 let mailboxConnectionError='';
+let calendarConnected=false;
+let calendarLastSync=null;
+let calendarSyncInProgress=false;
+let calendarConnectionError='';
+let calendarEvents=[];
+let calendarDiagnosticStatus='--';
+let calendarDiagnosticTimeoutId=null;
 let notes=[];
 let nextNoteId=100;
 let currentNoteId=null;
@@ -942,17 +1121,117 @@ function loadNotesFromCache(){const key=getNotesCacheKey();if(!key)return null;t
 function getInboxCacheKey(){return currentUser?.id?`${INBOX_CACHE_PREFIX}${currentUser.id}`:null;}
 function saveInboxToCache(){const key=getInboxCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify({connected:mailboxConnected,lastSync:mailboxLastSync,messages:INBOX}));}catch(e){}}
 function loadInboxFromCache(){const key=getInboxCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;if(!parsed||!Array.isArray(parsed.messages))return null;return parsed;}catch(e){return null;}}
+function getCalendarDiagKey(){
+  const userKey =
+    currentUser?.id ||
+    getCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY) ||
+    'global';
+  return `${CALENDAR_DIAG_PREFIX}${userKey}`;
+}
+function setCalendarDiagnostic(status,message){
+  calendarDiagnosticStatus=status;
+  const text=`Ultimo tentativo connessione: ${status}${message?` · ${message}`:''}`;
+  const el=document.getElementById('calendar-diagnostic');
+  if(el)el.textContent=text;
+  if(calendarDiagnosticTimeoutId){
+    clearTimeout(calendarDiagnosticTimeoutId);
+    calendarDiagnosticTimeoutId=null;
+  }
+  if(status==='IN CORSO'){
+    calendarDiagnosticTimeoutId=setTimeout(()=>{
+      const pending=getCalendarTransient(CALENDAR_OAUTH_PENDING_KEY)==='1';
+      if(calendarDiagnosticStatus==='IN CORSO'&&pending){
+        const reason='timeout callback OAuth (nessuna risposta da Google)';
+        calendarConnectionError=reason;
+        setCalendarDiagnostic('KO',reason);
+        removeCalendarTransient(CALENDAR_OAUTH_PENDING_KEY);
+        removeCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY);
+        renderCalendarControls();
+      }
+    },20000);
+  }
+  const key=getCalendarDiagKey();
+  if(key){
+    try{
+      if(status==='IN CORSO'){
+        localStorage.removeItem(key);
+      }else{
+        localStorage.setItem(key,JSON.stringify({status,message,ts:new Date().toISOString()}));
+      }
+    }catch(e){}
+  }
+}
+function loadCalendarDiagnostic(){
+  const keys=[];
+  const primary=getCalendarDiagKey();
+  if(primary)keys.push(primary);
+  keys.push(`${CALENDAR_DIAG_PREFIX}global`);
+  try{
+    for(const key of keys){
+      const raw=localStorage.getItem(key);
+      const parsed=raw?JSON.parse(raw):null;
+      if(!parsed)continue;
+      if(parsed?.status==='IN CORSO'){
+        localStorage.removeItem(key);
+        continue;
+      }
+      return parsed&&typeof parsed.status==='string'?parsed:null;
+    }
+    return null;
+  }catch(e){return null;}
+}
 function restorePostOauthPage(){const id=sessionStorage.getItem(POST_OAUTH_PAGE_KEY);if(!id)return;sessionStorage.removeItem(POST_OAUTH_PAGE_KEY);const pageEl=document.getElementById(`page-${id}`);if(!pageEl)return;const navEl=Array.from(document.querySelectorAll('.nav-item')).find(el=>el.getAttribute('onclick')===`showPage('${id}',this)`);showPage(id,navEl||null);}
 function getInboxConnectRedirectUri(){return `${window.location.origin}${window.location.pathname}`;}
 function getInboxStatePrefix(){return 'mailbox:';}
 function isMailboxOauthState(state){return typeof state==='string'&&state.startsWith(getInboxStatePrefix());}
 function extractUserIdFromMailboxState(state){if(!isMailboxOauthState(state))return null;const [,userId]=state.split(':');return userId||null;}
+function getCalendarConnectRedirectUri(){return `${window.location.origin}${window.location.pathname}`;}
+function getCalendarStatePrefix(){return 'calendar:';}
+function isCalendarOauthState(state){return typeof state==='string'&&state.startsWith(getCalendarStatePrefix());}
+function extractUserIdFromCalendarState(state){if(!isCalendarOauthState(state))return null;const [,userId]=state.split(':');return userId||null;}
 function formatInboxTime(ts){if(!ts)return '';const d=new Date(ts);if(Number.isNaN(d.getTime()))return '';return d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});}
+function formatCalendarTime(ts){if(!ts)return '';const d=new Date(ts);if(Number.isNaN(d.getTime()))return '';return d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});}
 function escapeHtml(str){return String(str??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');}
 function avatarFromSender(sender){const raw=(sender||'').replace(/<[^>]+>/g,'').replace(/["']/g,'').trim();const display=raw||'Sconosciuto';const initials=display.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'?';return{display,initials};}
 function mapInboxMessageToUi(item){const labels=Array.isArray(item?.labels)?item.labels:[];const unread=labels.includes('UNREAD');const sender=avatarFromSender(item?.sender);return{id:item?.id,from:sender.display,subj:item?.subject||'(Senza oggetto)',prev:item?.snippet||'',time:formatInboxTime(item?.received_at||item?.created_at),source:'Email',initials:sender.initials,bg:'#E8EEFB',tc:'#0D2E7A',unread};}
 async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));saveInboxToCache();}
 function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)mailboxConnectionError='';}
+function setCalendarConnectionState(connected,lastSyncedAt){calendarConnected=!!connected;calendarLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)calendarConnectionError='';}
+function mapCalendarEventToUi(item){
+  const startRaw=item?.starts_at||item?.start;
+  const endRaw=item?.ends_at||item?.end;
+  const start=startRaw?new Date(startRaw):null;
+  const end=endRaw?new Date(endRaw):null;
+  const allDay=!!item?.all_day;
+  return{
+    id:item?.id||item?.provider_event_id||`event-${Math.random().toString(36).slice(2)}`,
+    title:item?.title||'(Senza titolo)',
+    meta:allDay?'Tutto il giorno':(end&&start&&!Number.isNaN(end.getTime())&&!Number.isNaN(start.getTime()))?`${formatCalendarTime(start)} - ${formatCalendarTime(end)}`:formatCalendarTime(start),
+    time:allDay?'--:--':formatCalendarTime(start)||'--:--',
+    hl:false
+  };
+}
+async function loadCalendarEvents(limit=100){
+  if(!currentUser?.id)return;
+  const now=new Date();
+  const from=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const to=new Date(from.getTime()+24*60*60*1000);
+  const qs=new URLSearchParams({userId:currentUser.id,from:from.toISOString(),to:to.toISOString(),limit:String(limit)});
+  const res=await fetchApi(`/api/v1/calendar/events?${qs.toString()}`);
+  if(!res.ok){const txt=await res.text().catch(()=> '');throw new Error(`GET /calendar/events fallita (${res.status}): ${txt}`);}
+  const payload=await res.json();
+  const events=Array.isArray(payload?.data)?payload.data:[];
+  calendarEvents=events.map(mapCalendarEventToUi);
+}
+async function loadCalendarStatus(){
+  if(!currentUser?.id)return;
+  const res=await fetchApi(`/api/v1/calendar/google/status?userId=${encodeURIComponent(currentUser.id)}`);
+  if(!res.ok){const txt=await res.text().catch(()=> '');throw new Error(`GET /calendar/google/status fallita (${res.status}): ${txt}`);}
+  const payload=await res.json();
+  const data=payload?.data||{};
+  setCalendarConnectionState(!!data.connected,data.last_synced_at||null);
+  if(data.connected)setCalendarDiagnostic('OK','stato backend: collegato');
+}
 async function requestMailboxConnectUrl(userId,state){
   const payload={userId,redirectUri:getInboxConnectRedirectUri(),state};
   let lastDetail='';
@@ -990,6 +1269,35 @@ async function requestMailboxConnectUrl(userId,state){
     }
   }
   throw new Error(lastDetail||'Endpoint mailbox connect non raggiungibile');
+}
+
+async function requestCalendarConnectUrl(userId,state){
+  const payload={userId,redirectUri:getCalendarConnectRedirectUri(),state};
+  let lastDetail='';
+  for(const base of API_BASES){
+    const root=base.replace(/\/$/,'');
+    const endpoint=`${root}/api/v1/calendar/google/connect`;
+    try{
+      let res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      if(res.status===405){
+        const qs=new URLSearchParams(payload);
+        res=await fetch(`${endpoint}?${qs.toString()}`,{method:'GET'});
+      }
+      if(!res.ok){
+        const txt=await res.text().catch(()=> '');
+        lastDetail=`${res.status} ${txt}`.trim();
+        continue;
+      }
+      const data=await res.json();
+      const authUrl=data?.data?.authUrl;
+      if(authUrl)return{authUrl,redirectUri:data?.data?.redirectUri||payload.redirectUri};
+      lastDetail='Risposta JSON senza authUrl';
+    }catch(err){
+      const msg=err?.message?String(err.message):'Errore rete';
+      lastDetail=`${endpoint}: ${msg}`;
+    }
+  }
+  throw new Error(lastDetail||'Endpoint calendario connect non raggiungibile');
 }
 
 async function fetchApi(path,options={}){
@@ -1160,18 +1468,52 @@ function initCheckin(){const today=formatLocalDate();const checkins=mem_get('che
 function renderMemoryPage(){const checkins=mem_get('checkins')||[];const patterns=analyzePatterns()||[];const eh=document.getElementById('energy-history');if(eh){if(!checkins.length)eh.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">Nessun dato ancora.</div>';else eh.innerHTML=checkins.slice(-7).reverse().map(c=>`<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-size:12px;color:#9E9B94;width:80px;">${c.date}</span><span class="energy-dot" style="background:${ENERGY_COLORS[c.energy]||'#ccc'};"></span><span style="font-size:13px;">${ENERGY_LABELS[c.energy]||c.energy}</span><span style="margin-left:auto;font-size:12px;color:#9E9B94;">sonno: ${c.sleep} Â· stress: ${c.stress}/5</span></div>`).join('');}const pl=document.getElementById('pattern-list');if(pl){if(!patterns.length)pl.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">I pattern emergono dopo qualche giorno.</div>';else pl.innerHTML=patterns.map(p=>`<div class="mem-item"><div class="mem-icon" style="background:#F0EDE6;">${p.icon}</div><div><div class="mem-label">${p.label}</div><div class="mem-sub">${p.sub}</div></div></div>`).join('');}const ch=document.getElementById('checkin-history');if(ch)ch.innerHTML=`<div style="font-size:13px;color:#9E9B94;">${checkins.length} check-in registrati${checkins.length?' Â· ultimo: '+checkins[checkins.length-1].date:''}.</div>`;const sc=document.getElementById('stat-checkins');if(sc)sc.textContent=checkins.length;const nb=document.getElementById('nb-mem');if(nb)nb.style.display=patterns.length?'':'none';}
 
 // ── NAVIGAZIONE ───────────────────────────────────────────────────────────────
-const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Mercoledì 18 marzo · 3 eventi in programma"],inbox:["Inbox unificata","0 messaggi · 0 non letti"],task:["Task",""],note:["Note",""],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
+const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox unificata","0 messaggi · 0 non letti"],task:["Task",""],note:["Note",""],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
 function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');if(el)el.classList.add('active');const m=PAGE_META[id];const firstName=currentUser?(currentUser.user_metadata?.full_name||currentUser.email).split(' ')[0]:'';document.getElementById('page-title').textContent=id==='suggerimenti'?'Buongiorno, '+firstName:m[0];document.getElementById('page-sub').textContent=m[1];document.getElementById('topbar-actions').innerHTML='';if(id==='task')updateTaskSubtitle();if(id==='note'){showNoteList();document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">＋ Nuova nota</button>';}if(id==='memoria')renderMemoryPage();if(id==='impostazioni')updateStatsPage();renderAll();}
 
 // â”€â”€ RENDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function tagBadge(tag,idx){const c=TAG_PALETTE[idx%TAG_PALETTE.length];return `<span style="font-size:10px;font-weight:500;padding:2px 7px;border-radius:8px;background:${c.bg};color:${c.tc};">${tag}</span>`;}
 function prioritaBadge(p){const m={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};const l={urgente:'Urgente',alta:'Alta',normale:'Normale',bassa:'Bassa'};return `<span class="badge ${m[p]||'b-normale'}">${l[p]||p}</span>`;}
-function renderAll(){renderInboxControls();renderInbox();renderCalendar();renderTasks();renderNotes();updateBadges();}
+function renderAll(){renderInboxControls();renderInbox();renderCalendarControls();renderCalendar();renderTasks();renderNotes();updateBadges();}
 function openInboxMessage(id){inboxSelectedId=id;const item=INBOX.find(i=>i.id===id);if(!item)return;if(item.unread){item.unread=false;saveInboxToCache();}const modal=document.getElementById('inbox-message-modal');const fromEl=document.getElementById('inbox-modal-from');const subjEl=document.getElementById('inbox-modal-subj');const timeEl=document.getElementById('inbox-modal-time');const bodyEl=document.getElementById('inbox-modal-body');if(fromEl)fromEl.textContent=`Da: ${item.from}`;if(subjEl)subjEl.textContent=item.subj||'(Senza oggetto)';if(timeEl)timeEl.textContent=`Ricevuta alle ${item.time||'--:--'}`;if(bodyEl)bodyEl.textContent=item.prev||'(Nessun contenuto disponibile)';if(modal)modal.style.display='flex';updateBadges();renderInbox();}
 function closeInboxMessage(){const modal=document.getElementById('inbox-message-modal');if(modal)modal.style.display='none';inboxSelectedId=null;renderInbox();}
 function renderInboxControls(){const state=document.getElementById('inbox-connection-state');const connectBtn=document.getElementById('inbox-connect-btn');const syncBtn=document.getElementById('inbox-sync-btn');if(!state||!connectBtn||!syncBtn)return;if(!mailboxConnected){if(mailboxBackgroundSyncInProgress){state.textContent='Sincronizzazione mailbox in corso... potrebbe richiedere alcuni minuti.';state.style.color='#0D2E7A';connectBtn.style.display='';connectBtn.textContent='Sincronizzazione...';connectBtn.disabled=true;syncBtn.style.display='none';return;}state.textContent=mailboxConnectionError||'Mailbox non collegata';state.style.color=mailboxConnectionError?'#9B2525':'#6B6860';connectBtn.style.display='';connectBtn.textContent=mailboxSyncInProgress?'Connessione...':'Collega mailbox';connectBtn.disabled=mailboxSyncInProgress;syncBtn.style.display='none';return;}state.style.color='#6B6860';const last=mailboxLastSync?new Date(mailboxLastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'mai';state.textContent=`Mailbox collegata · ultima sync ${last}`;connectBtn.style.display='none';syncBtn.style.display='';syncBtn.disabled=mailboxSyncInProgress;syncBtn.innerHTML=mailboxSyncInProgress?'<span class="spinning">↻</span> Sincronizzo...':'Sincronizza';}
 function renderInbox(){const el=document.getElementById('inbox-list');if(!el)return;if(!mailboxConnected){if(mailboxBackgroundSyncInProgress){el.innerHTML='<div class="empty-state"><div class="empty-title"><span class="spinning">↻</span> Sincronizzazione in corso</div><div class="empty-sub">Stiamo collegando la mailbox e recuperando i messaggi. L\'operazione può richiedere qualche minuto.</div></div>';return;}el.innerHTML='<div class="empty-state"><div class="empty-title">Collega la mailbox</div><div class="empty-sub">Connettiti e poi premi "Sincronizza" per vedere i messaggi qui.</div></div>';return;}if(!INBOX.length){el.innerHTML='<div class="empty-state"><div class="empty-title">Nessun messaggio sincronizzato</div><div class="empty-sub">Premi "Sincronizza" per aggiornare la inbox.</div></div>';return;}el.innerHTML=INBOX.map(item=>`<div class="inbox-item" onclick="openInboxMessage('${item.id}')" style="cursor:pointer;${inboxSelectedId===item.id?'background:#F7FAFF;':''}"><div style="width:7px;height:7px;border-radius:50%;background:${item.unread?'#1A4FBF':'transparent'};margin-top:6px;flex-shrink:0;"></div><div class="av" style="background:${item.bg};color:${item.tc};">${item.initials}</div><div class="inbox-body"><div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span style="font-size:13px;font-weight:500;">${escapeHtml(item.from)}</span><span style="font-size:11px;color:#9E9B94;">${item.time}</span></div><div style="font-size:13px;margin-bottom:2px;">${escapeHtml(item.subj)}</div><div style="font-size:12px;color:#9E9B94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.prev)}</div></div><span class="badge ${item.source==='Slack'?'b-slack':'b-blue'}">${item.source}</span></div>`).join('');}
-function renderCalendar(){const el=document.getElementById('cal-events');if(!el)return;el.innerHTML=CAL.map(ev=>`<div class="cal-slot" style="${ev.done?'opacity:0.45':''}"><div class="cal-time">${ev.time}</div><div class="cal-block ${ev.hl?'hl':''}"><div style="font-size:13px;font-weight:500;color:${ev.hl?'#0D2E7A':'#1A1A18'};margin-bottom:3px;">${ev.title}</div><div style="font-size:12px;color:${ev.hl?'#185FA5':'#9E9B94'};">${ev.meta}</div></div>${ev.done?'<div style="font-size:11px;color:#0E6B4A;align-self:center;flex-shrink:0;">✓ Fatto</div>':''}</div>`).join('');}
+function renderCalendarControls(){
+  const stateEl=document.getElementById('calendar-connection-state');
+  const connectBtn=document.getElementById('calendar-connect-btn');
+  const syncBtn=document.getElementById('calendar-sync-btn');
+  if(!stateEl||!connectBtn||!syncBtn)return;
+  if(calendarConnected){
+    const syncLabel=calendarLastSync?` · sync ${new Date(calendarLastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`:'';
+    stateEl.textContent=`Google Calendar collegato${syncLabel}`;
+    connectBtn.style.display='none';
+    syncBtn.style.display='';
+  }else{
+    stateEl.textContent=calendarConnectionError||'Google Calendar non collegato';
+    connectBtn.style.display='';
+    syncBtn.style.display='none';
+  }
+  connectBtn.disabled=calendarSyncInProgress;
+  syncBtn.disabled=calendarSyncInProgress;
+}
+function renderCalendar(){
+  const el=document.getElementById('cal-events');if(!el)return;
+  const source=calendarEvents;
+  if(!source.length){
+    el.innerHTML=calendarConnected
+      ? '<div class="empty-state"><div class="empty-title">Nessun evento Google Calendar per oggi</div><div class="empty-sub">Prova "Sincronizza" oppure controlla che ci siano eventi nella giornata corrente.</div></div>'
+      : '<div class="empty-state"><div class="empty-title">Google Calendar non collegato</div><div class="empty-sub">Collega il tuo account per vedere qui i tuoi eventi reali.</div></div>';
+    return;
+  }
+  el.innerHTML=source.map(ev=>`<div class="cal-slot"><div class="cal-time">${ev.time||'--:--'}</div><div class="cal-block ${ev.hl?'hl':''}"><div style="font-size:13px;font-weight:500;color:${ev.hl?'#0D2E7A':'#1A1A18'};margin-bottom:3px;">${escapeHtml(ev.title||'(Senza titolo)')}</div><div style="font-size:12px;color:${ev.hl?'#185FA5':'#9E9B94'};">${escapeHtml(ev.meta||'')}</div></div></div>`).join('');
+  const activeCalendarPage=document.getElementById('page-calendario').classList.contains('active');
+  if(activeCalendarPage){
+    const count=source.length;
+    PAGE_META.calendario[1]=calendarConnected?`${count} eventi Google Calendar oggi`:'Collega Google Calendar per importare i tuoi eventi';
+    document.getElementById('page-sub').textContent=PAGE_META.calendario[1];
+  }
+}
 function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filter(t=>t.done);const ol=document.getElementById('open-tasks-list');const dl=document.getElementById('done-tasks-list');const dc=document.getElementById('done-tasks-card');if(!ol)return;document.getElementById('open-tasks-label').textContent=`Aperti (${open.length})`;ol.innerHTML=open.length===0?'<div style="font-size:13px;color:#9E9B94;padding:8px 0;font-style:italic;">Nessun task aperto!</div>':open.map(t=>`<div class="task-row"><div class="checkbox" onclick="toggleTask('${String(t.id).replace(/'/g,"\\'")}')"></div><span style="font-size:13px;flex:1;">${t.label}</span>${t.scadenza?`<span style="font-size:11px;color:#9E9B94;">${t.scadenza}</span>`:''} ${prioritaBadge(t.priorita)}<button class="btn-icon" onclick="deleteTask('${String(t.id).replace(/'/g,"\\'")}')">✕</button></div>`).join('');if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>`<div class="task-row"><div class="checkbox done" onclick="toggleTask('${String(t.id).replace(/'/g,"\\'")}')"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div><span style="font-size:13px;flex:1;color:#9E9B94;text-decoration:line-through;">${t.label}</span><button class="btn-icon" onclick="deleteTask('${String(t.id).replace(/'/g,"\\'")}')">✕</button></div>`).join('');}else dc.style.display='none';updateTaskSubtitle();updateBadges();}
 function renderNotes(){const el=document.getElementById('notes-container');if(!el)return;if(!notes.length){el.innerHTML='<div class="empty-state"><div class="empty-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#9E9B94" stroke-width="1.4"><rect x="3" y="2" width="14" height="16" rx="2"/><line x1="7" y1="7" x2="13" y2="7"/><line x1="7" y1="10" x2="13" y2="10"/><line x1="7" y1="13" x2="10" y2="13"/></svg></div><div class="empty-title">Nessuna nota ancora</div></div>';return;}el.innerHTML=notes.map(n=>`<div class="note-card" onclick="openNoteEditor('${String(n.id).replace(/'/g,"\\'")}')"><div style="font-size:14px;font-weight:500;margin-bottom:4px;">${n.title}</div><div style="font-size:12px;color:#6B6860;line-height:1.5;margin-bottom:8px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${n.body}</div><div style="display:flex;gap:5px;">${n.tags.map((t,j)=>tagBadge(t,j)).join('')}</div></div>`).join('');}
 function updateBadges(){const open=tasks.filter(t=>!t.done).length;const unread=INBOX.filter(i=>i.unread).length;const noteCount=notes.length;const nb=document.getElementById('nb-task');if(nb){nb.textContent=open;nb.style.display='';}const noteBadge=document.getElementById('nb-note');if(noteBadge){noteBadge.textContent=noteCount;noteBadge.style.display='';}document.getElementById('nb-inbox').textContent=unread;document.getElementById('stat-inbox').textContent=unread;document.getElementById('stat-tasks').textContent=open;updateInboxSubtitle();}
@@ -1180,6 +1522,8 @@ function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=ta
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}finally{mailboxSyncInProgress=false;renderAll();}}
+async function connectCalendar(){if(!currentUser?.id||calendarSyncInProgress)return;calendarConnectionError='';calendarSyncInProgress=true;setCalendarDiagnostic('IN CORSO','reindirizzamento a Google');renderCalendarControls();try{const state=`${getCalendarStatePrefix()}${currentUser.id}:${Date.now()}`;setCalendarTransient('filo_calendar_oauth_state',state);setCalendarTransient(CALENDAR_OAUTH_PENDING_KEY,'1');setCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY,currentUser.id);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'calendario');const calendarAuth=await requestCalendarConnectUrl(currentUser.id,state);const authUrl=typeof calendarAuth==='string'?calendarAuth:calendarAuth?.authUrl;const redirectUri=typeof calendarAuth==='object'&&calendarAuth?.redirectUri?calendarAuth.redirectUri:getCalendarConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione calendario non disponibile');setCalendarTransient(CALENDAR_REDIRECT_URI_KEY,redirectUri);setCalendarDiagnostic('IN CORSO',`redirect ${redirectUri}`);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento calendario:',reason,err);calendarConnectionError=`Connessione calendario non riuscita: ${reason}`;setCalendarDiagnostic('KO',reason);removeCalendarTransient(CALENDAR_OAUTH_PENDING_KEY);removeCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY);showError('Impossibile collegare Google Calendar.');calendarSyncInProgress=false;renderCalendarControls();}}
+async function syncCalendar(){if(!currentUser?.id||!calendarConnected||calendarSyncInProgress)return;calendarSyncInProgress=true;renderCalendarControls();try{const res=await fetchApi('/api/v1/calendar/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /calendar/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setCalendarConnectionState(true,syncedAt);await loadCalendarEvents();}catch(err){console.warn('Errore sync calendario:',err);calendarConnectionError='Sincronizzazione calendario non riuscita.';}finally{calendarSyncInProgress=false;renderAll();}}
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────
 function toggleTaskForm(){const f=document.getElementById('task-form');const b=document.getElementById('task-form-toggle');const open=f.style.display==='none';f.style.display=open?'':'none';b.textContent=open?'Annulla':'+ Nuovo task';b.style.background=open?'#F0EDE6':'#1A4FBF';b.style.color=open?'#6B6860':'#fff';if(open)document.getElementById('new-task-label').focus();}
@@ -1267,8 +1611,11 @@ async function init() {
     setTimeout(clearCorruptedPasswordAutofill, 250);
     setTimeout(clearCorruptedPasswordAutofill, 1000);
   }
+  window.addEventListener('pageshow',handleCalendarOAuthPageShow);
 
   await tryHandleMailboxOauthCallback();
+  await tryHandleCalendarOauthCallback();
+  markCalendarPendingAsFailedIfNoCallbackDetected();
   await tryExchangeSupabaseCodeSession();
   await trySetSupabaseSessionFromHash();
   handleSupabaseAuthErrorInQuery();
@@ -1293,7 +1640,11 @@ async function init() {
 
   const { data: { session } } = await supabaseClient.auth.getSession();
   console.log('Existing session:', session ? 'yes' : 'no');
-  if (session) loginSuccess(session.user);
+  if (session) {
+    await tryHandleCalendarOauthCallback();
+    markCalendarPendingAsFailedIfNoCallbackDetected();
+    loginSuccess(session.user);
+  }
   else showLoginScreen();
   isAuthBootstrapping = false;
 }
