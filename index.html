@@ -363,7 +363,10 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
       <!-- CALENDARIO -->
       <div id="page-calendario" class="page">
         <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
-          <div style="font-size:13px;color:#6B6860;" id="calendar-connection-state">Google Calendar non collegato</div>
+          <div>
+            <div style="font-size:13px;color:#6B6860;" id="calendar-connection-state">Google Calendar non collegato</div>
+            <div style="font-size:11px;color:#9E9B94;margin-top:4px;" id="calendar-diagnostic">Ultimo tentativo connessione: --</div>
+          </div>
           <div style="display:flex;gap:8px;">
             <button class="btn-ghost" id="calendar-connect-btn" onclick="connectCalendar()">Collega Google Calendar</button>
             <button class="btn-primary" id="calendar-sync-btn" onclick="syncCalendar()" style="display:none;">Sincronizza</button>
@@ -499,6 +502,7 @@ const CALENDAR_OAUTH_QUERY_STORAGE_KEY = 'filo_calendar_oauth_query_payload';
 const CALENDAR_REDIRECT_URI_KEY = 'filo_calendar_redirect_uri';
 const CALENDAR_OAUTH_PENDING_KEY = 'filo_calendar_oauth_pending';
 const CALENDAR_OAUTH_USER_ID_KEY = 'filo_calendar_oauth_user_id';
+const CALENDAR_DIAG_PREFIX = 'filo_calendar_diag_';
 
 (function preserveInboxOAuthQueryBeforeSupabaseInit(){
   try{
@@ -516,7 +520,9 @@ const CALENDAR_OAUTH_USER_ID_KEY = 'filo_calendar_oauth_user_id';
     const hasCalendarStatePrefix = typeof state === 'string' && state.startsWith('calendar:');
     const isInboxOAuthCallback = matchesInboxState || hasInboxStatePrefix;
     const hasCalendarPendingMarker = sessionStorage.getItem(CALENDAR_OAUTH_PENDING_KEY) === '1';
-    const isCalendarOAuthCallback = matchesCalendarState || hasCalendarStatePrefix || hasCalendarPendingMarker;
+    const scopeRaw = url.searchParams.get('scope') || '';
+    const hasCalendarScope = scopeRaw.includes('calendar');
+    const isCalendarOAuthCallback = matchesCalendarState || hasCalendarStatePrefix || hasCalendarPendingMarker || hasCalendarScope;
     if(!isInboxOAuthCallback && !isCalendarOAuthCallback) return;
 
     const payload = {
@@ -814,7 +820,11 @@ async function tryHandleCalendarOauthCallback() {
 
   let code = url.searchParams.get('code');
   let state = url.searchParams.get('state');
-  let hasCalendarIntent = isCalendarOauthState(state) || sessionStorage.getItem(CALENDAR_OAUTH_PENDING_KEY) === '1';
+  const urlScope = url.searchParams.get('scope') || '';
+  let hasCalendarIntent =
+    isCalendarOauthState(state) ||
+    sessionStorage.getItem(CALENDAR_OAUTH_PENDING_KEY) === '1' ||
+    urlScope.includes('calendar');
   if (!code || !hasCalendarIntent) {
     try {
       const raw = sessionStorage.getItem(CALENDAR_OAUTH_QUERY_STORAGE_KEY);
@@ -822,10 +832,14 @@ async function tryHandleCalendarOauthCallback() {
         const stored = JSON.parse(raw);
         const storedCode = typeof stored?.code === 'string' ? stored.code : '';
         const storedState = typeof stored?.state === 'string' ? stored.state : '';
+        const storedScope = typeof stored?.scope === 'string' ? stored.scope : '';
         if (storedCode) {
           code = storedCode;
           state = storedState || state;
-          hasCalendarIntent = isCalendarOauthState(storedState) || sessionStorage.getItem(CALENDAR_OAUTH_PENDING_KEY) === '1';
+          hasCalendarIntent =
+            isCalendarOauthState(storedState) ||
+            sessionStorage.getItem(CALENDAR_OAUTH_PENDING_KEY) === '1' ||
+            storedScope.includes('calendar');
         }
       }
     } catch (e) {}
@@ -839,6 +853,7 @@ async function tryHandleCalendarOauthCallback() {
   if (!userId) return false;
 
   try {
+    setCalendarDiagnostic('IN CORSO','exchange OAuth');
     const redirectUri = sessionStorage.getItem(CALENDAR_REDIRECT_URI_KEY) || getCalendarConnectRedirectUri();
     const res = await fetchApi('/api/v1/calendar/google/exchange', {
       method: 'POST',
@@ -852,10 +867,12 @@ async function tryHandleCalendarOauthCallback() {
     const payload = await res.json();
     const syncedAt = payload?.data?.account?.last_synced_at || new Date().toISOString();
     setCalendarConnectionState(true, syncedAt);
+    setCalendarDiagnostic('OK','account collegato');
     try{
       await loadCalendarEvents();
     }catch(loadErr){
       console.warn('Exchange calendario completato ma fetch eventi fallito:',loadErr);
+      setCalendarDiagnostic('OK','collegato (fetch eventi non riuscito)');
     }
     ['code','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''));
@@ -869,6 +886,7 @@ async function tryHandleCalendarOauthCallback() {
     const reason = err?.message ? String(err.message) : 'errore sconosciuto';
     console.warn('Errore callback calendario OAuth:', reason, err);
     calendarConnectionError = `Connessione calendario non completata: ${reason}`;
+    setCalendarDiagnostic('KO',reason);
     showError('Connessione Google Calendar non completata. Riprova.');
     sessionStorage.removeItem(CALENDAR_OAUTH_QUERY_STORAGE_KEY);
     sessionStorage.removeItem('filo_calendar_oauth_state');
@@ -951,6 +969,8 @@ async function loginSuccess(user) {
   document.getElementById('profile-role-disp').textContent = user.email;
   document.getElementById('pf-name').value = name;
   document.getElementById('page-title').textContent = 'Buongiorno, ' + firstName;
+  const calendarDiag = loadCalendarDiagnostic();
+  if(calendarDiag)setCalendarDiagnostic(calendarDiag.status,calendarDiag.message);
 
   const cachedTasks = loadTasksFromCache();
   if (cachedTasks) {
@@ -1050,6 +1070,25 @@ function loadNotesFromCache(){const key=getNotesCacheKey();if(!key)return null;t
 function getInboxCacheKey(){return currentUser?.id?`${INBOX_CACHE_PREFIX}${currentUser.id}`:null;}
 function saveInboxToCache(){const key=getInboxCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify({connected:mailboxConnected,lastSync:mailboxLastSync,messages:INBOX}));}catch(e){}}
 function loadInboxFromCache(){const key=getInboxCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;if(!parsed||!Array.isArray(parsed.messages))return null;return parsed;}catch(e){return null;}}
+function getCalendarDiagKey(){return currentUser?.id?`${CALENDAR_DIAG_PREFIX}${currentUser.id}`:null;}
+function setCalendarDiagnostic(status,message){
+  const text=`Ultimo tentativo connessione: ${status}${message?` · ${message}`:''}`;
+  const el=document.getElementById('calendar-diagnostic');
+  if(el)el.textContent=text;
+  const key=getCalendarDiagKey();
+  if(key){
+    try{localStorage.setItem(key,JSON.stringify({status,message,ts:new Date().toISOString()}));}catch(e){}
+  }
+}
+function loadCalendarDiagnostic(){
+  const key=getCalendarDiagKey();
+  if(!key)return null;
+  try{
+    const raw=localStorage.getItem(key);
+    const parsed=raw?JSON.parse(raw):null;
+    return parsed&&typeof parsed.status==='string'?parsed:null;
+  }catch(e){return null;}
+}
 function restorePostOauthPage(){const id=sessionStorage.getItem(POST_OAUTH_PAGE_KEY);if(!id)return;sessionStorage.removeItem(POST_OAUTH_PAGE_KEY);const pageEl=document.getElementById(`page-${id}`);if(!pageEl)return;const navEl=Array.from(document.querySelectorAll('.nav-item')).find(el=>el.getAttribute('onclick')===`showPage('${id}',this)`);showPage(id,navEl||null);}
 function getInboxConnectRedirectUri(){return `${window.location.origin}${window.location.pathname}`;}
 function getInboxStatePrefix(){return 'mailbox:';}
@@ -1100,6 +1139,7 @@ async function loadCalendarStatus(){
   const payload=await res.json();
   const data=payload?.data||{};
   setCalendarConnectionState(!!data.connected,data.last_synced_at||null);
+  if(data.connected)setCalendarDiagnostic('OK','stato backend: collegato');
 }
 async function requestMailboxConnectUrl(userId,state){
   const payload={userId,redirectUri:getInboxConnectRedirectUri(),state};
@@ -1391,7 +1431,7 @@ function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=ta
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}finally{mailboxSyncInProgress=false;renderAll();}}
-async function connectCalendar(){if(!currentUser?.id||calendarSyncInProgress)return;calendarConnectionError='';calendarSyncInProgress=true;renderCalendarControls();try{const state=`${getCalendarStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_calendar_oauth_state',state);sessionStorage.setItem(CALENDAR_OAUTH_PENDING_KEY,'1');sessionStorage.setItem(CALENDAR_OAUTH_USER_ID_KEY,currentUser.id);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'calendario');const calendarAuth=await requestCalendarConnectUrl(currentUser.id,state);const authUrl=typeof calendarAuth==='string'?calendarAuth:calendarAuth?.authUrl;const redirectUri=typeof calendarAuth==='object'&&calendarAuth?.redirectUri?calendarAuth.redirectUri:getCalendarConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione calendario non disponibile');sessionStorage.setItem(CALENDAR_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento calendario:',reason,err);calendarConnectionError=`Connessione calendario non riuscita: ${reason}`;showError('Impossibile collegare Google Calendar.');calendarSyncInProgress=false;renderCalendarControls();}}
+async function connectCalendar(){if(!currentUser?.id||calendarSyncInProgress)return;calendarConnectionError='';calendarSyncInProgress=true;setCalendarDiagnostic('IN CORSO','reindirizzamento a Google');renderCalendarControls();try{const state=`${getCalendarStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_calendar_oauth_state',state);sessionStorage.setItem(CALENDAR_OAUTH_PENDING_KEY,'1');sessionStorage.setItem(CALENDAR_OAUTH_USER_ID_KEY,currentUser.id);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'calendario');const calendarAuth=await requestCalendarConnectUrl(currentUser.id,state);const authUrl=typeof calendarAuth==='string'?calendarAuth:calendarAuth?.authUrl;const redirectUri=typeof calendarAuth==='object'&&calendarAuth?.redirectUri?calendarAuth.redirectUri:getCalendarConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione calendario non disponibile');sessionStorage.setItem(CALENDAR_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento calendario:',reason,err);calendarConnectionError=`Connessione calendario non riuscita: ${reason}`;setCalendarDiagnostic('KO',reason);showError('Impossibile collegare Google Calendar.');calendarSyncInProgress=false;renderCalendarControls();}}
 async function syncCalendar(){if(!currentUser?.id||!calendarConnected||calendarSyncInProgress)return;calendarSyncInProgress=true;renderCalendarControls();try{const res=await fetchApi('/api/v1/calendar/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /calendar/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setCalendarConnectionState(true,syncedAt);await loadCalendarEvents();}catch(err){console.warn('Errore sync calendario:',err);calendarConnectionError='Sincronizzazione calendario non riuscita.';}finally{calendarSyncInProgress=false;renderAll();}}
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────
@@ -1507,7 +1547,10 @@ async function init() {
 
   const { data: { session } } = await supabaseClient.auth.getSession();
   console.log('Existing session:', session ? 'yes' : 'no');
-  if (session) loginSuccess(session.user);
+  if (session) {
+    await tryHandleCalendarOauthCallback();
+    loginSuccess(session.user);
+  }
   else showLoginScreen();
   isAuthBootstrapping = false;
 }
