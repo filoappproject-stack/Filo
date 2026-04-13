@@ -7,6 +7,7 @@ import { errorHandler, notFoundHandler } from './middleware/error.js';
 import checkinsRoutes from './routes/checkins.routes.js';
 import healthRoutes from './routes/health.routes.js';
 import inboxRoutes from './routes/inbox.routes.js';
+import notesRoutes from './routes/notes.routes.js';
 import tasksRoutes from './routes/tasks.routes.js';
 
 export const app = express();
@@ -26,6 +27,7 @@ app.get('/', (req, res) => {
 
 app.use('/api/v1/health', healthRoutes);
 app.use('/api/v1/tasks', tasksRoutes);
+app.use('/api/v1/notes', notesRoutes);
 app.use('/api/v1/checkins', checkinsRoutes);
 app.use('/api/v1/inbox', inboxRoutes);
 
