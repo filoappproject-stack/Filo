@@ -933,6 +933,19 @@ function markCalendarPendingAsFailedIfNoCallbackDetected() {
   removeCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY);
 }
 
+function handleCalendarOAuthPageShow(event){
+  const pending=getCalendarTransient(CALENDAR_OAUTH_PENDING_KEY)==='1';
+  if(!pending)return;
+  if(event?.persisted){
+    const reason='ritorno da cache browser (OAuth non completato o redirect URI non raggiunta)';
+    setCalendarDiagnostic('KO',reason);
+    calendarConnectionError=reason;
+    removeCalendarTransient(CALENDAR_OAUTH_PENDING_KEY);
+    removeCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY);
+    renderCalendarControls();
+  }
+}
+
 
 function clearSupabaseAuthHashFromUrl() {
   if (!window.location.hash) return;
@@ -1108,7 +1121,13 @@ function loadNotesFromCache(){const key=getNotesCacheKey();if(!key)return null;t
 function getInboxCacheKey(){return currentUser?.id?`${INBOX_CACHE_PREFIX}${currentUser.id}`:null;}
 function saveInboxToCache(){const key=getInboxCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify({connected:mailboxConnected,lastSync:mailboxLastSync,messages:INBOX}));}catch(e){}}
 function loadInboxFromCache(){const key=getInboxCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;if(!parsed||!Array.isArray(parsed.messages))return null;return parsed;}catch(e){return null;}}
-function getCalendarDiagKey(){return currentUser?.id?`${CALENDAR_DIAG_PREFIX}${currentUser.id}`:null;}
+function getCalendarDiagKey(){
+  const userKey =
+    currentUser?.id ||
+    getCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY) ||
+    'global';
+  return `${CALENDAR_DIAG_PREFIX}${userKey}`;
+}
 function setCalendarDiagnostic(status,message){
   calendarDiagnosticStatus=status;
   const text=`Ultimo tentativo connessione: ${status}${message?` · ${message}`:''}`;
@@ -1143,16 +1162,22 @@ function setCalendarDiagnostic(status,message){
   }
 }
 function loadCalendarDiagnostic(){
-  const key=getCalendarDiagKey();
-  if(!key)return null;
+  const keys=[];
+  const primary=getCalendarDiagKey();
+  if(primary)keys.push(primary);
+  keys.push(`${CALENDAR_DIAG_PREFIX}global`);
   try{
-    const raw=localStorage.getItem(key);
-    const parsed=raw?JSON.parse(raw):null;
-    if(parsed?.status==='IN CORSO'){
-      localStorage.removeItem(key);
-      return null;
+    for(const key of keys){
+      const raw=localStorage.getItem(key);
+      const parsed=raw?JSON.parse(raw):null;
+      if(!parsed)continue;
+      if(parsed?.status==='IN CORSO'){
+        localStorage.removeItem(key);
+        continue;
+      }
+      return parsed&&typeof parsed.status==='string'?parsed:null;
     }
-    return parsed&&typeof parsed.status==='string'?parsed:null;
+    return null;
   }catch(e){return null;}
 }
 function restorePostOauthPage(){const id=sessionStorage.getItem(POST_OAUTH_PAGE_KEY);if(!id)return;sessionStorage.removeItem(POST_OAUTH_PAGE_KEY);const pageEl=document.getElementById(`page-${id}`);if(!pageEl)return;const navEl=Array.from(document.querySelectorAll('.nav-item')).find(el=>el.getAttribute('onclick')===`showPage('${id}',this)`);showPage(id,navEl||null);}
@@ -1497,7 +1522,7 @@ function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=ta
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}finally{mailboxSyncInProgress=false;renderAll();}}
-async function connectCalendar(){if(!currentUser?.id||calendarSyncInProgress)return;calendarConnectionError='';calendarSyncInProgress=true;setCalendarDiagnostic('IN CORSO','reindirizzamento a Google');renderCalendarControls();try{const state=`${getCalendarStatePrefix()}${currentUser.id}:${Date.now()}`;setCalendarTransient('filo_calendar_oauth_state',state);setCalendarTransient(CALENDAR_OAUTH_PENDING_KEY,'1');setCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY,currentUser.id);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'calendario');const calendarAuth=await requestCalendarConnectUrl(currentUser.id,state);const authUrl=typeof calendarAuth==='string'?calendarAuth:calendarAuth?.authUrl;const redirectUri=typeof calendarAuth==='object'&&calendarAuth?.redirectUri?calendarAuth.redirectUri:getCalendarConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione calendario non disponibile');setCalendarTransient(CALENDAR_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento calendario:',reason,err);calendarConnectionError=`Connessione calendario non riuscita: ${reason}`;setCalendarDiagnostic('KO',reason);removeCalendarTransient(CALENDAR_OAUTH_PENDING_KEY);removeCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY);showError('Impossibile collegare Google Calendar.');calendarSyncInProgress=false;renderCalendarControls();}}
+async function connectCalendar(){if(!currentUser?.id||calendarSyncInProgress)return;calendarConnectionError='';calendarSyncInProgress=true;setCalendarDiagnostic('IN CORSO','reindirizzamento a Google');renderCalendarControls();try{const state=`${getCalendarStatePrefix()}${currentUser.id}:${Date.now()}`;setCalendarTransient('filo_calendar_oauth_state',state);setCalendarTransient(CALENDAR_OAUTH_PENDING_KEY,'1');setCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY,currentUser.id);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'calendario');const calendarAuth=await requestCalendarConnectUrl(currentUser.id,state);const authUrl=typeof calendarAuth==='string'?calendarAuth:calendarAuth?.authUrl;const redirectUri=typeof calendarAuth==='object'&&calendarAuth?.redirectUri?calendarAuth.redirectUri:getCalendarConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione calendario non disponibile');setCalendarTransient(CALENDAR_REDIRECT_URI_KEY,redirectUri);setCalendarDiagnostic('IN CORSO',`redirect ${redirectUri}`);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento calendario:',reason,err);calendarConnectionError=`Connessione calendario non riuscita: ${reason}`;setCalendarDiagnostic('KO',reason);removeCalendarTransient(CALENDAR_OAUTH_PENDING_KEY);removeCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY);showError('Impossibile collegare Google Calendar.');calendarSyncInProgress=false;renderCalendarControls();}}
 async function syncCalendar(){if(!currentUser?.id||!calendarConnected||calendarSyncInProgress)return;calendarSyncInProgress=true;renderCalendarControls();try{const res=await fetchApi('/api/v1/calendar/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /calendar/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setCalendarConnectionState(true,syncedAt);await loadCalendarEvents();}catch(err){console.warn('Errore sync calendario:',err);calendarConnectionError='Sincronizzazione calendario non riuscita.';}finally{calendarSyncInProgress=false;renderAll();}}
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────
@@ -1586,6 +1611,7 @@ async function init() {
     setTimeout(clearCorruptedPasswordAutofill, 250);
     setTimeout(clearCorruptedPasswordAutofill, 1000);
   }
+  window.addEventListener('pageshow',handleCalendarOAuthPageShow);
 
   await tryHandleMailboxOauthCallback();
   await tryHandleCalendarOauthCallback();
