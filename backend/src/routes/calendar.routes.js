@@ -15,6 +15,11 @@ router.get('/google/connect', asyncHandler(getGoogleCalendarConnectUrl));
 router.post('/google/exchange', asyncHandler(postGoogleCalendarCodeExchange));
 router.post('/google/sync', asyncHandler(postGoogleCalendarSync));
 router.get('/google/status', asyncHandler(getGoogleCalendarConnectionStatus));
+router.post('/connect', asyncHandler(getGoogleCalendarConnectUrl));
+router.get('/connect', asyncHandler(getGoogleCalendarConnectUrl));
+router.post('/exchange', asyncHandler(postGoogleCalendarCodeExchange));
+router.post('/sync', asyncHandler(postGoogleCalendarSync));
+router.get('/status', asyncHandler(getGoogleCalendarConnectionStatus));
 router.get('/events', asyncHandler(getCalendarEvents));
 
 export default router;
