@@ -663,8 +663,32 @@ async function tryExchangeSupabaseCodeSession() {
   if (isMailboxOauthState(state)) return false;
 
   try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session) {
+      ['code', 'state'].forEach((k) => url.searchParams.delete(k));
+      window.history.replaceState(
+        {},
+        document.title,
+        url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '')
+      );
+      return false;
+    }
+  } catch (_) {}
+
+  try {
     const { data, error } = await supabaseClient.auth.exchangeCodeForSession(code);
     if (error) {
+      const message = String(error.message || error || '');
+      if (message.toLowerCase().includes('pkce code verifier not found')) {
+        ['code', 'state'].forEach((k) => url.searchParams.delete(k));
+        window.history.replaceState(
+          {},
+          document.title,
+          url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '')
+        );
+        console.info('OAuth code ignorato: sessione/PKCE non più valida in questo browser.');
+        return false;
+      }
       console.warn('OAuth code exchange fallito:', error.message || error);
       showError('Login Google non completato. Riprova.');
       return false;
@@ -678,6 +702,17 @@ async function tryExchangeSupabaseCodeSession() {
     );
     return !!data?.session;
   } catch (err) {
+    const message = String(err?.message || err || '');
+    if (message.toLowerCase().includes('pkce code verifier not found')) {
+      ['code', 'state'].forEach((k) => url.searchParams.delete(k));
+      window.history.replaceState(
+        {},
+        document.title,
+        url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '')
+      );
+      console.info('OAuth code ignorato: sessione/PKCE non più valida in questo browser.');
+      return false;
+    }
     console.warn('Errore durante exchangeCodeForSession:', err);
     showError('Login Google non completato. Riprova.');
     return false;
