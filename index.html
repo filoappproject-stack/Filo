@@ -1071,6 +1071,8 @@ let calendarLastSync=null;
 let calendarSyncInProgress=false;
 let calendarConnectionError='';
 let calendarEvents=[];
+let calendarDiagnosticStatus='--';
+let calendarDiagnosticTimeoutId=null;
 let notes=[];
 let nextNoteId=100;
 let currentNoteId=null;
@@ -1101,12 +1103,36 @@ function saveInboxToCache(){const key=getInboxCacheKey();if(!key)return;try{loca
 function loadInboxFromCache(){const key=getInboxCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;if(!parsed||!Array.isArray(parsed.messages))return null;return parsed;}catch(e){return null;}}
 function getCalendarDiagKey(){return currentUser?.id?`${CALENDAR_DIAG_PREFIX}${currentUser.id}`:null;}
 function setCalendarDiagnostic(status,message){
+  calendarDiagnosticStatus=status;
   const text=`Ultimo tentativo connessione: ${status}${message?` · ${message}`:''}`;
   const el=document.getElementById('calendar-diagnostic');
   if(el)el.textContent=text;
+  if(calendarDiagnosticTimeoutId){
+    clearTimeout(calendarDiagnosticTimeoutId);
+    calendarDiagnosticTimeoutId=null;
+  }
+  if(status==='IN CORSO'){
+    calendarDiagnosticTimeoutId=setTimeout(()=>{
+      const pending=sessionStorage.getItem(CALENDAR_OAUTH_PENDING_KEY)==='1';
+      if(calendarDiagnosticStatus==='IN CORSO'&&pending){
+        const reason='timeout callback OAuth (nessuna risposta da Google)';
+        calendarConnectionError=reason;
+        setCalendarDiagnostic('KO',reason);
+        sessionStorage.removeItem(CALENDAR_OAUTH_PENDING_KEY);
+        sessionStorage.removeItem(CALENDAR_OAUTH_USER_ID_KEY);
+        renderCalendarControls();
+      }
+    },20000);
+  }
   const key=getCalendarDiagKey();
   if(key){
-    try{localStorage.setItem(key,JSON.stringify({status,message,ts:new Date().toISOString()}));}catch(e){}
+    try{
+      if(status==='IN CORSO'){
+        localStorage.removeItem(key);
+      }else{
+        localStorage.setItem(key,JSON.stringify({status,message,ts:new Date().toISOString()}));
+      }
+    }catch(e){}
   }
 }
 function loadCalendarDiagnostic(){
@@ -1115,6 +1141,10 @@ function loadCalendarDiagnostic(){
   try{
     const raw=localStorage.getItem(key);
     const parsed=raw?JSON.parse(raw):null;
+    if(parsed?.status==='IN CORSO'){
+      localStorage.removeItem(key);
+      return null;
+    }
     return parsed&&typeof parsed.status==='string'?parsed:null;
   }catch(e){return null;}
 }
