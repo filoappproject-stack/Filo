@@ -34,7 +34,12 @@ const SyncSchema = z.object({
 export async function getGoogleCalendarConnectUrl(req, res) {
   const source = req.method === 'GET' ? req.query : req.body;
   const parsed = ConnectSchema.safeParse(source);
-  if (!parsed.success) throw new HttpError(400, 'Payload connect calendario non valido');
+  if (!parsed.success) {
+    const details = parsed.error.issues
+      .map((issue) => `${issue.path.join('.') || 'payload'}: ${issue.message}`)
+      .join('; ');
+    throw new HttpError(400, `Payload connect calendario non valido${details ? ` (${details})` : ''}`);
+  }
   const auth = buildGoogleCalendarAuthUrl(parsed.data);
   res.json({ data: auth });
 }
