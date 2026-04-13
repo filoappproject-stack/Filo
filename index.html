@@ -892,6 +892,7 @@ function buildApiBaseCandidates(){const out=[];const origin=window.location.orig
 const API_BASES=buildApiBaseCandidates();
 const TASKS_CACHE_PREFIX='filo_tasks_cache_';
 const NOTES_CACHE_PREFIX='filo_notes_cache_';
+const NOTES_BACKFILL_DONE_PREFIX='filo_notes_backfill_done_';
 const INBOX_CACHE_PREFIX='filo_inbox_cache_';
 const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
 
@@ -900,6 +901,7 @@ function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${curren
 function saveTasksToCache(){const key=getTaskCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(tasks));}catch(e){}}
 function loadTasksFromCache(){const key=getTaskCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
 function getNotesCacheKey(){return currentUser?.id?`${NOTES_CACHE_PREFIX}${currentUser.id}`:null;}
+function getNotesBackfillDoneKey(){return currentUser?.id?`${NOTES_BACKFILL_DONE_PREFIX}${currentUser.id}`:null;}
 function saveNotesToCache(){const key=getNotesCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(notes));}catch(e){}}
 function loadNotesFromCache(){const key=getNotesCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
 function getInboxCacheKey(){return currentUser?.id?`${INBOX_CACHE_PREFIX}${currentUser.id}`:null;}
@@ -1008,17 +1010,42 @@ function normalizeApiNote(apiNote){
 }
 async function loadNotesFromApi(){
   if(!currentUser?.id)return;
+  const cached=loadNotesFromCache();
   try{
     const res=await fetchApi(`/api/v1/notes?userId=${encodeURIComponent(currentUser.id)}`);
     const payload=await res.json();
     const apiNotes=Array.isArray(payload?.data)?payload.data:[];
-    notes=apiNotes.map(normalizeApiNote);
+    const apiUiNotes=apiNotes.map(normalizeApiNote);
+    if(!apiUiNotes.length&&Array.isArray(cached)&&cached.length){
+      notes=cached;
+      saveNotesToCache();
+      const numericNoteIds=notes.map(n=>parseInt(n.id,10)).filter(n=>Number.isFinite(n));
+      nextNoteId=numericNoteIds.length?Math.max(...numericNoteIds)+1:100;
+      const backfillKey=getNotesBackfillDoneKey();
+      const alreadyBackfilled=backfillKey?localStorage.getItem(backfillKey)==='1':false;
+      if(!alreadyBackfilled){
+        let createdCount=0;
+        for(const n of cached){
+          try{
+            const noteTitle=String(n?.title||'Nota senza titolo').slice(0,200);
+            const noteBody=String(n?.body||'');
+            const noteTags=Array.isArray(n?.tags)?n.tags.map(t=>String(t)).filter(Boolean).slice(0,20):[];
+            const createRes=await fetchApi('/api/v1/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,title:noteTitle,body:noteBody,tags:noteTags})});
+            if(createRes.ok)createdCount++;
+          }catch(err){
+            console.warn('Backfill nota locale verso backend fallito:',err);
+          }
+        }
+        if(createdCount>0&&backfillKey)localStorage.setItem(backfillKey,'1');
+      }
+      return;
+    }
+    notes=apiUiNotes;
     saveNotesToCache();
     const numericNoteIds=notes.map(n=>parseInt(n.id,10)).filter(n=>Number.isFinite(n));
     nextNoteId=numericNoteIds.length?Math.max(...numericNoteIds)+1:100;
   }catch(err){
     console.warn('Impossibile caricare note da backend, uso cache locale:',err);
-    const cached=loadNotesFromCache();
     if(cached)notes=cached;
     const numericNoteIds=notes.map(n=>parseInt(n.id,10)).filter(n=>Number.isFinite(n));
     nextNoteId=numericNoteIds.length?Math.max(...numericNoteIds)+1:100;
