@@ -235,6 +235,10 @@ async function ensureUserExists(userId, email) {
   await query(sql, [userId, email]);
 }
 
+function resolveInternalUserEmail(userId) {
+  return `user-${userId}@filo.local`;
+}
+
 async function updateAccountTokens(accountId, accessToken, tokenExpiresAt) {
   const sql = `
     UPDATE inbox_accounts
@@ -420,7 +424,7 @@ export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
 
   const profile = await gmailRequest('/users/me/profile', oauthPayload.access_token);
 
-  await ensureUserExists(userId, profile.emailAddress);
+  await ensureUserExists(userId, resolveInternalUserEmail(userId));
 
   const account = await upsertInboxAccount({
     userId,
