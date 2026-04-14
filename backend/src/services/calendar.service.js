@@ -59,7 +59,23 @@ async function exchangeGoogleCode({ code, redirectUri }) {
 
   if (!response.ok) {
     const payload = await response.text();
-    throw new HttpError(400, `Scambio OAuth calendario fallito: ${payload}`);
+    let parsedError = null;
+    try {
+      parsedError = JSON.parse(payload);
+    } catch (e) {
+      parsedError = null;
+    }
+    const errorCode = typeof parsedError?.error === 'string' ? parsedError.error : null;
+    const errorDescription =
+      typeof parsedError?.error_description === 'string' ? parsedError.error_description : null;
+    if (errorCode === 'invalid_grant') {
+      throw new HttpError(
+        400,
+        'Codice OAuth Google non valido o scaduto. Clicca "Collega Google Calendar" e completa di nuovo il consenso.'
+      );
+    }
+    const detail = errorCode || errorDescription ? `${errorCode ?? ''} ${errorDescription ?? ''}`.trim() : payload;
+    throw new HttpError(400, `Scambio OAuth calendario fallito: ${detail}`);
   }
 
   return response.json();

@@ -506,11 +506,26 @@ const CALENDAR_DIAG_PREFIX = 'filo_calendar_diag_';
 function setCalendarTransient(key,value){try{sessionStorage.setItem(key,value);}catch(e){}try{localStorage.setItem(key,value);}catch(e){}}
 function getCalendarTransient(key){try{const v=sessionStorage.getItem(key);if(v)return v;}catch(e){}try{return localStorage.getItem(key);}catch(e){return null;}}
 function removeCalendarTransient(key){try{sessionStorage.removeItem(key);}catch(e){}try{localStorage.removeItem(key);}catch(e){}}
+function getQueryParamPreservePlus(url,key){
+  const search=typeof url?.search==='string'?url.search:'';
+  if(!search||search==='?')return null;
+  const query=search.startsWith('?')?search.slice(1):search;
+  for(const segment of query.split('&')){
+    if(!segment)continue;
+    const [rawKey,...rawValueParts]=segment.split('=');
+    if(!rawKey)continue;
+    const decodedKey=decodeURIComponent(rawKey.replace(/\+/g,'%20'));
+    if(decodedKey!==key)continue;
+    const rawValue=rawValueParts.join('=');
+    try{return decodeURIComponent(rawValue||'');}catch(e){return rawValue||'';}
+  }
+  return null;
+}
 
 (function preserveInboxOAuthQueryBeforeSupabaseInit(){
   try{
     const url = new URL(window.location.href);
-    const code = url.searchParams.get('code');
+    const code = getQueryParamPreservePlus(url,'code');
     const error = url.searchParams.get('error');
     const state = url.searchParams.get('state');
     if(!code && !error) return;
@@ -689,7 +704,7 @@ async function tryExchangeSupabaseCodeSession() {
     return false;
   }
 
-  const code = url.searchParams.get('code');
+  const code = getQueryParamPreservePlus(url,'code');
   const state = url.searchParams.get('state');
   if (!code) return false;
   if (isMailboxOauthState(state)) return false;
@@ -759,7 +774,7 @@ async function tryHandleMailboxOauthCallback() {
     return false;
   }
 
-  let code = url.searchParams.get('code');
+  let code = getQueryParamPreservePlus(url,'code');
   let state = url.searchParams.get('state');
   if (!code || !isMailboxOauthState(state)) {
     try {
@@ -825,7 +840,7 @@ async function tryHandleCalendarOauthCallback() {
   let url;
   try { url = new URL(window.location.href); } catch (e) { return false; }
 
-  let code = url.searchParams.get('code');
+  let code = getQueryParamPreservePlus(url,'code');
   let state = url.searchParams.get('state');
   const urlScope = url.searchParams.get('scope') || '';
   let hasCalendarIntent =
