@@ -243,7 +243,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
     </div>
     <button class="btn-primary" style="width:100%;justify-content:center;" onclick="saveCheckin()">Inizia la giornata</button>
     <div style="text-align:center;margin-top:10px;">
-      <span style="font-size:12px;color:#9E9B94;cursor:pointer;" onclick="skipCheckin()">Salta per oggi</span>
+      <span style="font-size:12px;color:#9E9B94;cursor:pointer;" onclick="skipCheckin()">Salta per oggi (valori neutrali)</span>
     </div>
   </div>
 </div>
@@ -1607,8 +1607,31 @@ function clearMemory(){if(!confirm('Cancellare tutta la memoria?'))return;['chec
 // â”€â”€ CHECK-IN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function selectEnergy(val,el){todayEnergy=val;document.querySelectorAll('.e-btn').forEach(b=>b.classList.remove('selected'));el.classList.add('selected');}
 function selectSleep(val,el){todaySleep=val;document.querySelectorAll('.s-btn').forEach(b=>b.classList.remove('selected'));el.classList.add('selected');}
-async function saveCheckin(){todayStress=parseInt(document.getElementById('stress-slider').value);const energy=todayEnergy||3;const sleep=todaySleep||'così così';saveCheckinToMemory(energy,sleep,todayStress);document.getElementById('checkin-overlay').style.display='none';updateEnergyDisplay(energy,sleep,todayStress);try{await saveCheckinToApi(energy,sleep,todayStress);await saveCheckinToSupabaseProfile(energy,sleep,todayStress);}catch(err){console.warn('Persistenza check-in API fallita:',err);const fallbackSaved=await saveCheckinToSupabaseProfile(energy,sleep,todayStress);if(!fallbackSaved)alert('Check-in salvato solo in locale. Verifica connessione/API.');}}
-function skipCheckin(){document.getElementById('checkin-overlay').style.display='none';}
+async function saveCheckin(options={}){
+  const slider=document.getElementById('stress-slider');
+  const sliderStress=parseInt(slider?.value??'3',10);
+  todayStress=Number.isFinite(options?.stress)?options.stress:(Number.isFinite(sliderStress)?sliderStress:3);
+  const energy=Number.isFinite(options?.energy)?options.energy:(todayEnergy||3);
+  const sleep=typeof options?.sleep==='string'&&options.sleep?options.sleep:(todaySleep||'così così');
+  todayEnergy=energy;
+  todaySleep=sleep;
+  saveCheckinToMemory(energy,sleep,todayStress);
+  document.getElementById('checkin-overlay').style.display='none';
+  updateEnergyDisplay(energy,sleep,todayStress);
+  try{
+    await saveCheckinToApi(energy,sleep,todayStress);
+    await saveCheckinToSupabaseProfile(energy,sleep,todayStress);
+  }catch(err){
+    console.warn('Persistenza check-in API fallita:',err);
+    const fallbackSaved=await saveCheckinToSupabaseProfile(energy,sleep,todayStress);
+    if(!fallbackSaved)alert('Check-in salvato solo in locale. Verifica connessione/API.');
+  }
+}
+async function skipCheckin(){
+  const confirmed=window.confirm('Vuoi continuare con valori neutrali (energia 3/5, sonno "così così", stress 3/5)?');
+  if(!confirmed)return;
+  await saveCheckin({energy:3,sleep:'così così',stress:3});
+}
 function updateEnergyDisplay(energy,sleep,stress){const el=document.getElementById('stat-energy');const sub=document.getElementById('stat-energy-sub');if(el){el.textContent=energy+'/5';el.style.color=ENERGY_COLORS[energy]||'#1A1A18';}if(sub)sub.textContent=ENERGY_LABELS[energy]||'';const banner=document.getElementById('energy-banner');if(banner){let msg='';if(energy<=2)msg=`<strong>Energia bassa oggi</strong>. Concentrati su 1-2 priorità.`;else if(energy>=4)msg=`<strong>Ottima energia oggi.</strong> E' il momento ideale per attività impegnative.`;else msg=`<strong>Energia nella norma.</strong> Sonno ${sleep}, stress ${stress}/5.`;banner.innerHTML=msg;banner.classList.add('active');}const checkins=mem_get('checkins')||[];const memBanner=document.getElementById('memory-banner');if(memBanner&&checkins.length>=3){const patterns=analyzePatterns()||[];if(patterns.length){memBanner.innerHTML=`<strong>Memoria:</strong> ${patterns[0].label}`;memBanner.classList.add('active');}}}
 function initCheckin(){const today=formatLocalDate();const checkins=mem_get('checkins')||[];const checkinToday=checkins.find(c=>c.date===today);const doneToday=!!checkinToday;if(!prefs.checkin||doneToday){document.getElementById('checkin-overlay').style.display='none';if(checkinToday){updateEnergyDisplay(checkinToday.energy,checkinToday.sleep,checkinToday.stress);}}else{document.getElementById('checkin-overlay').style.display='flex';}}
 
