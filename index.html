@@ -1221,7 +1221,7 @@ function setCalendarDiagnostic(status,message){
   const key=getCalendarDiagKey();
   if(key){
     try{
-      if(status==='IN CORSO'){
+      if(status==='IN CORSO'||status==='KO'){
         localStorage.removeItem(key);
       }else{
         localStorage.setItem(key,JSON.stringify({status,message,ts:new Date().toISOString()}));
@@ -1240,6 +1240,10 @@ function loadCalendarDiagnostic(){
       const parsed=raw?JSON.parse(raw):null;
       if(!parsed)continue;
       if(parsed?.status==='IN CORSO'){
+        localStorage.removeItem(key);
+        continue;
+      }
+      if(parsed?.status==='KO'){
         localStorage.removeItem(key);
         continue;
       }
