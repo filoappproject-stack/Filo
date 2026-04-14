@@ -576,6 +576,7 @@ let currentUser = null;
 let authTransitionInFlight = false;
 let lastAuthenticatedUserId = null;
 const handledInboxOAuthCodes = new Set();
+const handledCalendarOAuthCodes = new Set();
 
 
 
@@ -843,14 +844,15 @@ async function tryHandleCalendarOauthCallback() {
   let code = getQueryParamPreservePlus(url,'code');
   let state = url.searchParams.get('state');
   const urlScope = url.searchParams.get('scope') || '';
+  const hasPendingMarker = getCalendarTransient(CALENDAR_OAUTH_PENDING_KEY) === '1';
   let hasCalendarIntent =
     isCalendarOauthState(state) ||
-    getCalendarTransient(CALENDAR_OAUTH_PENDING_KEY) === '1' ||
+    hasPendingMarker ||
     urlScope.includes('calendar');
   if (!code || !hasCalendarIntent) {
     try {
       const raw = getCalendarTransient(CALENDAR_OAUTH_QUERY_STORAGE_KEY);
-      if (raw) {
+      if (raw && hasPendingMarker) {
         const stored = JSON.parse(raw);
         const storedCode = typeof stored?.code === 'string' ? stored.code : '';
         const storedState = typeof stored?.state === 'string' ? stored.state : '';
@@ -867,12 +869,14 @@ async function tryHandleCalendarOauthCallback() {
     } catch (e) {}
   }
   if (!code || !hasCalendarIntent) return false;
+  if (handledCalendarOAuthCodes.has(code)) return false;
   const userId =
     extractUserIdFromCalendarState(state) ||
     getCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY) ||
     currentUser?.id ||
     null;
   if (!userId) return false;
+  handledCalendarOAuthCodes.add(code);
 
   try {
     setCalendarDiagnostic('IN CORSO','exchange OAuth');
@@ -1206,6 +1210,12 @@ function loadCalendarDiagnostic(){
       const parsed=raw?JSON.parse(raw):null;
       if(!parsed)continue;
       if(parsed?.status==='IN CORSO'){
+        localStorage.removeItem(key);
+        continue;
+      }
+      const parsedTs=parsed?.ts?new Date(parsed.ts).getTime():null;
+      const isStale=Number.isFinite(parsedTs)?(Date.now()-parsedTs)>(10*60*1000):false;
+      if(isStale){
         localStorage.removeItem(key);
         continue;
       }
@@ -1698,8 +1708,11 @@ async function init() {
     await tryHandleCalendarOauthCallback();
     markCalendarPendingAsFailedIfNoCallbackDetected();
     loginSuccess(session.user);
+  } else {
+    removeCalendarTransient(CALENDAR_OAUTH_PENDING_KEY);
+    removeCalendarTransient(CALENDAR_OAUTH_USER_ID_KEY);
+    showLoginScreen();
   }
-  else showLoginScreen();
   isAuthBootstrapping = false;
 }
 
