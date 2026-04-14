@@ -981,6 +981,8 @@ async function tryHandleCalendarOauthCallback() {
   } catch (err) {
     const reason = err?.message ? String(err.message) : 'errore sconosciuto';
     console.warn('Errore callback calendario OAuth:', reason, err);
+    ['code','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
+    window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''));
     calendarConnectionError = `Connessione calendario non completata: ${reason}`;
     setCalendarDiagnostic('KO',reason);
     showError('Connessione Google Calendar non completata. Riprova.');
