@@ -96,7 +96,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 .cal-slot{display:flex;gap:14px;padding:12px 0;border-bottom:1px solid rgba(0,0,0,0.05);}
 .cal-slot:last-child{border-bottom:none;}
 .cal-time{font-size:12px;color:#9E9B94;width:46px;flex-shrink:0;padding-top:2px;}
-.cal-block{flex:1;background:#F7F5F0;border-radius:8px;padding:10px 14px;border-left:3px solid transparent;}
+.cal-block{flex:1;background:#F7F5F0;border-radius:8px;padding:10px 14px;border-left:3px solid transparent;cursor:pointer;}
+.cal-block:focus{outline:2px solid #1A4FBF;outline-offset:2px;}
 .cal-block.hl{background:#E8EEFB;border-left-color:#1A4FBF;}
 .task-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(0,0,0,0.05);}
 .task-row:last-child{border-bottom:none;}
@@ -489,6 +490,23 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
       <button class="btn-ghost" onclick="closeInboxMessage()">Chiudi</button>
     </div>
     <div id="inbox-modal-body" style="margin-top:14px;font-size:13px;line-height:1.6;color:#3A3936;max-height:50vh;overflow:auto;"></div>
+  </div>
+</div>
+
+<div class="checkin-overlay" id="calendar-event-modal" style="display:none;">
+  <div class="checkin-box" style="max-width:700px;width:min(700px,92vw);padding:24px 24px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+      <div>
+        <div id="calendar-modal-time" style="font-size:12px;color:#9E9B94;margin-bottom:6px;">Orario: --</div>
+        <div id="calendar-modal-title" style="font-size:20px;font-weight:600;letter-spacing:-0.2px;">Evento</div>
+        <div id="calendar-modal-location" style="font-size:13px;color:#6B6860;margin-top:6px;display:none;">Luogo: -</div>
+      </div>
+      <button class="btn-ghost" onclick="closeCalendarEventModal()">Chiudi</button>
+    </div>
+    <div id="calendar-modal-description" style="margin-top:14px;font-size:13px;line-height:1.6;color:#3A3936;max-height:40vh;overflow:auto;"></div>
+    <div id="calendar-modal-link-wrap" style="margin-top:14px;display:none;">
+      <a id="calendar-modal-link" href="#" target="_blank" rel="noopener noreferrer" style="font-size:13px;color:#1A4FBF;text-decoration:underline;">Apri su Google Calendar</a>
+    </div>
   </div>
 </div>
 
@@ -1260,13 +1278,58 @@ function mapCalendarEventToUi(item){
   const start=startRaw?new Date(startRaw):null;
   const end=endRaw?new Date(endRaw):null;
   const allDay=!!item?.all_day;
+  const description=typeof item?.description==='string'?item.description.trim():'';
+  const location=typeof item?.location==='string'?item.location.trim():'';
+  const link=typeof item?.html_link==='string'?item.html_link.trim():'';
   return{
     id:item?.id||item?.provider_event_id||`event-${Math.random().toString(36).slice(2)}`,
     title:item?.title||'(Senza titolo)',
     meta:allDay?'Tutto il giorno':(end&&start&&!Number.isNaN(end.getTime())&&!Number.isNaN(start.getTime()))?`${formatCalendarTime(start)} - ${formatCalendarTime(end)}`:formatCalendarTime(start),
     time:allDay?'--:--':formatCalendarTime(start)||'--:--',
-    hl:false
+    hl:false,
+    description:description||'Nessuna descrizione disponibile.',
+    location:location||'',
+    startsAt:start&&!Number.isNaN(start.getTime())?start.toISOString():null,
+    endsAt:end&&!Number.isNaN(end.getTime())?end.toISOString():null,
+    allDay,
+    htmlLink:link||''
   };
+}
+function getCalendarEventById(id){const key=String(id);return calendarEvents.find(ev=>String(ev.id)===key)||null;}
+function closeCalendarEventModal(){const modal=document.getElementById('calendar-event-modal');if(modal)modal.style.display='none';}
+function openCalendarEventModal(id){
+  const event=getCalendarEventById(id);
+  if(!event)return;
+  const modal=document.getElementById('calendar-event-modal');
+  const titleEl=document.getElementById('calendar-modal-title');
+  const timeEl=document.getElementById('calendar-modal-time');
+  const descEl=document.getElementById('calendar-modal-description');
+  const locationEl=document.getElementById('calendar-modal-location');
+  const linkWrap=document.getElementById('calendar-modal-link-wrap');
+  const linkEl=document.getElementById('calendar-modal-link');
+  if(!modal||!titleEl||!timeEl||!descEl||!locationEl||!linkWrap||!linkEl)return;
+  titleEl.textContent=event.title||'(Senza titolo)';
+  if(event.allDay){
+    timeEl.textContent='Orario: Tutto il giorno';
+  }else{
+    const startsLabel=event.startsAt?formatCalendarTime(event.startsAt):event.time||'--:--';
+    const endsLabel=event.endsAt?formatCalendarTime(event.endsAt):'';
+    timeEl.textContent=`Orario: ${startsLabel}${endsLabel?` - ${endsLabel}`:''}`;
+  }
+  descEl.textContent=event.description||'Nessuna descrizione disponibile.';
+  if(event.location){
+    locationEl.textContent=`Luogo: ${event.location}`;
+    locationEl.style.display='';
+  }else{
+    locationEl.style.display='none';
+  }
+  if(event.htmlLink){
+    linkEl.href=event.htmlLink;
+    linkWrap.style.display='';
+  }else{
+    linkWrap.style.display='none';
+  }
+  modal.style.display='';
 }
 async function loadCalendarEvents(limit=100){
   if(!currentUser?.id)return;
@@ -1586,7 +1649,7 @@ function renderCalendar(){
       : '<div class="empty-state"><div class="empty-title">Google Calendar non collegato</div><div class="empty-sub">Collega il tuo account per vedere qui i tuoi eventi reali.</div></div>';
     return;
   }
-  el.innerHTML=source.map(ev=>`<div class="cal-slot"><div class="cal-time">${ev.time||'--:--'}</div><div class="cal-block ${ev.hl?'hl':''}"><div style="font-size:13px;font-weight:500;color:${ev.hl?'#0D2E7A':'#1A1A18'};margin-bottom:3px;">${escapeHtml(ev.title||'(Senza titolo)')}</div><div style="font-size:12px;color:${ev.hl?'#185FA5':'#9E9B94'};">${escapeHtml(ev.meta||'')}</div></div></div>`).join('');
+  el.innerHTML=source.map(ev=>`<div class="cal-slot"><div class="cal-time">${ev.time||'--:--'}</div><div class="cal-block ${ev.hl?'hl':''}" role="button" tabindex="0" onclick="openCalendarEventModal('${String(ev.id).replace(/'/g,"\\'")}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCalendarEventModal('${String(ev.id).replace(/'/g,"\\'")}');}"><div style="font-size:13px;font-weight:500;color:${ev.hl?'#0D2E7A':'#1A1A18'};margin-bottom:3px;">${escapeHtml(ev.title||'(Senza titolo)')}</div><div style="font-size:12px;color:${ev.hl?'#185FA5':'#9E9B94'};">${escapeHtml(ev.meta||'')}</div></div></div>`).join('');
   const activeCalendarPage=document.getElementById('page-calendario').classList.contains('active');
   if(activeCalendarPage){
     const count=source.length;
