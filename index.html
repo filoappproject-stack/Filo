@@ -1736,6 +1736,8 @@ async function init() {
   window.addEventListener('pageshow',handleCalendarOAuthPageShow);
 
   await tryHandleMailboxOauthCallback();
+  await tryHandleCalendarOauthCallback();
+  markCalendarPendingAsFailedIfNoCallbackDetected();
   await tryExchangeSupabaseCodeSession();
   await trySetSupabaseSessionFromHash();
   handleSupabaseAuthErrorInQuery();
