@@ -77,6 +77,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 .f-textarea{width:100%;font-family:inherit;font-size:13px;color:#1A1A18;background:#F7F5F0;border:1px solid rgba(0,0,0,0.1);border-radius:8px;padding:10px 12px;resize:vertical;}
 .f-textarea:focus{outline:2px solid #1A4FBF;outline-offset:1px;}
 .f-select{width:100%;font-family:inherit;font-size:13px;color:#1A1A18;background:#F7F5F0;border:1px solid rgba(0,0,0,0.1);border-radius:8px;padding:8px 12px;height:38px;}
+.hint-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.hint-btn{background:#F7F5F0;color:#6B6860;border:1px solid rgba(0,0,0,0.1);border-radius:999px;padding:4px 10px;font-family:inherit;font-size:11px;cursor:pointer;transition:all 0.12s;}
+.hint-btn:hover{background:#E8EEFB;border-color:rgba(26,79,191,0.25);color:#0D2E7A;}
+.small-help{font-size:11px;color:#9E9B94;margin-top:6px;line-height:1.45;}
+.micro-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .form-actions{display:flex;gap:8px;margin-top:16px;}
 .row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(0,0,0,0.05);}
@@ -334,10 +339,42 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
             <div>
               <div class="field-label">Cosa hai in agenda oggi?</div>
               <textarea id="agenda-input" class="f-textarea" rows="4" placeholder="Es: call con Rossi alle 10:30, revisione roadmap alle 14:30..."></textarea>
+              <div class="hint-row">
+                <button class="hint-btn" type="button" onclick="appendGuidedInput('agenda-input','Meeting')">+ Meeting</button>
+                <button class="hint-btn" type="button" onclick="appendGuidedInput('agenda-input','Deep work')">+ Deep work</button>
+                <button class="hint-btn" type="button" onclick="appendGuidedInput('agenda-input','Scadenza')">+ Scadenza</button>
+              </div>
+              <div class="small-help">Suggerimento: inserisci orario + contesto (es. "11:00 review contratto").</div>
             </div>
             <div>
               <div class="field-label">Cosa hai in sospeso o ti preoccupa?</div>
               <textarea id="pending-input" class="f-textarea" rows="4" placeholder="Es: rispondere a Bianchi, approvare budget Q2..."></textarea>
+              <div class="hint-row">
+                <button class="hint-btn" type="button" onclick="appendGuidedInput('pending-input','Email da chiudere')">+ Email</button>
+                <button class="hint-btn" type="button" onclick="appendGuidedInput('pending-input','Blocco decisionale')">+ Blocco</button>
+                <button class="hint-btn" type="button" onclick="appendGuidedInput('pending-input','Follow-up urgente')">+ Follow-up</button>
+              </div>
+              <div class="small-help">Aggiungi ciò che rischia di rallentarti: Filo potrà prioritizzare meglio.</div>
+            </div>
+          </div>
+          <div class="micro-grid" style="margin-bottom:14px;">
+            <div>
+              <div class="field-label">Fine giornata (opz.)</div>
+              <input id="day-end-input" class="f-input" type="time">
+            </div>
+            <div>
+              <div class="field-label">Tempo utile oggi (opz.)</div>
+              <select id="day-availability-input" class="f-select">
+                <option value="">Non specificato</option>
+                <option value="meno di 1 ora">Meno di 1 ora</option>
+                <option value="1-2 ore">1-2 ore</option>
+                <option value="2-4 ore">2-4 ore</option>
+                <option value="oltre 4 ore">Oltre 4 ore</option>
+              </select>
+            </div>
+            <div>
+              <div class="field-label">Priorità del giorno (opz.)</div>
+              <input id="day-focus-input" class="f-input" placeholder="Es: chiudere budget Q2">
             </div>
           </div>
           <div style="display:flex;gap:10px;align-items:center;">
@@ -345,7 +382,6 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.1 2.2 2.4.35-1.75 1.7.42 2.4L6.5 6.6 4.33 7.65l.42-2.4L3 3.55l2.4-.35z" fill="white"/></svg>
               Analizza la mia giornata
             </button>
-            <button class="btn-ghost" onclick="fillExample()">Carica esempio</button>
           </div>
         </div>
         <div class="error-box" id="ai-error"></div>
@@ -945,6 +981,8 @@ async function tryHandleCalendarOauthCallback() {
   } catch (err) {
     const reason = err?.message ? String(err.message) : 'errore sconosciuto';
     console.warn('Errore callback calendario OAuth:', reason, err);
+    ['code','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
+    window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''));
     calendarConnectionError = `Connessione calendario non completata: ${reason}`;
     setCalendarDiagnostic('KO',reason);
     showError('Connessione Google Calendar non completata. Riprova.');
@@ -1825,8 +1863,23 @@ function saveProfile(){const name=document.getElementById('pf-name').value.trim(
 function togglePref(key){prefs[key]=!prefs[key];const on=prefs[key];document.getElementById('toggle-'+key).style.background=on?'#1A4FBF':'#D0CCC6';document.getElementById('knob-'+key).style.left=on?'19px':'3px';}
 
 // â”€â”€ AI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function fillExample(){document.getElementById('agenda-input').value="Call con il cliente Rossi alle 10:30, revisione roadmap Q2 alle 14:30, riepilogo team alle 17:00.";document.getElementById('pending-input').value="Rispondere a Bianchi sul contratto, approvare budget Q2 entro venerdÃ¬, 3 email non lette di Rossi.";}
-async function analyzeDay(){const agenda=document.getElementById('agenda-input').value.trim();const pending=document.getElementById('pending-input').value.trim();if(!agenda&&!pending)return;const btn=document.getElementById('analyze-btn');const loader=document.getElementById('ai-loader');const errBox=document.getElementById('ai-error');const container=document.getElementById('suggestions-container');btn.disabled=true;loader.classList.add('active');errBox.classList.remove('active');container.innerHTML='';const memCtx=getMemoryContext();const energyCtx=todayEnergy?`Energia utente oggi: ${todayEnergy}/5, stress ${todayStress}/5. ${todayEnergy<=2?'Max 2 suggerimenti.':todayEnergy>=4?'Energia alta.':''} `:'';const prompt=`Sei Filo, assistente per manager.\n${energyCtx}${memCtx}\nAgenda: ${agenda||"non specificata"}\nIn sospeso: ${pending||"nessuna"}\nRispondi SOLO con JSON valido:\n{"suggerimenti":[{"titolo":"azione","perche":"perchÃ© adesso in 1-2 frasi","priorita":"urgente|alta|normale|bassa","azioni":["Inizia","Rimanda"]}]}\nDai 3-5 suggerimenti per urgenza.`;try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:prompt}]})});const data=await res.json();const text=data.content.map(i=>i.text||"").join("");const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());const suggestions=parsed.suggerimenti||[];loader.classList.remove('active');btn.disabled=false;if(!suggestions.length){container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';return;}const nb=document.getElementById('nb-sugg');nb.textContent=suggestions.length;nb.style.display='';const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};const PLBL={urgente:'Urgente',alta:'Alta prioritÃ ',normale:'Normale',bassa:'Bassa'};container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${s.titolo}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${s.perche}</div><div class="sugg-actions">${(s.azioni||[]).map((a,j)=>`<button style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${a}</button>`).join('')}<button onclick="addTaskFromSuggestion('${s.titolo.replace(/'/g,"\\'")}');this.textContent='âœ“ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#9E9B94;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');}catch(e){loader.classList.remove('active');btn.disabled=false;errBox.textContent="Errore nell'analisi. Riprova.";errBox.classList.add('active');}}
+function appendGuidedInput(targetId,label){
+  const input=document.getElementById(targetId);
+  if(!input)return;
+  const value=input.value.trim();
+  const entry=label.endsWith(':')?label:`${label}: `;
+  input.value=value?`${value}, ${entry}`:entry;
+  input.focus();
+  input.selectionStart=input.selectionEnd=input.value.length;
+}
+function fillExample(){
+  document.getElementById('agenda-input').value="Call con il cliente Rossi alle 10:30, revisione roadmap Q2 alle 14:30, riepilogo team alle 17:00.";
+  document.getElementById('pending-input').value="Rispondere a Bianchi sul contratto, approvare budget Q2 entro venerdì, 3 email non lette di Rossi.";
+  document.getElementById('day-end-input').value='18:30';
+  document.getElementById('day-availability-input').value='2-4 ore';
+  document.getElementById('day-focus-input').value='Chiudere il budget Q2 senza rimandare le urgenze clienti';
+}
+async function analyzeDay(){const agenda=document.getElementById('agenda-input').value.trim();const pending=document.getElementById('pending-input').value.trim();const dayEnd=document.getElementById('day-end-input')?.value||'';const availability=document.getElementById('day-availability-input')?.value||'';const dayFocus=document.getElementById('day-focus-input')?.value.trim()||'';if(!agenda&&!pending)return;const btn=document.getElementById('analyze-btn');const loader=document.getElementById('ai-loader');const errBox=document.getElementById('ai-error');const container=document.getElementById('suggestions-container');btn.disabled=true;loader.classList.add('active');errBox.classList.remove('active');container.innerHTML='';try{const res=await fetchApi('/api/v1/assistant/day-analysis',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agenda,pending,dayEnd,availability,dayFocus,memoryContext:getMemoryContext(),energy:todayEnergy,stress:todayStress})});if(!res.ok){const txt=await res.text().catch(()=> '');throw new Error(`POST /assistant/day-analysis fallita (${res.status}): ${txt}`);}const payload=await res.json();const suggestions=Array.isArray(payload?.data?.suggerimenti)?payload.data.suggerimenti:[];loader.classList.remove('active');btn.disabled=false;if(!suggestions.length){container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';return;}const nb=document.getElementById('nb-sugg');nb.textContent=suggestions.length;nb.style.display='';const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#9E9B94;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');}catch(e){console.warn('Errore analisi giornata:',e);loader.classList.remove('active');btn.disabled=false;errBox.textContent="Errore nell'analisi. Riprova.";errBox.classList.add('active');}}
 
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
