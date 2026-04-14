@@ -10,7 +10,9 @@ const EnvSchema = z.object({
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
-  GOOGLE_REDIRECT_URI: z.string().url().optional()
+  GOOGLE_REDIRECT_URI: z.string().url().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-20250514')
 });
 
 const parsed = EnvSchema.safeParse(process.env);
