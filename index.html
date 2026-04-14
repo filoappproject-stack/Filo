@@ -549,7 +549,8 @@ function getQueryParamPreservePlus(url,key){
       state,
       scope: url.searchParams.get('scope'),
       authuser: url.searchParams.get('authuser'),
-      prompt: url.searchParams.get('prompt')
+      prompt: url.searchParams.get('prompt'),
+      capturedAt: Date.now()
     };
     const storageKey = isCalendarOAuthCallback ? CALENDAR_OAUTH_QUERY_STORAGE_KEY : INBOX_OAUTH_QUERY_STORAGE_KEY;
     if(storageKey===CALENDAR_OAUTH_QUERY_STORAGE_KEY){
@@ -843,6 +844,7 @@ async function tryHandleCalendarOauthCallback() {
 
   let code = getQueryParamPreservePlus(url,'code');
   let state = url.searchParams.get('state');
+  const expectedState = getCalendarTransient('filo_calendar_oauth_state');
   const urlScope = url.searchParams.get('scope') || '';
   const hasPendingMarker = getCalendarTransient(CALENDAR_OAUTH_PENDING_KEY) === '1';
   let hasCalendarIntent =
@@ -857,7 +859,9 @@ async function tryHandleCalendarOauthCallback() {
         const storedCode = typeof stored?.code === 'string' ? stored.code : '';
         const storedState = typeof stored?.state === 'string' ? stored.state : '';
         const storedScope = typeof stored?.scope === 'string' ? stored.scope : '';
-        if (storedCode) {
+        const capturedAt = Number(stored?.capturedAt);
+        const isFresh = Number.isFinite(capturedAt) ? (Date.now() - capturedAt) < (5 * 60 * 1000) : false;
+        if (storedCode && isFresh) {
           code = storedCode;
           state = storedState || state;
           hasCalendarIntent =
@@ -869,6 +873,10 @@ async function tryHandleCalendarOauthCallback() {
     } catch (e) {}
   }
   if (!code || !hasCalendarIntent) return false;
+  if (expectedState && state !== expectedState) {
+    removeCalendarTransient(CALENDAR_OAUTH_QUERY_STORAGE_KEY);
+    return false;
+  }
   if (handledCalendarOAuthCodes.has(code)) return false;
   const userId =
     extractUserIdFromCalendarState(state) ||
