@@ -1329,7 +1329,7 @@ function openCalendarEventModal(id){
   }else{
     linkWrap.style.display='none';
   }
-  modal.style.display='';
+  modal.style.display='flex';
 }
 async function loadCalendarEvents(limit=100){
   if(!currentUser?.id)return;
