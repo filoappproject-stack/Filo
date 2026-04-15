@@ -554,6 +554,22 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
   </div>
 </div>
 
+<div class="focus-overlay" id="focus-session-modal">
+  <div class="focus-box">
+    <div class="focus-title">Focus sprint avviato</div>
+    <div class="focus-sub" id="focus-session-sub">Stai lavorando su: -</div>
+    <div class="focus-timer" id="focus-session-timer">15:00</div>
+    <div class="focus-actions" id="focus-session-actions" style="display:none;">
+      <button class="btn-primary" onclick="completeFocusSession()">✓ Completato</button>
+      <button class="btn-ghost" onclick="extendFocusSession(10)">+10 minuti</button>
+      <button class="btn-ghost" onclick="postponeFocusSession()">Rimanda al pomeriggio</button>
+    </div>
+    <div class="focus-actions" id="focus-session-running-actions">
+      <button class="btn-ghost" onclick="cancelFocusSession()">Chiudi timer</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // â”€â”€ SUPABASE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SUPABASE_URL = 'https://xkdniukhksfiuromnmtv.supabase.co';
@@ -1020,6 +1036,8 @@ async function tryHandleCalendarOauthCallback() {
   } catch (err) {
     const reason = err?.message ? String(err.message) : 'errore sconosciuto';
     console.warn('Errore callback calendario OAuth:', reason, err);
+    ['code','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
+    window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''));
     calendarConnectionError = `Connessione calendario non completata: ${reason}`;
     setCalendarDiagnostic('KO',reason);
     showError('Connessione Google Calendar non completata. Riprova.');
@@ -2038,6 +2056,40 @@ function handleSuggestionAction(actionLabel,suggestionTitle,btn){
   }
   if(btn){btn.textContent='✓';btn.disabled=true;}
 }
+function splitLocalItems(raw){
+  return String(raw||'').split(/[\n,;]+/).map(v=>v.trim()).filter(Boolean).slice(0,8);
+}
+function buildLocalDayFallback(input){
+  const agendaItems=splitLocalItems(input?.agenda);
+  const pendingItems=splitLocalItems(input?.pending);
+  const focus=(input?.dayFocus||'').trim();
+  const out=[];
+  if(pendingItems.length){
+    out.push({titolo:`Sblocca subito: ${pendingItems[0]}`,perche:'Chiudere il principale punto aperto riduce il carico mentale e libera attenzione per il resto della giornata.',priorita:'urgente',azioni:['Inizia ora (15 min)','Rimanda al pomeriggio']});
+  }
+  if(agendaItems.length){
+    out.push({titolo:`Prepara il prossimo impegno: ${agendaItems[0]}`,perche:'Una preparazione rapida evita frizioni e rende più efficace il prossimo blocco in agenda.',priorita:'alta',azioni:['Prepara checklist','Aggiungi reminder']});
+  }
+  if(focus){
+    out.push({titolo:`Proteggi la priorità del giorno: ${focus}`,perche:'Dedica un blocco concentrato alla priorità principale prima che venga frammentata da urgenze minori.',priorita:'alta',azioni:['Blocca 45 minuti','Rivedi a fine giornata']});
+  }
+  out.push({titolo:'Definisci 3 obiettivi realistici per oggi',perche:'Un limite chiaro alle priorità aumenta la probabilità di chiudere le attività davvero importanti.',priorita:'normale',azioni:['Seleziona top 3','Sposta il resto']});
+  return out.slice(0,5);
+}
+function renderDaySuggestions(suggestions){
+  const container=document.getElementById('suggestions-container');
+  if(!container)return;
+  if(!Array.isArray(suggestions)||!suggestions.length){
+    container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';
+    return;
+  }
+  const nb=document.getElementById('nb-sugg');
+  nb.textContent=suggestions.length;
+  nb.style.display='';
+  const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};
+  const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
+  container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#9E9B94;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
+}
 function updateAnalyzeQuotaLabel(limit,remaining){
   const el=document.getElementById('analyze-quota');
   if(!el)return;
@@ -2099,6 +2151,14 @@ async function analyzeDay(){
     });
     const payload=await res.json().catch(()=>null);
     if(!res.ok){
+      if(res.status===404){
+        const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
+        loader.classList.remove('active');
+        btn.disabled=false;
+        errBox.classList.remove('active');
+        renderDaySuggestions(fallbackSuggestions);
+        return;
+      }
       if(res.status===429&&payload){
         const message=payload?.message||'Limite analisi raggiunto.';
         errBox.textContent=message;
@@ -2117,16 +2177,7 @@ async function analyzeDay(){
     if(quota)updateAnalyzeQuotaLabel(Number(quota.limit),Number(quota.remaining));
     loader.classList.remove('active');
     btn.disabled=false;
-    if(!suggestions.length){
-      container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';
-      return;
-    }
-    const nb=document.getElementById('nb-sugg');
-    nb.textContent=suggestions.length;
-    nb.style.display='';
-    const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};
-    const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
-    container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#9E9B94;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
+    renderDaySuggestions(suggestions);
   }catch(e){
     console.warn('Errore analisi giornata:',e);
     loader.classList.remove('active');
