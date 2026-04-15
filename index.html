@@ -623,7 +623,7 @@ function getQueryParamPreservePlus(url,key){
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: {
     persistSession: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: false,
     flowType: 'pkce'
   }
 });
@@ -765,7 +765,8 @@ async function tryExchangeSupabaseCodeSession() {
   const code = getQueryParamPreservePlus(url,'code');
   const state = url.searchParams.get('state');
   if (!code) return false;
-  if (isMailboxOauthState(state)) return false;
+  const pendingCalendarOauth = getCalendarTransient(CALENDAR_OAUTH_PENDING_KEY) === '1';
+  if (isMailboxOauthState(state) || isCalendarOauthState(state) || pendingCalendarOauth) return false;
 
   try {
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -1640,7 +1641,26 @@ function hydrateLatestCheckinFromSupabaseProfile(){
 }
 function recordTaskCompleted(task){if(!prefs.memoria)return;let h=mem_get('tasks_done')||[];h.push({label:task.label,priorita:task.priorita,ts:Date.now()});if(h.length>200)h=h.slice(-200);mem_set('tasks_done',h);analyzePatterns();}
 function recordTaskPostponed(task){if(!prefs.memoria)return;let p=mem_get('tasks_postponed')||{};p[task.label]=(p[task.label]||0)+1;mem_set('tasks_postponed',p);}
-function analyzePatterns(){if(!prefs.memoria)return;const checkins=mem_get('checkins')||[];const done=mem_get('tasks_done')||[];const postponed=mem_get('tasks_postponed')||{};const patterns=[];if(checkins.length>=3){const avg=checkins.slice(-7).reduce((s,c)=>s+c.energy,0)/Math.min(checkins.length,7);if(avg<3)patterns.push({icon:"âš¡",label:"Energia sotto la media",sub:`Media: ${avg.toFixed(1)}/5`});else if(avg>=4)patterns.push({icon:"ðŸš€",label:"Settimana ad alta energia",sub:`Media: ${avg.toFixed(1)}/5`});}const chronic=Object.entries(postponed).filter(([k,v])=>v>=3).map(([k,v])=>`"${k}" (${v}x)`);if(chronic.length)patterns.push({icon:"ðŸ”",label:"Task rimandati frequentemente",sub:chronic.slice(0,2).join(', ')});if(done.length>=5){const u=done.filter(t=>t.priorita==='urgente').length;patterns.push({icon:"âœ“",label:`${done.length} task completati`,sub:`${Math.round(u/done.length*100)}% urgenti`});}mem_set('patterns',patterns);return patterns;}
+function analyzePatterns(){
+  if(!prefs.memoria)return;
+  const checkins=mem_get('checkins')||[];
+  const done=mem_get('tasks_done')||[];
+  const postponed=mem_get('tasks_postponed')||{};
+  const patterns=[];
+  if(checkins.length>=3){
+    const avg=checkins.slice(-7).reduce((s,c)=>s+c.energy,0)/Math.min(checkins.length,7);
+    if(avg<3)patterns.push({icon:"⚡",label:"Energia sotto la media",sub:`Media: ${avg.toFixed(1)}/5`});
+    else if(avg>=4)patterns.push({icon:"🚀",label:"Settimana ad alta energia",sub:`Media: ${avg.toFixed(1)}/5`});
+  }
+  const chronic=Object.entries(postponed).filter(([k,v])=>v>=3).map(([k,v])=>`"${k}" (${v}x)`);
+  if(chronic.length)patterns.push({icon:"🔁",label:"Task rimandati frequentemente",sub:chronic.slice(0,2).join(', ')});
+  if(done.length>=5){
+    const u=done.filter(t=>t.priorita==='urgente').length;
+    patterns.push({icon:"✓",label:`${done.length} task completati`,sub:`${Math.round(u/done.length*100)}% urgenti`});
+  }
+  mem_set('patterns',patterns);
+  return patterns;
+}
 function getMemoryContext(){const checkins=mem_get('checkins')||[];const patterns=mem_get('patterns')||[];const postponed=mem_get('tasks_postponed')||{};let ctx='';if(checkins.length>0){const last=checkins[checkins.length-1];ctx+=`Dati recenti: energia ${last.energy}/5, sonno "${last.sleep}", stress ${last.stress}/5. `;}if(todayEnergy)ctx+=`Energia oggi: ${todayEnergy}/5. `;const chronic=Object.entries(postponed).filter(([k,v])=>v>=3).map(([k])=>k);if(chronic.length)ctx+=`Task che tende a rimandare: ${chronic.join(', ')}. `;if(patterns.length)ctx+=`Pattern: ${patterns.map(p=>p.label).join('; ')}. `;return ctx;}
 function clearMemory(){if(!confirm('Cancellare tutta la memoria?'))return;['checkins','tasks_done','tasks_postponed','patterns'].forEach(k=>localStorage.removeItem('filo_'+k));renderMemoryPage();}
 
@@ -1676,7 +1696,29 @@ function updateEnergyDisplay(energy,sleep,stress){const el=document.getElementBy
 function initCheckin(){const today=formatLocalDate();const checkins=mem_get('checkins')||[];const checkinToday=checkins.find(c=>c.date===today);const doneToday=!!checkinToday;if(!prefs.checkin||doneToday){document.getElementById('checkin-overlay').style.display='none';if(checkinToday){updateEnergyDisplay(checkinToday.energy,checkinToday.sleep,checkinToday.stress);}}else{document.getElementById('checkin-overlay').style.display='flex';}}
 
 // â”€â”€ MEMORIA PAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function renderMemoryPage(){const checkins=mem_get('checkins')||[];const patterns=analyzePatterns()||[];const eh=document.getElementById('energy-history');if(eh){if(!checkins.length)eh.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">Nessun dato ancora.</div>';else eh.innerHTML=checkins.slice(-7).reverse().map(c=>`<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-size:12px;color:#9E9B94;width:80px;">${c.date}</span><span class="energy-dot" style="background:${ENERGY_COLORS[c.energy]||'#ccc'};"></span><span style="font-size:13px;">${ENERGY_LABELS[c.energy]||c.energy}</span><span style="margin-left:auto;font-size:12px;color:#9E9B94;">sonno: ${c.sleep} Â· stress: ${c.stress}/5</span></div>`).join('');}const pl=document.getElementById('pattern-list');if(pl){if(!patterns.length)pl.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">I pattern emergono dopo qualche giorno.</div>';else pl.innerHTML=patterns.map(p=>`<div class="mem-item"><div class="mem-icon" style="background:#F0EDE6;">${p.icon}</div><div><div class="mem-label">${p.label}</div><div class="mem-sub">${p.sub}</div></div></div>`).join('');}const ch=document.getElementById('checkin-history');if(ch)ch.innerHTML=`<div style="font-size:13px;color:#9E9B94;">${checkins.length} check-in registrati${checkins.length?' Â· ultimo: '+checkins[checkins.length-1].date:''}.</div>`;const sc=document.getElementById('stat-checkins');if(sc)sc.textContent=checkins.length;const nb=document.getElementById('nb-mem');if(nb)nb.style.display=patterns.length?'':'none';}
+function renderMemoryPage(){
+  const checkins=mem_get('checkins')||[];
+  const patterns=analyzePatterns()||[];
+  const eh=document.getElementById('energy-history');
+  if(eh){
+    if(!checkins.length){
+      eh.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">Nessun dato ancora.</div>';
+    }else{
+      eh.innerHTML=checkins.slice(-7).reverse().map(c=>`<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-size:12px;color:#9E9B94;width:80px;">${c.date}</span><span class="energy-dot" style="background:${ENERGY_COLORS[c.energy]||'#ccc'};"></span><span style="font-size:13px;">${ENERGY_LABELS[c.energy]||c.energy}</span><span style="margin-left:auto;font-size:12px;color:#9E9B94;">sonno: ${c.sleep} · stress: ${c.stress}/5</span></div>`).join('');
+    }
+  }
+  const pl=document.getElementById('pattern-list');
+  if(pl){
+    if(!patterns.length)pl.innerHTML='<div style="font-size:13px;color:#9E9B94;font-style:italic;">I pattern emergono dopo qualche giorno.</div>';
+    else pl.innerHTML=patterns.map(p=>`<div class="mem-item"><div class="mem-icon" style="background:#F0EDE6;">${p.icon}</div><div><div class="mem-label">${p.label}</div><div class="mem-sub">${p.sub}</div></div></div>`).join('');
+  }
+  const ch=document.getElementById('checkin-history');
+  if(ch)ch.innerHTML=`<div style="font-size:13px;color:#9E9B94;">${checkins.length} check-in registrati${checkins.length?' · ultimo: '+checkins[checkins.length-1].date:''}.</div>`;
+  const sc=document.getElementById('stat-checkins');
+  if(sc)sc.textContent=checkins.length;
+  const nb=document.getElementById('nb-mem');
+  if(nb)nb.style.display=patterns.length?'':'none';
+}
 
 // ── NAVIGAZIONE ───────────────────────────────────────────────────────────────
 const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox unificata","0 messaggi · 0 non letti"],task:["Task",""],note:["Note",""],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
