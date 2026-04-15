@@ -1469,11 +1469,42 @@ async function loadCalendarStatus(){
   setCalendarConnectionState(!!data.connected,data.last_synced_at||null);
   if(data.connected)setCalendarDiagnostic('OK','stato backend: collegato');
 }
+function getJwtExpMs(token){
+  try{
+    const payloadPart=token.split('.')[1];
+    if(!payloadPart)return null;
+    const payload=JSON.parse(atob(payloadPart.replace(/-/g,'+').replace(/_/g,'/')));
+    if(!payload||typeof payload.exp!=='number')return null;
+    return payload.exp*1000;
+  }catch(e){
+    return null;
+  }
+}
+
+async function getValidAccessToken(){
+  try{
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if(!session?.access_token)return null;
+    const expMs=getJwtExpMs(session.access_token);
+    const now=Date.now();
+    const needsRefresh=expMs?expMs<=now+30_000:false;
+    if(!needsRefresh)return session.access_token;
+    const { data, error } = await supabaseClient.auth.refreshSession();
+    if(error){
+      console.warn('Refresh session fallito prima della chiamata API:',error);
+      return session.access_token;
+    }
+    return data?.session?.access_token||session.access_token;
+  }catch(err){
+    console.warn('Impossibile recuperare sessione auth per API:',err);
+    return null;
+  }
+}
+
 async function buildApiAuthHeaders(baseHeaders={}){
   const headers={...baseHeaders};
   try{
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    const token=session?.access_token;
+    const token=await getValidAccessToken();
     if(token)headers.Authorization=`Bearer ${token}`;
   }catch(err){
     console.warn('Impossibile recuperare token auth per API:',err);
@@ -1559,11 +1590,20 @@ async function requestCalendarConnectUrl(userId,state){
 async function fetchApi(path,options={}){
   let lastError=null;
   const authHeaders=await buildApiAuthHeaders(options.headers||{});
-  const requestOptions={...options,headers:authHeaders};
+  let requestOptions={...options,headers:authHeaders};
   for(const base of API_BASES){
     try{
       const url=base.replace(/\/$/,'')+path;
-      const res=await fetch(url,requestOptions);
+      let res=await fetch(url,requestOptions);
+      if(res.status===401){
+        const retryHeaders=await buildApiAuthHeaders(options.headers||{});
+        const oldAuth=(requestOptions.headers&&requestOptions.headers.Authorization)||'';
+        const newAuth=retryHeaders.Authorization||'';
+        if(newAuth&&newAuth!==oldAuth){
+          requestOptions={...options,headers:retryHeaders};
+          res=await fetch(url,requestOptions);
+        }
+      }
       if(res.ok){
         const contentType=(res.headers.get('content-type')||'').toLowerCase();
         if(contentType.includes('text/html')){
