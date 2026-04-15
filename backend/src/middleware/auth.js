@@ -60,18 +60,24 @@ async function fetchSupabaseUser(accessToken) {
   const timeout = setTimeout(() => controller.abort(), 5000);
 
   try {
-    const headers = {
-      Authorization: `Bearer ${accessToken}`
-    };
-    if (env.SUPABASE_ANON_KEY) {
-      headers.apikey = env.SUPABASE_ANON_KEY;
-    }
-
-    const response = await fetch(`${authBaseUrl}/user`, {
+    const requestUser = async (headers) => fetch(`${authBaseUrl}/user`, {
       method: 'GET',
       headers,
       signal: controller.signal
     });
+
+    let response = await requestUser({
+      Authorization: `Bearer ${accessToken}`,
+      ...(env.SUPABASE_ANON_KEY ? { apikey: env.SUPABASE_ANON_KEY } : {})
+    });
+
+    if (!response.ok && env.SUPABASE_ANON_KEY) {
+      // Fallback di compatibilità: se ANON_KEY backend non è allineata al progetto
+      // del token, riprova con il solo bearer token.
+      response = await requestUser({
+        Authorization: `Bearer ${accessToken}`
+      });
+    }
 
     if (!response.ok) {
       throw new HttpError(401, 'Sessione non valida o scaduta');
