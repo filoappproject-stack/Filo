@@ -2049,9 +2049,40 @@ function handleSuggestionAction(actionLabel,suggestionTitle,btn){
     if(btn){btn.textContent='Timer avviato';btn.disabled=true;}
     return;
   }
+  if(action.includes('blocca 45 minuti')){
+    addTaskFromSuggestion(`${suggestionTitle||'Attività'} (focus 45 min)`);
+    openFocusSession(suggestionTitle||'Attività prioritaria',45);
+    if(btn){btn.textContent='Focus 45m avviato';btn.disabled=true;}
+    return;
+  }
   if(action.includes('rimanda')){
     addTaskFromSuggestion(`${suggestionTitle||'Attività'} (da ripianificare)`);
     if(btn){btn.textContent='Rimandato';btn.disabled=true;}
+    return;
+  }
+  if(action.includes('prepara checklist')){
+    addTaskFromSuggestion(`Checklist: ${suggestionTitle||'attività'}`);
+    if(btn){btn.textContent='Checklist creata';btn.disabled=true;}
+    return;
+  }
+  if(action.includes('aggiungi reminder')){
+    addTaskFromSuggestion(`Reminder: ${suggestionTitle||'attività'} (entro oggi)`);
+    if(btn){btn.textContent='Reminder creato';btn.disabled=true;}
+    return;
+  }
+  if(action.includes('rivedi a fine giornata')){
+    addTaskFromSuggestion(`Review fine giornata: ${suggestionTitle||'priorità'}`);
+    if(btn){btn.textContent='Review pianificata';btn.disabled=true;}
+    return;
+  }
+  if(action.includes('seleziona top 3')){
+    addTaskFromSuggestion('Seleziona top 3 obiettivi della giornata');
+    if(btn){btn.textContent='Top 3 creati';btn.disabled=true;}
+    return;
+  }
+  if(action.includes('sposta il resto')){
+    addTaskFromSuggestion('Sposta attività non prioritarie a domani');
+    if(btn){btn.textContent='Attività spostate';btn.disabled=true;}
     return;
   }
   if(btn){btn.textContent='✓';btn.disabled=true;}
