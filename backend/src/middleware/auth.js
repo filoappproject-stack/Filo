@@ -24,11 +24,7 @@ function decodeJwtPayload(token) {
   }
 }
 
-function resolveSupabaseAuthBaseUrl(accessToken) {
-  if (env.SUPABASE_URL) {
-    return `${env.SUPABASE_URL.replace(/\/$/, '')}/auth/v1`;
-  }
-
+function resolveIssuerAuthBaseUrl(accessToken) {
   const payload = decodeJwtPayload(accessToken);
   const issuer = payload?.iss;
   if (!issuer || typeof issuer !== 'string') return null;
@@ -44,9 +40,21 @@ function resolveSupabaseAuthBaseUrl(accessToken) {
   }
 }
 
+function resolveSupabaseAuthBaseUrls(accessToken) {
+  const out = [];
+  if (env.SUPABASE_URL) {
+    out.push(`${env.SUPABASE_URL.replace(/\/$/, '')}/auth/v1`);
+  }
+  const issuerBase = resolveIssuerAuthBaseUrl(accessToken);
+  if (issuerBase) {
+    out.push(issuerBase);
+  }
+  return Array.from(new Set(out));
+}
+
 async function fetchSupabaseUser(accessToken) {
-  const authBaseUrl = resolveSupabaseAuthBaseUrl(accessToken);
-  if (!authBaseUrl) {
+  const authBaseUrls = resolveSupabaseAuthBaseUrls(accessToken);
+  if (!authBaseUrls.length) {
     throw new HttpError(500, 'Auth backend non configurata (SUPABASE_URL mancante e issuer token non valido)');
   }
 
@@ -60,40 +68,43 @@ async function fetchSupabaseUser(accessToken) {
   const timeout = setTimeout(() => controller.abort(), 5000);
 
   try {
-    const requestUser = async (headers) => fetch(`${authBaseUrl}/user`, {
+    const requestUser = async (authBaseUrl, headers) => fetch(`${authBaseUrl}/user`, {
       method: 'GET',
       headers,
       signal: controller.signal
     });
 
-    let response = await requestUser({
-      Authorization: `Bearer ${accessToken}`,
-      ...(env.SUPABASE_ANON_KEY ? { apikey: env.SUPABASE_ANON_KEY } : {})
-    });
+    let lastResponse = null;
+    for (const authBaseUrl of authBaseUrls) {
+      // 1) Tentativo con apikey (se presente)
+      let response = await requestUser(authBaseUrl, {
+        Authorization: `Bearer ${accessToken}`,
+        ...(env.SUPABASE_ANON_KEY ? { apikey: env.SUPABASE_ANON_KEY } : {})
+      });
+      lastResponse = response;
+      if (response.ok) {
+        const user = await response.json();
+        if (!user?.id) throw new HttpError(401, 'Utente non autenticato');
+        tokenCache.set(accessToken, { user, expiresAt: now + CACHE_TTL_MS });
+        return user;
+      }
 
-    if (!response.ok && env.SUPABASE_ANON_KEY) {
-      // Fallback di compatibilità: se ANON_KEY backend non è allineata al progetto
-      // del token, riprova con il solo bearer token.
-      response = await requestUser({
+      // 2) Fallback con solo bearer (apikey non allineata o non necessaria)
+      response = await requestUser(authBaseUrl, {
         Authorization: `Bearer ${accessToken}`
       });
+      lastResponse = response;
+      if (response.ok) {
+        const user = await response.json();
+        if (!user?.id) throw new HttpError(401, 'Utente non autenticato');
+        tokenCache.set(accessToken, { user, expiresAt: now + CACHE_TTL_MS });
+        return user;
+      }
     }
 
-    if (!response.ok) {
+    if (!lastResponse?.ok) {
       throw new HttpError(401, 'Sessione non valida o scaduta');
     }
-
-    const user = await response.json();
-    if (!user?.id) {
-      throw new HttpError(401, 'Utente non autenticato');
-    }
-
-    tokenCache.set(accessToken, {
-      user,
-      expiresAt: now + CACHE_TTL_MS
-    });
-
-    return user;
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw new HttpError(503, 'Timeout verifica autenticazione');
