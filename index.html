@@ -1244,6 +1244,8 @@ let analyzeCooldownTimeoutId=null;
 let focusSessionTitle='';
 let focusSessionSeconds=0;
 let focusSessionIntervalId=null;
+let focusSessionActionBtn=null;
+let focusSessionSiblingBtn=null;
 const LOCAL_API_BASES=['http://localhost:4000','http://127.0.0.1:4000'];
 const SHOULD_TRY_LOCAL_API=['localhost','127.0.0.1'].includes(window.location.hostname);
 function buildApiBaseCandidates(){
@@ -2011,11 +2013,41 @@ function closeFocusSession(){
   const modal=document.getElementById('focus-session-modal');
   if(modal)modal.style.display='none';
 }
-function cancelFocusSession(){
+function resetFocusActionButtons(mode='default'){
+  if(focusSessionActionBtn){
+    const original=focusSessionActionBtn.dataset.originalLabel||'Inizia ora (15 min)';
+    if(mode==='completed'){
+      focusSessionActionBtn.textContent='Completato';
+      focusSessionActionBtn.disabled=true;
+    }else if(mode==='postponed'){
+      focusSessionActionBtn.textContent='Rimandato';
+      focusSessionActionBtn.disabled=true;
+    }else{
+      focusSessionActionBtn.textContent=original;
+      focusSessionActionBtn.disabled=false;
+    }
+  }
+  if(focusSessionSiblingBtn){
+    const originalSibling=focusSessionSiblingBtn.dataset.originalLabel||focusSessionSiblingBtn.textContent;
+    if(mode==='postponed'){
+      focusSessionSiblingBtn.textContent='Rimandato';
+      focusSessionSiblingBtn.disabled=true;
+    }else{
+      focusSessionSiblingBtn.textContent=originalSibling;
+      focusSessionSiblingBtn.disabled=false;
+    }
+  }
+  if(mode!=='default'){
+    focusSessionActionBtn=null;
+    focusSessionSiblingBtn=null;
+  }
+}
+function cancelFocusSession(resetButtons=true){
   if(focusSessionIntervalId){
     clearInterval(focusSessionIntervalId);
     focusSessionIntervalId=null;
   }
+  if(resetButtons)resetFocusActionButtons('default');
   closeFocusSession();
 }
 function extendFocusSession(extraMinutes=10){
@@ -2034,16 +2066,28 @@ function extendFocusSession(extraMinutes=10){
   renderFocusSession();
 }
 function completeFocusSession(){
-  cancelFocusSession();
+  resetFocusActionButtons('completed');
+  cancelFocusSession(false);
   showPage('task',document.querySelectorAll('.nav-item')[3]);
 }
 function postponeFocusSession(){
+  resetFocusActionButtons('postponed');
   addTaskFromSuggestion(`${focusSessionTitle} (riprogrammare pomeriggio)`);
-  cancelFocusSession();
+  cancelFocusSession(false);
 }
 function handleSuggestionAction(actionLabel,suggestionTitle,btn){
   const action=(actionLabel||'').trim().toLowerCase();
   if(action.startsWith('inizia ora')){
+    if(btn){
+      btn.dataset.originalLabel=btn.dataset.originalLabel||btn.textContent;
+      const sibling=btn.nextElementSibling;
+      if(sibling&&sibling.tagName==='BUTTON'){
+        sibling.dataset.originalLabel=sibling.dataset.originalLabel||sibling.textContent;
+        sibling.disabled=true;
+      }
+      focusSessionActionBtn=btn;
+      focusSessionSiblingBtn=sibling||null;
+    }
     addTaskFromSuggestion(suggestionTitle||'Attività prioritaria');
     openFocusSession(suggestionTitle||'Attività prioritaria',15);
     if(btn){btn.textContent='Timer avviato';btn.disabled=true;}
