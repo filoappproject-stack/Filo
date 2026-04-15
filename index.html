@@ -77,6 +77,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 .f-textarea{width:100%;font-family:inherit;font-size:13px;color:#1A1A18;background:#F7F5F0;border:1px solid rgba(0,0,0,0.1);border-radius:8px;padding:10px 12px;resize:vertical;}
 .f-textarea:focus{outline:2px solid #1A4FBF;outline-offset:1px;}
 .f-select{width:100%;font-family:inherit;font-size:13px;color:#1A1A18;background:#F7F5F0;border:1px solid rgba(0,0,0,0.1);border-radius:8px;padding:8px 12px;height:38px;}
+.hint-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.hint-btn{background:#F7F5F0;color:#6B6860;border:1px solid rgba(0,0,0,0.1);border-radius:999px;padding:4px 10px;font-family:inherit;font-size:11px;cursor:pointer;transition:all 0.12s;}
+.hint-btn:hover{background:#E8EEFB;border-color:rgba(26,79,191,0.25);color:#0D2E7A;}
+.small-help{font-size:11px;color:#9E9B94;margin-top:6px;line-height:1.45;}
+.micro-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .form-actions{display:flex;gap:8px;margin-top:16px;}
 .row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(0,0,0,0.05);}
@@ -121,6 +126,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 .toggle-knob{position:absolute;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left 0.2s;}
 .checkin-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:100;display:none;}
 .checkin-box{background:#fff;border-radius:16px;padding:32px 28px;width:420px;max-width:92vw;animation:slideDown 0.25s ease forwards;}
+.focus-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.42);display:none;align-items:center;justify-content:center;z-index:130;}
+.focus-box{background:#fff;border-radius:16px;padding:24px;width:min(460px,92vw);box-shadow:0 12px 40px rgba(0,0,0,0.18);}
+.focus-title{font-size:16px;font-weight:600;color:#1A1A18;margin-bottom:6px;}
+.focus-sub{font-size:13px;color:#6B6860;margin-bottom:16px;line-height:1.5;}
+.focus-timer{font-size:42px;font-weight:600;letter-spacing:-1px;color:#1A4FBF;text-align:center;margin:8px 0 18px;}
+.focus-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
 .checkin-title{font-size:18px;font-weight:600;letter-spacing:-0.3px;color:#1A1A18;margin-bottom:6px;}
 .checkin-sub{font-size:13px;color:#9E9B94;margin-bottom:24px;}
 .checkin-q{font-size:13px;font-weight:500;color:#1A1A18;margin-bottom:10px;}
@@ -334,10 +345,42 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
             <div>
               <div class="field-label">Cosa hai in agenda oggi?</div>
               <textarea id="agenda-input" class="f-textarea" rows="4" placeholder="Es: call con Rossi alle 10:30, revisione roadmap alle 14:30..."></textarea>
+              <div class="hint-row">
+                <button class="hint-btn" type="button" onclick="appendGuidedInput('agenda-input','Meeting')">+ Meeting</button>
+                <button class="hint-btn" type="button" onclick="appendGuidedInput('agenda-input','Deep work')">+ Deep work</button>
+                <button class="hint-btn" type="button" onclick="appendGuidedInput('agenda-input','Scadenza')">+ Scadenza</button>
+              </div>
+              <div class="small-help">Suggerimento: inserisci orario + contesto (es. "11:00 review contratto").</div>
             </div>
             <div>
               <div class="field-label">Cosa hai in sospeso o ti preoccupa?</div>
               <textarea id="pending-input" class="f-textarea" rows="4" placeholder="Es: rispondere a Bianchi, approvare budget Q2..."></textarea>
+              <div class="hint-row">
+                <button class="hint-btn" type="button" onclick="appendGuidedInput('pending-input','Email da chiudere')">+ Email</button>
+                <button class="hint-btn" type="button" onclick="appendGuidedInput('pending-input','Blocco decisionale')">+ Blocco</button>
+                <button class="hint-btn" type="button" onclick="appendGuidedInput('pending-input','Follow-up urgente')">+ Follow-up</button>
+              </div>
+              <div class="small-help">Aggiungi ciò che rischia di rallentarti: Filo potrà prioritizzare meglio.</div>
+            </div>
+          </div>
+          <div class="micro-grid" style="margin-bottom:14px;">
+            <div>
+              <div class="field-label">Fine giornata (opz.)</div>
+              <input id="day-end-input" class="f-input" type="time">
+            </div>
+            <div>
+              <div class="field-label">Tempo utile oggi (opz.)</div>
+              <select id="day-availability-input" class="f-select">
+                <option value="">Non specificato</option>
+                <option value="meno di 1 ora">Meno di 1 ora</option>
+                <option value="1-2 ore">1-2 ore</option>
+                <option value="2-4 ore">2-4 ore</option>
+                <option value="oltre 4 ore">Oltre 4 ore</option>
+              </select>
+            </div>
+            <div>
+              <div class="field-label">Priorità del giorno (opz.)</div>
+              <input id="day-focus-input" class="f-input" placeholder="Es: chiudere budget Q2">
             </div>
           </div>
           <div style="display:flex;gap:10px;align-items:center;">
@@ -345,8 +388,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.1 2.2 2.4.35-1.75 1.7.42 2.4L6.5 6.6 4.33 7.65l.42-2.4L3 3.55l2.4-.35z" fill="white"/></svg>
               Analizza la mia giornata
             </button>
-            <button class="btn-ghost" onclick="fillExample()">Carica esempio</button>
           </div>
+          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#9E9B94;">Analisi rimanenti oggi: 3</div>
         </div>
         <div class="error-box" id="ai-error"></div>
         <div class="loader" id="ai-loader">
@@ -1179,6 +1222,10 @@ let inboxSelectedId=null;
 let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
+let analyzeCooldownTimeoutId=null;
+let focusSessionTitle='';
+let focusSessionSeconds=0;
+let focusSessionIntervalId=null;
 const LOCAL_API_BASES=['http://localhost:4000','http://127.0.0.1:4000'];
 const SHOULD_TRY_LOCAL_API=['localhost','127.0.0.1'].includes(window.location.hostname);
 function buildApiBaseCandidates(){
@@ -1891,8 +1938,203 @@ function saveProfile(){const name=document.getElementById('pf-name').value.trim(
 function togglePref(key){prefs[key]=!prefs[key];const on=prefs[key];document.getElementById('toggle-'+key).style.background=on?'#1A4FBF':'#D0CCC6';document.getElementById('knob-'+key).style.left=on?'19px':'3px';}
 
 // â”€â”€ AI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function fillExample(){document.getElementById('agenda-input').value="Call con il cliente Rossi alle 10:30, revisione roadmap Q2 alle 14:30, riepilogo team alle 17:00.";document.getElementById('pending-input').value="Rispondere a Bianchi sul contratto, approvare budget Q2 entro venerdÃ¬, 3 email non lette di Rossi.";}
-async function analyzeDay(){const agenda=document.getElementById('agenda-input').value.trim();const pending=document.getElementById('pending-input').value.trim();if(!agenda&&!pending)return;const btn=document.getElementById('analyze-btn');const loader=document.getElementById('ai-loader');const errBox=document.getElementById('ai-error');const container=document.getElementById('suggestions-container');btn.disabled=true;loader.classList.add('active');errBox.classList.remove('active');container.innerHTML='';const memCtx=getMemoryContext();const energyCtx=todayEnergy?`Energia utente oggi: ${todayEnergy}/5, stress ${todayStress}/5. ${todayEnergy<=2?'Max 2 suggerimenti.':todayEnergy>=4?'Energia alta.':''} `:'';const prompt=`Sei Filo, assistente per manager.\n${energyCtx}${memCtx}\nAgenda: ${agenda||"non specificata"}\nIn sospeso: ${pending||"nessuna"}\nRispondi SOLO con JSON valido:\n{"suggerimenti":[{"titolo":"azione","perche":"perchÃ© adesso in 1-2 frasi","priorita":"urgente|alta|normale|bassa","azioni":["Inizia","Rimanda"]}]}\nDai 3-5 suggerimenti per urgenza.`;try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:prompt}]})});const data=await res.json();const text=data.content.map(i=>i.text||"").join("");const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());const suggestions=parsed.suggerimenti||[];loader.classList.remove('active');btn.disabled=false;if(!suggestions.length){container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';return;}const nb=document.getElementById('nb-sugg');nb.textContent=suggestions.length;nb.style.display='';const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};const PLBL={urgente:'Urgente',alta:'Alta prioritÃ ',normale:'Normale',bassa:'Bassa'};container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${s.titolo}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${s.perche}</div><div class="sugg-actions">${(s.azioni||[]).map((a,j)=>`<button style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${a}</button>`).join('')}<button onclick="addTaskFromSuggestion('${s.titolo.replace(/'/g,"\\'")}');this.textContent='âœ“ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#9E9B94;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');}catch(e){loader.classList.remove('active');btn.disabled=false;errBox.textContent="Errore nell'analisi. Riprova.";errBox.classList.add('active');}}
+function appendGuidedInput(targetId,label){
+  const input=document.getElementById(targetId);
+  if(!input)return;
+  const value=input.value.trim();
+  const entry=label.endsWith(':')?label:`${label}: `;
+  input.value=value?`${value}, ${entry}`:entry;
+  input.focus();
+  input.selectionStart=input.selectionEnd=input.value.length;
+}
+function fillExample(){
+  document.getElementById('agenda-input').value="Call con il cliente Rossi alle 10:30, revisione roadmap Q2 alle 14:30, riepilogo team alle 17:00.";
+  document.getElementById('pending-input').value="Rispondere a Bianchi sul contratto, approvare budget Q2 entro venerdì, 3 email non lette di Rossi.";
+  document.getElementById('day-end-input').value='18:30';
+  document.getElementById('day-availability-input').value='2-4 ore';
+  document.getElementById('day-focus-input').value='Chiudere il budget Q2 senza rimandare le urgenze clienti';
+}
+function fmtFocusTime(totalSeconds){
+  const minutes=Math.floor(totalSeconds/60);
+  const seconds=totalSeconds%60;
+  return `${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
+}
+function renderFocusSession(){
+  const timerEl=document.getElementById('focus-session-timer');
+  const subEl=document.getElementById('focus-session-sub');
+  const runningActions=document.getElementById('focus-session-running-actions');
+  const doneActions=document.getElementById('focus-session-actions');
+  if(timerEl)timerEl.textContent=fmtFocusTime(Math.max(0,focusSessionSeconds));
+  if(subEl)subEl.textContent=`Stai lavorando su: ${focusSessionTitle||'-'}`;
+  const completed=focusSessionSeconds<=0;
+  if(runningActions)runningActions.style.display=completed?'none':'';
+  if(doneActions)doneActions.style.display=completed?'':'none';
+}
+function openFocusSession(title,minutes=15){
+  focusSessionTitle=title||'Attività prioritaria';
+  focusSessionSeconds=Math.max(60,Math.round(minutes*60));
+  const modal=document.getElementById('focus-session-modal');
+  if(focusSessionIntervalId){
+    clearInterval(focusSessionIntervalId);
+    focusSessionIntervalId=null;
+  }
+  renderFocusSession();
+  if(modal)modal.style.display='flex';
+  focusSessionIntervalId=setInterval(()=>{
+    focusSessionSeconds=Math.max(0,focusSessionSeconds-1);
+    renderFocusSession();
+    if(focusSessionSeconds<=0&&focusSessionIntervalId){
+      clearInterval(focusSessionIntervalId);
+      focusSessionIntervalId=null;
+    }
+  },1000);
+}
+function closeFocusSession(){
+  const modal=document.getElementById('focus-session-modal');
+  if(modal)modal.style.display='none';
+}
+function cancelFocusSession(){
+  if(focusSessionIntervalId){
+    clearInterval(focusSessionIntervalId);
+    focusSessionIntervalId=null;
+  }
+  closeFocusSession();
+}
+function extendFocusSession(extraMinutes=10){
+  const extra=Math.max(1,Number(extraMinutes)||10);
+  focusSessionSeconds+=Math.round(extra*60);
+  if(!focusSessionIntervalId){
+    focusSessionIntervalId=setInterval(()=>{
+      focusSessionSeconds=Math.max(0,focusSessionSeconds-1);
+      renderFocusSession();
+      if(focusSessionSeconds<=0&&focusSessionIntervalId){
+        clearInterval(focusSessionIntervalId);
+        focusSessionIntervalId=null;
+      }
+    },1000);
+  }
+  renderFocusSession();
+}
+function completeFocusSession(){
+  cancelFocusSession();
+  showPage('task',document.querySelectorAll('.nav-item')[3]);
+}
+function postponeFocusSession(){
+  addTaskFromSuggestion(`${focusSessionTitle} (riprogrammare pomeriggio)`);
+  cancelFocusSession();
+}
+function handleSuggestionAction(actionLabel,suggestionTitle,btn){
+  const action=(actionLabel||'').trim().toLowerCase();
+  if(action.startsWith('inizia ora')){
+    addTaskFromSuggestion(suggestionTitle||'Attività prioritaria');
+    openFocusSession(suggestionTitle||'Attività prioritaria',15);
+    if(btn){btn.textContent='Timer avviato';btn.disabled=true;}
+    return;
+  }
+  if(action.includes('rimanda')){
+    addTaskFromSuggestion(`${suggestionTitle||'Attività'} (da ripianificare)`);
+    if(btn){btn.textContent='Rimandato';btn.disabled=true;}
+    return;
+  }
+  if(btn){btn.textContent='✓';btn.disabled=true;}
+}
+function updateAnalyzeQuotaLabel(limit,remaining){
+  const el=document.getElementById('analyze-quota');
+  if(!el)return;
+  if(Number.isFinite(limit)&&Number.isFinite(remaining)){
+    el.textContent=`Analisi rimanenti oggi: ${remaining}/${limit}`;
+    el.style.color=remaining<=1?'#8A5C00':'#9E9B94';
+    return;
+  }
+  el.textContent='Analisi rimanenti oggi: --';
+  el.style.color='#9E9B94';
+}
+function startAnalyzeCooldown(seconds){
+  const btn=document.getElementById('analyze-btn');
+  if(!btn)return;
+  if(analyzeCooldownTimeoutId){
+    clearInterval(analyzeCooldownTimeoutId);
+    analyzeCooldownTimeoutId=null;
+  }
+  let left=Math.max(1,Math.ceil(Number(seconds)||0));
+  const originalHtml=`<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.1 2.2 2.4.35-1.75 1.7.42 2.4L6.5 6.6 4.33 7.65l.42-2.4L3 3.55l2.4-.35z" fill="white"/></svg>Analizza la mia giornata`;
+  btn.disabled=true;
+  btn.innerHTML=`Attendi ${left}s`;
+  analyzeCooldownTimeoutId=setInterval(()=>{
+    left-=1;
+    if(left<=0){
+      clearInterval(analyzeCooldownTimeoutId);
+      analyzeCooldownTimeoutId=null;
+      btn.disabled=false;
+      btn.innerHTML=originalHtml;
+      return;
+    }
+    btn.innerHTML=`Attendi ${left}s`;
+  },1000);
+}
+async function analyzeDay(){
+  const agenda=document.getElementById('agenda-input').value.trim();
+  const pending=document.getElementById('pending-input').value.trim();
+  const dayEnd=document.getElementById('day-end-input')?.value||'';
+  const availability=document.getElementById('day-availability-input')?.value||'';
+  const dayFocus=document.getElementById('day-focus-input')?.value.trim()||'';
+  if(!agenda&&!pending)return;
+  const btn=document.getElementById('analyze-btn');
+  const loader=document.getElementById('ai-loader');
+  const errBox=document.getElementById('ai-error');
+  const container=document.getElementById('suggestions-container');
+  btn.disabled=true;
+  loader.classList.add('active');
+  errBox.classList.remove('active');
+  container.innerHTML='';
+  try{
+    const res=await fetchApi('/api/v1/assistant/day-analysis',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        userId:currentUser?.id||null,
+        agenda,pending,dayEnd,availability,dayFocus,
+        memoryContext:getMemoryContext(),energy:todayEnergy,stress:todayStress
+      })
+    });
+    const payload=await res.json().catch(()=>null);
+    if(!res.ok){
+      if(res.status===429&&payload){
+        const message=payload?.message||'Limite analisi raggiunto.';
+        errBox.textContent=message;
+        errBox.classList.add('active');
+        updateAnalyzeQuotaLabel(Number(payload?.limit),Number(payload?.remaining));
+        if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
+        loader.classList.remove('active');
+        if(!analyzeCooldownTimeoutId)btn.disabled=false;
+        return;
+      }
+      const fallbackMsg=payload?.message||`POST /assistant/day-analysis fallita (${res.status})`;
+      throw new Error(fallbackMsg);
+    }
+    const suggestions=Array.isArray(payload?.data?.suggerimenti)?payload.data.suggerimenti:[];
+    const quota=payload?.data?.quota||null;
+    if(quota)updateAnalyzeQuotaLabel(Number(quota.limit),Number(quota.remaining));
+    loader.classList.remove('active');
+    btn.disabled=false;
+    if(!suggestions.length){
+      container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';
+      return;
+    }
+    const nb=document.getElementById('nb-sugg');
+    nb.textContent=suggestions.length;
+    nb.style.display='';
+    const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};
+    const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
+    container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#9E9B94;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
+  }catch(e){
+    console.warn('Errore analisi giornata:',e);
+    loader.classList.remove('active');
+    btn.disabled=false;
+    errBox.textContent='Errore nell\'analisi. Riprova.';
+    errBox.classList.add('active');
+  }
+}
 
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
@@ -1908,6 +2150,8 @@ async function init() {
   window.addEventListener('pageshow',handleCalendarOAuthPageShow);
 
   await tryHandleMailboxOauthCallback();
+  await tryHandleCalendarOauthCallback();
+  markCalendarPendingAsFailedIfNoCallbackDetected();
   await tryExchangeSupabaseCodeSession();
   await trySetSupabaseSessionFromHash();
   handleSupabaseAuthErrorInQuery();
