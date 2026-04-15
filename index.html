@@ -633,7 +633,11 @@ function getQueryParamPreservePlus(url,key){
     const hasCalendarPendingMarker = hasActiveCalendarOAuthPending();
     const scopeRaw = url.searchParams.get('scope') || '';
     const hasCalendarScope = scopeRaw.includes('calendar');
-    const isCalendarOAuthCallback = matchesCalendarState || hasCalendarStatePrefix || hasCalendarPendingMarker || hasCalendarScope;
+    const isCalendarOAuthCallback =
+      matchesCalendarState ||
+      hasCalendarStatePrefix ||
+      hasCalendarScope ||
+      (hasCalendarPendingMarker && (hasCalendarStatePrefix || hasCalendarScope));
     if(!isInboxOAuthCallback && !isCalendarOAuthCallback) return;
 
     const payload = {
@@ -943,7 +947,7 @@ async function tryHandleCalendarOauthCallback() {
   const hasPendingMarker = hasActiveCalendarOAuthPending();
   let hasCalendarIntent =
     isCalendarOauthState(state) ||
-    hasPendingMarker ||
+    (expectedState && state && expectedState === state) ||
     urlScope.includes('calendar');
   if (hasPendingMarker && isCalendarOauthState(state) && !code) {
     removeCalendarTransient(CALENDAR_OAUTH_QUERY_STORAGE_KEY);
@@ -964,7 +968,7 @@ async function tryHandleCalendarOauthCallback() {
           state = storedState || state;
           hasCalendarIntent =
             isCalendarOauthState(storedState) ||
-            hasActiveCalendarOAuthPending() ||
+            (expectedState && storedState && expectedState === storedState) ||
             storedScope.includes('calendar');
         }
       }
