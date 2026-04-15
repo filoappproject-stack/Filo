@@ -13,9 +13,41 @@ function getBearerToken(req) {
   return token.trim();
 }
 
+function decodeJwtPayload(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    return payload && typeof payload === 'object' ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveSupabaseAuthBaseUrl(accessToken) {
+  if (env.SUPABASE_URL) {
+    return `${env.SUPABASE_URL.replace(/\/$/, '')}/auth/v1`;
+  }
+
+  const payload = decodeJwtPayload(accessToken);
+  const issuer = payload?.iss;
+  if (!issuer || typeof issuer !== 'string') return null;
+
+  try {
+    const parsed = new URL(issuer);
+    if (parsed.protocol !== 'https:') return null;
+    if (!parsed.hostname.endsWith('.supabase.co')) return null;
+    const normalized = issuer.replace(/\/$/, '');
+    return normalized.endsWith('/auth/v1') ? normalized : `${normalized}/auth/v1`;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchSupabaseUser(accessToken) {
-  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
-    throw new HttpError(500, 'Auth backend non configurata (SUPABASE_URL/SUPABASE_ANON_KEY mancanti)');
+  const authBaseUrl = resolveSupabaseAuthBaseUrl(accessToken);
+  if (!authBaseUrl) {
+    throw new HttpError(500, 'Auth backend non configurata (SUPABASE_URL mancante e issuer token non valido)');
   }
 
   const now = Date.now();
@@ -28,12 +60,16 @@ async function fetchSupabaseUser(accessToken) {
   const timeout = setTimeout(() => controller.abort(), 5000);
 
   try {
-    const response = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
+    const headers = {
+      Authorization: `Bearer ${accessToken}`
+    };
+    if (env.SUPABASE_ANON_KEY) {
+      headers.apikey = env.SUPABASE_ANON_KEY;
+    }
+
+    const response = await fetch(`${authBaseUrl}/user`, {
       method: 'GET',
-      headers: {
-        apikey: env.SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${accessToken}`
-      },
+      headers,
       signal: controller.signal
     });
 
