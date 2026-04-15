@@ -1469,6 +1469,18 @@ async function loadCalendarStatus(){
   setCalendarConnectionState(!!data.connected,data.last_synced_at||null);
   if(data.connected)setCalendarDiagnostic('OK','stato backend: collegato');
 }
+async function buildApiAuthHeaders(baseHeaders={}){
+  const headers={...baseHeaders};
+  try{
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const token=session?.access_token;
+    if(token)headers.Authorization=`Bearer ${token}`;
+  }catch(err){
+    console.warn('Impossibile recuperare token auth per API:',err);
+  }
+  return headers;
+}
+
 async function requestMailboxConnectUrl(userId,state){
   const payload={userId,redirectUri:getInboxConnectRedirectUri(),state};
   let lastDetail='';
@@ -1476,10 +1488,12 @@ async function requestMailboxConnectUrl(userId,state){
     const root=base.replace(/\/$/,'');
     const endpoint=`${root}/api/v1/inbox/google/connect`;
     try{
-      let res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const authHeaders=await buildApiAuthHeaders({'Content-Type':'application/json'});
+      let res=await fetch(endpoint,{method:'POST',headers:authHeaders,body:JSON.stringify(payload)});
       if(res.status===405){
         const qs=new URLSearchParams(payload);
-        res=await fetch(`${endpoint}?${qs.toString()}`,{method:'GET'});
+        const getHeaders=await buildApiAuthHeaders();
+        res=await fetch(`${endpoint}?${qs.toString()}`,{method:'GET',headers:getHeaders});
       }
       if(!res.ok){
         const txt=await res.text().catch(()=> '');
@@ -1517,10 +1531,12 @@ async function requestCalendarConnectUrl(userId,state){
     for(const path of endpointPaths){
       const endpoint=`${root}${path}`;
       try{
-        let res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const authHeaders=await buildApiAuthHeaders({'Content-Type':'application/json'});
+        let res=await fetch(endpoint,{method:'POST',headers:authHeaders,body:JSON.stringify(payload)});
         if(res.status===405){
           const qs=new URLSearchParams(payload);
-          res=await fetch(`${endpoint}?${qs.toString()}`,{method:'GET'});
+          const getHeaders=await buildApiAuthHeaders();
+          res=await fetch(`${endpoint}?${qs.toString()}`,{method:'GET',headers:getHeaders});
         }
         if(!res.ok){
           const txt=await res.text().catch(()=> '');
@@ -1542,10 +1558,12 @@ async function requestCalendarConnectUrl(userId,state){
 
 async function fetchApi(path,options={}){
   let lastError=null;
+  const authHeaders=await buildApiAuthHeaders(options.headers||{});
+  const requestOptions={...options,headers:authHeaders};
   for(const base of API_BASES){
     try{
       const url=base.replace(/\/$/,'')+path;
-      const res=await fetch(url,options);
+      const res=await fetch(url,requestOptions);
       if(res.ok){
         const contentType=(res.headers.get('content-type')||'').toLowerCase();
         if(contentType.includes('text/html')){

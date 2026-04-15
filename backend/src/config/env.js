@@ -8,6 +8,8 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().default(4000),
   DATABASE_URL: z.string().optional().default(''),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_ANON_KEY: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().url().optional(),
