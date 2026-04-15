@@ -126,6 +126,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 .toggle-knob{position:absolute;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left 0.2s;}
 .checkin-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:100;display:none;}
 .checkin-box{background:#fff;border-radius:16px;padding:32px 28px;width:420px;max-width:92vw;animation:slideDown 0.25s ease forwards;}
+.focus-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.42);display:none;align-items:center;justify-content:center;z-index:130;}
+.focus-box{background:#fff;border-radius:16px;padding:24px;width:min(460px,92vw);box-shadow:0 12px 40px rgba(0,0,0,0.18);}
+.focus-title{font-size:16px;font-weight:600;color:#1A1A18;margin-bottom:6px;}
+.focus-sub{font-size:13px;color:#6B6860;margin-bottom:16px;line-height:1.5;}
+.focus-timer{font-size:42px;font-weight:600;letter-spacing:-1px;color:#1A4FBF;text-align:center;margin:8px 0 18px;}
+.focus-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
 .checkin-title{font-size:18px;font-weight:600;letter-spacing:-0.3px;color:#1A1A18;margin-bottom:6px;}
 .checkin-sub{font-size:13px;color:#9E9B94;margin-bottom:24px;}
 .checkin-q{font-size:13px;font-weight:500;color:#1A1A18;margin-bottom:10px;}
@@ -544,6 +550,22 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
     <div id="calendar-modal-description" style="margin-top:14px;font-size:13px;line-height:1.6;color:#3A3936;max-height:40vh;overflow:auto;"></div>
     <div id="calendar-modal-link-wrap" style="margin-top:14px;display:none;">
       <a id="calendar-modal-link" href="#" target="_blank" rel="noopener noreferrer" style="font-size:13px;color:#1A4FBF;text-decoration:underline;">Apri su Google Calendar</a>
+    </div>
+  </div>
+</div>
+
+<div class="focus-overlay" id="focus-session-modal">
+  <div class="focus-box">
+    <div class="focus-title">Focus sprint avviato</div>
+    <div class="focus-sub" id="focus-session-sub">Stai lavorando su: -</div>
+    <div class="focus-timer" id="focus-session-timer">15:00</div>
+    <div class="focus-actions" id="focus-session-actions" style="display:none;">
+      <button class="btn-primary" onclick="completeFocusSession()">✓ Completato</button>
+      <button class="btn-ghost" onclick="extendFocusSession(10)">+10 minuti</button>
+      <button class="btn-ghost" onclick="postponeFocusSession()">Rimanda al pomeriggio</button>
+    </div>
+    <div class="focus-actions" id="focus-session-running-actions">
+      <button class="btn-ghost" onclick="cancelFocusSession()">Chiudi timer</button>
     </div>
   </div>
 </div>
@@ -1194,6 +1216,9 @@ let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
 let analyzeCooldownTimeoutId=null;
+let focusSessionTitle='';
+let focusSessionSeconds=0;
+let focusSessionIntervalId=null;
 const LOCAL_API_BASES=['http://localhost:4000','http://127.0.0.1:4000'];
 const SHOULD_TRY_LOCAL_API=['localhost','127.0.0.1'].includes(window.location.hostname);
 function buildApiBaseCandidates(){
@@ -1923,6 +1948,90 @@ function fillExample(){
   document.getElementById('day-availability-input').value='2-4 ore';
   document.getElementById('day-focus-input').value='Chiudere il budget Q2 senza rimandare le urgenze clienti';
 }
+function fmtFocusTime(totalSeconds){
+  const minutes=Math.floor(totalSeconds/60);
+  const seconds=totalSeconds%60;
+  return `${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
+}
+function renderFocusSession(){
+  const timerEl=document.getElementById('focus-session-timer');
+  const subEl=document.getElementById('focus-session-sub');
+  const runningActions=document.getElementById('focus-session-running-actions');
+  const doneActions=document.getElementById('focus-session-actions');
+  if(timerEl)timerEl.textContent=fmtFocusTime(Math.max(0,focusSessionSeconds));
+  if(subEl)subEl.textContent=`Stai lavorando su: ${focusSessionTitle||'-'}`;
+  const completed=focusSessionSeconds<=0;
+  if(runningActions)runningActions.style.display=completed?'none':'';
+  if(doneActions)doneActions.style.display=completed?'':'none';
+}
+function openFocusSession(title,minutes=15){
+  focusSessionTitle=title||'Attività prioritaria';
+  focusSessionSeconds=Math.max(60,Math.round(minutes*60));
+  const modal=document.getElementById('focus-session-modal');
+  if(focusSessionIntervalId){
+    clearInterval(focusSessionIntervalId);
+    focusSessionIntervalId=null;
+  }
+  renderFocusSession();
+  if(modal)modal.style.display='flex';
+  focusSessionIntervalId=setInterval(()=>{
+    focusSessionSeconds=Math.max(0,focusSessionSeconds-1);
+    renderFocusSession();
+    if(focusSessionSeconds<=0&&focusSessionIntervalId){
+      clearInterval(focusSessionIntervalId);
+      focusSessionIntervalId=null;
+    }
+  },1000);
+}
+function closeFocusSession(){
+  const modal=document.getElementById('focus-session-modal');
+  if(modal)modal.style.display='none';
+}
+function cancelFocusSession(){
+  if(focusSessionIntervalId){
+    clearInterval(focusSessionIntervalId);
+    focusSessionIntervalId=null;
+  }
+  closeFocusSession();
+}
+function extendFocusSession(extraMinutes=10){
+  const extra=Math.max(1,Number(extraMinutes)||10);
+  focusSessionSeconds+=Math.round(extra*60);
+  if(!focusSessionIntervalId){
+    focusSessionIntervalId=setInterval(()=>{
+      focusSessionSeconds=Math.max(0,focusSessionSeconds-1);
+      renderFocusSession();
+      if(focusSessionSeconds<=0&&focusSessionIntervalId){
+        clearInterval(focusSessionIntervalId);
+        focusSessionIntervalId=null;
+      }
+    },1000);
+  }
+  renderFocusSession();
+}
+function completeFocusSession(){
+  cancelFocusSession();
+  showPage('task',document.querySelectorAll('.nav-item')[3]);
+}
+function postponeFocusSession(){
+  addTaskFromSuggestion(`${focusSessionTitle} (riprogrammare pomeriggio)`);
+  cancelFocusSession();
+}
+function handleSuggestionAction(actionLabel,suggestionTitle,btn){
+  const action=(actionLabel||'').trim().toLowerCase();
+  if(action.startsWith('inizia ora')){
+    addTaskFromSuggestion(suggestionTitle||'Attività prioritaria');
+    openFocusSession(suggestionTitle||'Attività prioritaria',15);
+    if(btn){btn.textContent='Timer avviato';btn.disabled=true;}
+    return;
+  }
+  if(action.includes('rimanda')){
+    addTaskFromSuggestion(`${suggestionTitle||'Attività'} (da ripianificare)`);
+    if(btn){btn.textContent='Rimandato';btn.disabled=true;}
+    return;
+  }
+  if(btn){btn.textContent='✓';btn.disabled=true;}
+}
 function updateAnalyzeQuotaLabel(limit,remaining){
   const el=document.getElementById('analyze-quota');
   if(!el)return;
@@ -2011,7 +2120,7 @@ async function analyzeDay(){
     nb.style.display='';
     const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};
     const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
-    container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#9E9B94;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
+    container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#9E9B94;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
   }catch(e){
     console.warn('Errore analisi giornata:',e);
     loader.classList.remove('active');
