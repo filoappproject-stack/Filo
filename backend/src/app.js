@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { env } from './config/env.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
+import calendarRoutes from './routes/calendar.routes.js';
 import checkinsRoutes from './routes/checkins.routes.js';
 import healthRoutes from './routes/health.routes.js';
 import inboxRoutes from './routes/inbox.routes.js';
@@ -30,6 +31,7 @@ app.use('/api/v1/tasks', tasksRoutes);
 app.use('/api/v1/notes', notesRoutes);
 app.use('/api/v1/checkins', checkinsRoutes);
 app.use('/api/v1/inbox', inboxRoutes);
+app.use('/api/v1/calendar', calendarRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
