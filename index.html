@@ -554,22 +554,6 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
   </div>
 </div>
 
-<div class="focus-overlay" id="focus-session-modal">
-  <div class="focus-box">
-    <div class="focus-title">Focus sprint avviato</div>
-    <div class="focus-sub" id="focus-session-sub">Stai lavorando su: -</div>
-    <div class="focus-timer" id="focus-session-timer">15:00</div>
-    <div class="focus-actions" id="focus-session-actions" style="display:none;">
-      <button class="btn-primary" onclick="completeFocusSession()">✓ Completato</button>
-      <button class="btn-ghost" onclick="extendFocusSession(10)">+10 minuti</button>
-      <button class="btn-ghost" onclick="postponeFocusSession()">Rimanda al pomeriggio</button>
-    </div>
-    <div class="focus-actions" id="focus-session-running-actions">
-      <button class="btn-ghost" onclick="cancelFocusSession()">Chiudi timer</button>
-    </div>
-  </div>
-</div>
-
 <script>
 // â”€â”€ SUPABASE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SUPABASE_URL = 'https://xkdniukhksfiuromnmtv.supabase.co';
@@ -581,9 +565,12 @@ const CALENDAR_REDIRECT_URI_KEY = 'filo_calendar_redirect_uri';
 const CALENDAR_OAUTH_PENDING_KEY = 'filo_calendar_oauth_pending';
 const CALENDAR_OAUTH_PENDING_AT_KEY = 'filo_calendar_oauth_pending_at';
 const CALENDAR_OAUTH_USER_ID_KEY = 'filo_calendar_oauth_user_id';
+const CALENDAR_LAST_EXCHANGE_CODE_KEY = 'filo_calendar_last_exchange_code';
+const CALENDAR_LAST_EXCHANGE_AT_KEY = 'filo_calendar_last_exchange_at';
 const CALENDAR_DIAG_PREFIX = 'filo_calendar_diag_';
 const CALENDAR_OAUTH_PENDING_MAX_AGE_MS = 15 * 60 * 1000;
 const CALENDAR_OAUTH_CALLBACK_MAX_AGE_MS = 5 * 60 * 1000;
+const CALENDAR_EXCHANGE_REPLAY_GUARD_MS = 10 * 60 * 1000;
 function setCalendarTransient(key,value){try{sessionStorage.setItem(key,value);}catch(e){}try{localStorage.setItem(key,value);}catch(e){}}
 function getCalendarTransient(key){try{const v=sessionStorage.getItem(key);if(v)return v;}catch(e){}try{return localStorage.getItem(key);}catch(e){return null;}}
 function removeCalendarTransient(key){try{sessionStorage.removeItem(key);}catch(e){}try{localStorage.removeItem(key);}catch(e){}}
@@ -614,6 +601,23 @@ function hasActiveCalendarOAuthPending(){
     return false;
   }
   return true;
+}
+function hasRecentCalendarExchangeCode(code){
+  if(!code)return false;
+  try{
+    const recentCode=sessionStorage.getItem(CALENDAR_LAST_EXCHANGE_CODE_KEY);
+    const recentAt=Number(sessionStorage.getItem(CALENDAR_LAST_EXCHANGE_AT_KEY));
+    if(!recentCode||!Number.isFinite(recentAt))return false;
+    if((Date.now()-recentAt)>CALENDAR_EXCHANGE_REPLAY_GUARD_MS)return false;
+    return recentCode===code;
+  }catch(e){return false;}
+}
+function markCalendarExchangeCode(code){
+  if(!code)return;
+  try{
+    sessionStorage.setItem(CALENDAR_LAST_EXCHANGE_CODE_KEY,code);
+    sessionStorage.setItem(CALENDAR_LAST_EXCHANGE_AT_KEY,String(Date.now()));
+  }catch(e){}
 }
 function getQueryParamPreservePlus(url,key){
   const search=typeof url?.search==='string'?url.search:'';
@@ -673,6 +677,7 @@ function getQueryParamPreservePlus(url,key){
     }
     ['code','error','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     const cleanUrl = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash;
+    window.__filoAbortInitAfterOAuthPreserve = true;
     window.location.replace(cleanUrl);
   }catch(e){}
 })();
@@ -995,6 +1000,7 @@ async function tryHandleCalendarOauthCallback() {
     clearCalendarOAuthFlowState();
     return false;
   }
+  if(hasRecentCalendarExchangeCode(code)) return false;
   if (handledCalendarOAuthCodes.has(code)) return false;
   const userId =
     extractUserIdFromCalendarState(state) ||
@@ -1003,6 +1009,7 @@ async function tryHandleCalendarOauthCallback() {
     null;
   if (!userId) return false;
   handledCalendarOAuthCodes.add(code);
+  markCalendarExchangeCode(code);
 
   try {
     setCalendarDiagnostic('IN CORSO','exchange OAuth');
@@ -1036,8 +1043,6 @@ async function tryHandleCalendarOauthCallback() {
   } catch (err) {
     const reason = err?.message ? String(err.message) : 'errore sconosciuto';
     console.warn('Errore callback calendario OAuth:', reason, err);
-    ['code','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
-    window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''));
     calendarConnectionError = `Connessione calendario non completata: ${reason}`;
     setCalendarDiagnostic('KO',reason);
     showError('Connessione Google Calendar non completata. Riprova.');
@@ -1469,49 +1474,6 @@ async function loadCalendarStatus(){
   setCalendarConnectionState(!!data.connected,data.last_synced_at||null);
   if(data.connected)setCalendarDiagnostic('OK','stato backend: collegato');
 }
-function getJwtExpMs(token){
-  try{
-    const payloadPart=token.split('.')[1];
-    if(!payloadPart)return null;
-    const payload=JSON.parse(atob(payloadPart.replace(/-/g,'+').replace(/_/g,'/')));
-    if(!payload||typeof payload.exp!=='number')return null;
-    return payload.exp*1000;
-  }catch(e){
-    return null;
-  }
-}
-
-async function getValidAccessToken(){
-  try{
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if(!session?.access_token)return null;
-    const expMs=getJwtExpMs(session.access_token);
-    const now=Date.now();
-    const needsRefresh=expMs?expMs<=now+30_000:false;
-    if(!needsRefresh)return session.access_token;
-    const { data, error } = await supabaseClient.auth.refreshSession();
-    if(error){
-      console.warn('Refresh session fallito prima della chiamata API:',error);
-      return session.access_token;
-    }
-    return data?.session?.access_token||session.access_token;
-  }catch(err){
-    console.warn('Impossibile recuperare sessione auth per API:',err);
-    return null;
-  }
-}
-
-async function buildApiAuthHeaders(baseHeaders={}){
-  const headers={...baseHeaders};
-  try{
-    const token=await getValidAccessToken();
-    if(token)headers.Authorization=`Bearer ${token}`;
-  }catch(err){
-    console.warn('Impossibile recuperare token auth per API:',err);
-  }
-  return headers;
-}
-
 async function requestMailboxConnectUrl(userId,state){
   const payload={userId,redirectUri:getInboxConnectRedirectUri(),state};
   let lastDetail='';
@@ -1562,12 +1524,10 @@ async function requestCalendarConnectUrl(userId,state){
     for(const path of endpointPaths){
       const endpoint=`${root}${path}`;
       try{
-        const authHeaders=await buildApiAuthHeaders({'Content-Type':'application/json'});
-        let res=await fetch(endpoint,{method:'POST',headers:authHeaders,body:JSON.stringify(payload)});
+        let res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         if(res.status===405){
           const qs=new URLSearchParams(payload);
-          const getHeaders=await buildApiAuthHeaders();
-          res=await fetch(`${endpoint}?${qs.toString()}`,{method:'GET',headers:getHeaders});
+          res=await fetch(`${endpoint}?${qs.toString()}`,{method:'GET'});
         }
         if(!res.ok){
           const txt=await res.text().catch(()=> '');
@@ -2322,6 +2282,7 @@ async function analyzeDay(){
 
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
+  if(window.__filoAbortInitAfterOAuthPreserve)return;
   document.getElementById('login-password').value = '';
   clearCorruptedPasswordAutofill();
   let isAuthBootstrapping = true;
