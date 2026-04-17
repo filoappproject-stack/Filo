@@ -119,3 +119,15 @@ CREATE TABLE IF NOT EXISTS calendar_events (
 
 CREATE INDEX IF NOT EXISTS idx_calendar_accounts_user_provider ON calendar_accounts(user_id, provider);
 CREATE INDEX IF NOT EXISTS idx_calendar_events_user_starts ON calendar_events(user_id, starts_at ASC);
+
+CREATE TABLE IF NOT EXISTS ai_usage_limits (
+  actor_key TEXT NOT NULL,
+  day_key DATE NOT NULL,
+  used_count INTEGER NOT NULL DEFAULT 0 CHECK (used_count >= 0),
+  last_request_at TIMESTAMPTZ NOT NULL DEFAULT TO_TIMESTAMP(0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (actor_key, day_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_limits_day_key ON ai_usage_limits(day_key);
