@@ -3,6 +3,7 @@ import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { env } from './config/env.js';
+import { requireAuth } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import calendarRoutes from './routes/calendar.routes.js';
 import checkinsRoutes from './routes/checkins.routes.js';
@@ -27,6 +28,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/v1/health', healthRoutes);
+app.use('/api/v1', requireAuth);
 app.use('/api/v1/tasks', tasksRoutes);
 app.use('/api/v1/notes', notesRoutes);
 app.use('/api/v1/checkins', checkinsRoutes);
