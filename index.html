@@ -1524,10 +1524,12 @@ async function requestCalendarConnectUrl(userId,state){
     for(const path of endpointPaths){
       const endpoint=`${root}${path}`;
       try{
-        let res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const authHeaders=await buildApiAuthHeaders({'Content-Type':'application/json'});
+        let res=await fetch(endpoint,{method:'POST',headers:authHeaders,body:JSON.stringify(payload)});
         if(res.status===405){
           const qs=new URLSearchParams(payload);
-          res=await fetch(`${endpoint}?${qs.toString()}`,{method:'GET'});
+          const getHeaders=await buildApiAuthHeaders();
+          res=await fetch(`${endpoint}?${qs.toString()}`,{method:'GET',headers:getHeaders});
         }
         if(!res.ok){
           const txt=await res.text().catch(()=> '');
@@ -1547,6 +1549,18 @@ async function requestCalendarConnectUrl(userId,state){
   throw new Error(lastDetail||'Endpoint calendario connect non raggiungibile');
 }
 
+async function buildApiAuthHeaders(baseHeaders={}){
+  const merged={...baseHeaders};
+  try{
+    const {data:{session}}=await supabaseClient.auth.getSession();
+    const accessToken=session?.access_token;
+    if(accessToken){
+      merged.Authorization=`Bearer ${accessToken}`;
+    }
+  }catch(e){}
+  return merged;
+}
+
 async function fetchApi(path,options={}){
   let lastError=null;
   const authHeaders=await buildApiAuthHeaders(options.headers||{});
@@ -1554,16 +1568,10 @@ async function fetchApi(path,options={}){
   for(const base of API_BASES){
     try{
       const url=base.replace(/\/$/,'')+path;
-      let res=await fetch(url,requestOptions);
-      if(res.status===401){
-        const retryHeaders=await buildApiAuthHeaders(options.headers||{});
-        const oldAuth=(requestOptions.headers&&requestOptions.headers.Authorization)||'';
-        const newAuth=retryHeaders.Authorization||'';
-        if(newAuth&&newAuth!==oldAuth){
-          requestOptions={...options,headers:retryHeaders};
-          res=await fetch(url,requestOptions);
-        }
-      }
+      const method=typeof options?.method==='string'?options.method.toUpperCase():'GET';
+      const headers=await buildApiAuthHeaders(options?.headers||{});
+      const fetchOptions={...options,method,headers};
+      const res=await fetch(url,fetchOptions);
       if(res.ok){
         const contentType=(res.headers.get('content-type')||'').toLowerCase();
         if(contentType.includes('text/html')){
