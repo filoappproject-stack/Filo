@@ -44,3 +44,14 @@ export async function updateTaskStatus(taskId, userId, status) {
   const { rows } = await query(sql, [taskId, userId, status]);
   return rows[0] ?? null;
 }
+
+export async function deleteTask(taskId, userId) {
+  const sql = `
+    DELETE FROM tasks
+    WHERE id = $1 AND user_id = $2
+    RETURNING id
+  `;
+
+  const { rows } = await query(sql, [taskId, userId]);
+  return rows[0] ?? null;
+}
