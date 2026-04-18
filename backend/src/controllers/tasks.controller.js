@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { HttpError } from '../utils/httpError.js';
-import { createTask, listTasks, updateTaskStatus } from '../services/tasks.service.js';
+import { createTask, deleteTask, listTasks, updateTaskStatus } from '../services/tasks.service.js';
 
 const UserQuerySchema = z.object({
   userId: z.string().uuid()
@@ -19,6 +19,10 @@ const CreateTaskSchema = z.object({
 const UpdateStatusSchema = z.object({
   userId: z.string().uuid(),
   status: z.enum(['todo', 'in_progress', 'done'])
+});
+
+const DeleteTaskSchema = z.object({
+  userId: z.string().uuid()
 });
 
 export async function getTasks(req, res) {
@@ -56,4 +60,19 @@ export async function patchTaskStatus(req, res) {
   }
 
   res.json({ data: updated });
+}
+
+export async function removeTask(req, res) {
+  const taskId = req.params.id;
+  const parsed = DeleteTaskSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Payload delete task non valido');
+  }
+
+  const deleted = await deleteTask(taskId, parsed.data.userId);
+  if (!deleted) {
+    throw new HttpError(404, 'Task non trovato');
+  }
+
+  res.status(204).send();
 }

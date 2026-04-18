@@ -2034,7 +2034,35 @@ async function addTask() {
 }
 function addTaskFromSuggestion(titolo){tasks.push({id:nextTaskId++,label:titolo,done:false,priorita:'urgente',scadenza:'Oggi'});saveTasksToCache();renderTasks();showPage('task',document.querySelectorAll('.nav-item')[3]);}
 function toggleTask(id){const idKey=String(id);const t=tasks.find(t=>String(t.id)===idKey);if(t){if(!t.done)recordTaskPostponed(t);else{t.done=false;saveTasksToCache();renderTasks();return;}t.done=true;recordTaskCompleted(t);}saveTasksToCache();renderTasks();}
-function deleteTask(id){const idKey=String(id);tasks=tasks.filter(t=>String(t.id)!==idKey);saveTasksToCache();renderTasks();}
+async function deleteTask(id){
+  const idKey=String(id);
+  const previous=tasks.slice();
+  tasks=tasks.filter(t=>String(t.id)!==idKey);
+  saveTasksToCache();
+  renderTasks();
+
+  try{
+    if(currentUser?.id){
+      const res=await fetchApi(`/api/v1/tasks/${encodeURIComponent(idKey)}`,{
+        method:'DELETE',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({userId:currentUser.id})
+      });
+      if(!(res.status===204||res.status===200)){
+        const txt=await res.text().catch(()=> '');
+        console.warn(`DELETE /tasks/${idKey} fallita (${res.status}):`,txt);
+        tasks=previous;
+        saveTasksToCache();
+        renderTasks();
+      }
+    }
+  }catch(err){
+    console.warn('Errore delete task su backend:',err);
+    tasks=previous;
+    saveTasksToCache();
+    renderTasks();
+  }
+}
 
 // â”€â”€ NOTE CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function showNoteList(){document.getElementById('note-list-view').style.display='';document.getElementById('note-editor-view').style.display='none';document.getElementById('page-sub').textContent=notes.length+' note';document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">＋ Nuova nota</button>';renderNotes();updateBadges();}
