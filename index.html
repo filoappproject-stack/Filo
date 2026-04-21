@@ -389,7 +389,10 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
               Analizza la mia giornata
             </button>
           </div>
-          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#9E9B94;">Analisi rimanenti oggi: 3/3</div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div id="analyze-quota" style="font-size:12px;color:#9E9B94;">Analisi rimanenti oggi: 3/3</div>
+            <span id="analyze-fallback-badge" style="display:none;font-size:11px;line-height:1;padding:4px 8px;border-radius:999px;background:#F2F1EE;color:#6B6860;border:1px solid rgba(0,0,0,0.08);">Suggerimenti locali</span>
+          </div>
         </div>
         <div class="error-box" id="ai-error"></div>
         <div class="loader" id="ai-loader">
@@ -2297,6 +2300,11 @@ function updateAnalyzeQuotaLabel(limit,remaining){
   el.textContent='Analisi rimanenti oggi: --';
   el.style.color='#9E9B94';
 }
+function setAnalyzeFallbackBadge(active){
+  const el=document.getElementById('analyze-fallback-badge');
+  if(!el)return;
+  el.style.display=active?'inline-flex':'none';
+}
 function startAnalyzeCooldown(seconds){
   const btn=document.getElementById('analyze-btn');
   if(!btn)return;
@@ -2335,6 +2343,7 @@ async function analyzeDay(){
   loader.classList.add('active');
   errBox.classList.remove('active');
   container.innerHTML='';
+  setAnalyzeFallbackBadge(false);
   try{
     const res=await fetchApi('/api/v1/assistant/day-analysis',{
       method:'POST',
@@ -2352,6 +2361,7 @@ async function analyzeDay(){
         loader.classList.remove('active');
         btn.disabled=false;
         errBox.classList.remove('active');
+        setAnalyzeFallbackBadge(true);
         renderDaySuggestions(fallbackSuggestions);
         return;
       }
@@ -2363,6 +2373,7 @@ async function analyzeDay(){
         if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
         loader.classList.remove('active');
         if(!analyzeCooldownTimeoutId)btn.disabled=false;
+        setAnalyzeFallbackBadge(false);
         return;
       }
       const fallbackMsg=payload?.message||`POST /assistant/day-analysis fallita (${res.status})`;
@@ -2375,8 +2386,10 @@ async function analyzeDay(){
       const diagnosticId=payload?.data?.diagnosticId||null;
       if(diagnosticId)console.info('Day analysis in fallback locale. Ref:',diagnosticId);
       errBox.classList.remove('active');
+      setAnalyzeFallbackBadge(true);
     }else{
       errBox.classList.remove('active');
+      setAnalyzeFallbackBadge(false);
     }
     loader.classList.remove('active');
     btn.disabled=false;
@@ -2393,11 +2406,13 @@ async function analyzeDay(){
       errBox.textContent='Analisi AI non disponibile su questo deploy. Ti mostro suggerimenti locali.';
       errBox.classList.add('active');
       const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
+      setAnalyzeFallbackBadge(true);
       renderDaySuggestions(fallbackSuggestions);
       return;
     }
     errBox.textContent='Errore nell\'analisi. Riprova.';
     errBox.classList.add('active');
+    setAnalyzeFallbackBadge(false);
   }
 }
 
