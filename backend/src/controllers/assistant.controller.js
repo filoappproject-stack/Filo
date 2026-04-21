@@ -20,7 +20,7 @@ function buildDiagnosticId() {
   return `asst_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 }
 
-function logAssistantFailure(req, diagnosticId, error, data) {
+function logAssistantFailure(req, diagnosticId, error, data, failureStage) {
   const authUserId = req.auth?.userId || null;
   console.error('[assistant.day-analysis] failure', {
     diagnosticId,
@@ -31,6 +31,7 @@ function logAssistantFailure(req, diagnosticId, error, data) {
     agendaLength: (data?.agenda || '').length,
     pendingLength: (data?.pending || '').length,
     dayFocusLength: (data?.dayFocus || '').length,
+    failureStage,
     errorName: error?.name,
     errorMessage: error?.message
   });
@@ -47,8 +48,11 @@ export async function postDayAnalysis(req, res) {
     throw new HttpError(400, 'Inserisci almeno agenda o sospesi');
   }
 
+  let quota = null;
+  let failureStage = 'quota';
+
   try {
-    const quota = await consumeAnalysisQuota(req, data);
+    quota = await consumeAnalysisQuota(req, data);
 
     if (!quota.ok) {
       if (quota.error === 'CooldownExceeded') {
@@ -73,6 +77,7 @@ export async function postDayAnalysis(req, res) {
       });
     }
 
+    failureStage = 'analysis';
     const suggerimenti = await analyzeDay(data);
 
     return res.json({
@@ -88,15 +93,23 @@ export async function postDayAnalysis(req, res) {
     });
   } catch (error) {
     const diagnosticId = buildDiagnosticId();
-    logAssistantFailure(req, diagnosticId, error, data);
+    logAssistantFailure(req, diagnosticId, error, data, failureStage);
 
     const suggerimenti = buildFallbackSuggestions(data);
 
     return res.status(200).json({
       data: {
         suggerimenti,
-        quota: null,
+        quota: quota?.ok
+          ? {
+              limit: quota.limit,
+              used: quota.used,
+              remaining: quota.remaining,
+              dayKey: quota.dayKey
+            }
+          : null,
         degraded: true,
+        degradedStage: failureStage,
         diagnosticId,
         source: 'local-fallback'
       },
