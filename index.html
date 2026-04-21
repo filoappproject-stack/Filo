@@ -1268,6 +1268,8 @@ let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
 let analyzeCooldownTimeoutId=null;
+let analyzeQuotaEstimateLimit=3;
+let analyzeQuotaEstimateRemaining=3;
 let focusSessionTitle='';
 let focusSessionSeconds=0;
 let focusSessionIntervalId=null;
@@ -2301,6 +2303,22 @@ function updateAnalyzeQuotaLabel(limit,remaining){
   el.textContent='Analisi rimanenti oggi: --';
   el.style.color='#9E9B94';
 }
+function syncAnalyzeQuotaEstimate(limit,remaining){
+  if(Number.isFinite(limit)&&Number.isFinite(remaining)){
+    analyzeQuotaEstimateLimit=Math.max(0,Math.floor(limit));
+    analyzeQuotaEstimateRemaining=Math.max(0,Math.floor(remaining));
+  }
+}
+function consumeAnalyzeQuotaEstimate(){
+  if(!Number.isFinite(analyzeQuotaEstimateLimit)||analyzeQuotaEstimateLimit<=0){
+    analyzeQuotaEstimateLimit=3;
+  }
+  if(!Number.isFinite(analyzeQuotaEstimateRemaining)||analyzeQuotaEstimateRemaining<0){
+    analyzeQuotaEstimateRemaining=analyzeQuotaEstimateLimit;
+  }
+  analyzeQuotaEstimateRemaining=Math.max(0,analyzeQuotaEstimateRemaining-1);
+  return {limit:analyzeQuotaEstimateLimit,remaining:analyzeQuotaEstimateRemaining};
+}
 function setAnalyzeFallbackStatus(active,message=''){
   const badge=document.getElementById('analyze-fallback-badge');
   const note=document.getElementById('analyze-fallback-note');
@@ -2374,7 +2392,10 @@ async function analyzeDay(){
         const message=payload?.message||'Limite analisi raggiunto.';
         errBox.textContent=message;
         errBox.classList.add('active');
-        updateAnalyzeQuotaLabel(Number(payload?.limit),Number(payload?.remaining));
+        const limitVal=Number(payload?.limit);
+        const remainingVal=Number(payload?.remaining);
+        syncAnalyzeQuotaEstimate(limitVal,remainingVal);
+        updateAnalyzeQuotaLabel(limitVal,remainingVal);
         if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
         loader.classList.remove('active');
         if(!analyzeCooldownTimeoutId)btn.disabled=false;
@@ -2386,7 +2407,15 @@ async function analyzeDay(){
     }
     const suggestions=Array.isArray(payload?.data?.suggerimenti)?payload.data.suggerimenti:[];
     const quota=payload?.data?.quota||null;
-    if(quota){updateAnalyzeQuotaLabel(Number(quota.limit),Number(quota.remaining));}else{updateAnalyzeQuotaLabel(NaN,NaN);}
+    if(quota){
+      const limitVal=Number(quota.limit);
+      const remainingVal=Number(quota.remaining);
+      syncAnalyzeQuotaEstimate(limitVal,remainingVal);
+      updateAnalyzeQuotaLabel(limitVal,remainingVal);
+    }else{
+      const estimated=consumeAnalyzeQuotaEstimate();
+      updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
+    }
     if(payload?.data?.degraded){
       const diagnosticId=payload?.data?.diagnosticId||null;
       if(diagnosticId)console.info('Day analysis in fallback locale. Ref:',diagnosticId);
@@ -2412,6 +2441,8 @@ async function analyzeDay(){
       errBox.textContent='Analisi AI non disponibile su questo deploy. Ti mostro suggerimenti locali.';
       errBox.classList.add('active');
       const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
+      const estimated=consumeAnalyzeQuotaEstimate();
+      updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
       setAnalyzeFallbackStatus(true,'Endpoint analisi non disponibile: uso suggerimenti locali.');
       renderDaySuggestions(fallbackSuggestions);
       return;
