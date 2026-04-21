@@ -20,6 +20,29 @@ function buildDiagnosticId() {
   return `asst_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 }
 
+
+function buildDegradedReason(failureStage, error) {
+  const message = String(error?.message || '').toLowerCase();
+
+  if (failureStage === 'quota') {
+    return {
+      code: 'quota-temporarily-unavailable',
+      hint: 'Limiti analisi temporaneamente non verificabili: uso suggerimenti locali.'
+    };
+  }
+
+  if (message.includes('anthropic') || message.includes('api key')) {
+    return {
+      code: 'ai-provider-unavailable',
+      hint: 'Servizio AI temporaneamente non disponibile: uso suggerimenti locali.'
+    };
+  }
+
+  return {
+    code: 'analysis-temporarily-unavailable',
+    hint: 'Analisi avanzata temporaneamente non disponibile: uso suggerimenti locali.'
+  };
+}
 function logAssistantFailure(req, diagnosticId, error, data, failureStage) {
   const authUserId = req.auth?.userId || null;
   console.error('[assistant.day-analysis] failure', {
@@ -96,6 +119,7 @@ export async function postDayAnalysis(req, res) {
     logAssistantFailure(req, diagnosticId, error, data, failureStage);
 
     const suggerimenti = buildFallbackSuggestions(data);
+    const degradedReason = buildDegradedReason(failureStage, error);
 
     return res.status(200).json({
       data: {
@@ -110,6 +134,8 @@ export async function postDayAnalysis(req, res) {
           : null,
         degraded: true,
         degradedStage: failureStage,
+        degradedReason: degradedReason.code,
+        degradedHint: degradedReason.hint,
         diagnosticId,
         source: 'local-fallback'
       },
