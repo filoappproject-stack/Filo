@@ -2370,7 +2370,14 @@ async function analyzeDay(){
     }
     const suggestions=Array.isArray(payload?.data?.suggerimenti)?payload.data.suggerimenti:[];
     const quota=payload?.data?.quota||null;
-    if(quota)updateAnalyzeQuotaLabel(Number(quota.limit),Number(quota.remaining));
+    if(quota){updateAnalyzeQuotaLabel(Number(quota.limit),Number(quota.remaining));}else{updateAnalyzeQuotaLabel(NaN,NaN);}
+    if(payload?.data?.degraded){
+      const diagnosticId=payload?.data?.diagnosticId||null;
+      if(diagnosticId)console.info('Day analysis in fallback locale. Ref:',diagnosticId);
+      errBox.classList.remove('active');
+    }else{
+      errBox.classList.remove('active');
+    }
     loader.classList.remove('active');
     btn.disabled=false;
     renderDaySuggestions(suggestions);
