@@ -2340,6 +2340,7 @@ function setAnalyzeRequestDebug(message=''){
 }
 function startAnalyzeCooldown(seconds){
   const btn=document.getElementById('analyze-btn');
+  const errBox=document.getElementById('ai-error');
   if(!btn)return;
   if(analyzeCooldownTimeoutId){
     clearInterval(analyzeCooldownTimeoutId);
@@ -2347,8 +2348,18 @@ function startAnalyzeCooldown(seconds){
   }
   let left=Math.max(1,Math.ceil(Number(seconds)||0));
   const originalHtml=`<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.1 2.2 2.4.35-1.75 1.7.42 2.4L6.5 6.6 4.33 7.65l.42-2.4L3 3.55l2.4-.35z" fill="white"/></svg>Analizza la mia giornata`;
+
+  const renderCooldownMessage=()=>{
+    if(!errBox)return;
+    errBox.textContent=`Attendi ${left}s prima di una nuova richiesta.`;
+    errBox.classList.add('active');
+    errBox.dataset.cooldownMessage='1';
+  };
+
   btn.disabled=true;
   btn.innerHTML=`Attendi ${left}s`;
+  renderCooldownMessage();
+
   analyzeCooldownTimeoutId=setInterval(()=>{
     left-=1;
     if(left<=0){
@@ -2356,11 +2367,18 @@ function startAnalyzeCooldown(seconds){
       analyzeCooldownTimeoutId=null;
       btn.disabled=false;
       btn.innerHTML=originalHtml;
+      if(errBox?.dataset?.cooldownMessage==='1'){
+        errBox.classList.remove('active');
+        errBox.textContent='';
+        delete errBox.dataset.cooldownMessage;
+      }
       return;
     }
     btn.innerHTML=`Attendi ${left}s`;
+    renderCooldownMessage();
   },1000);
 }
+
 async function analyzeDay(){
   const agenda=document.getElementById('agenda-input').value.trim();
   const pending=document.getElementById('pending-input').value.trim();
@@ -2372,11 +2390,6 @@ async function analyzeDay(){
   if(analyzeCooldownUntilMs>now){
     const left=Math.ceil((analyzeCooldownUntilMs-now)/1000);
     startAnalyzeCooldown(left);
-    const errBox=document.getElementById('ai-error');
-    if(errBox){
-      errBox.textContent='Attendi qualche secondo prima di una nuova analisi.';
-      errBox.classList.add('active');
-    }
     return;
   }
   const btn=document.getElementById('analyze-btn');
