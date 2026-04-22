@@ -1686,7 +1686,7 @@ async function buildApiAuthHeaders(baseHeaders={}){
 }
 
 async function fetchApi(path,options={}){
-  const { singleAttempt=false, ...fetchOptions } = options||{};
+  const { singleAttempt=false, disableAuthRetry=false, ...fetchOptions } = options||{};
   let lastError=null;
   const authHeaders=await buildApiAuthHeaders(fetchOptions.headers||{});
   let requestOptions={...fetchOptions,headers:authHeaders};
@@ -1695,7 +1695,7 @@ async function fetchApi(path,options={}){
     try{
       const url=base.replace(/\/$/,'')+path;
       let res=await fetch(url,requestOptions);
-      if(res.status===401){
+      if(res.status===401&&!disableAuthRetry){
         const retryHeaders=await buildApiAuthHeaders(fetchOptions.headers||{});
         const oldAuth=(requestOptions.headers&&requestOptions.headers.Authorization)||'';
         const newAuth=retryHeaders.Authorization||'';
@@ -2470,6 +2470,7 @@ async function analyzeDay(){
   try{
     const res=await fetchApi('/api/v1/assistant/day-analysis',{
       singleAttempt:true,
+      disableAuthRetry:true,
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
