@@ -9,7 +9,7 @@ function splitItems(raw) {
     .slice(0, 8);
 }
 
-function buildFallbackSuggestions(input) {
+export function buildFallbackSuggestions(input) {
   const agendaItems = splitItems(input.agenda);
   const pendingItems = splitItems(input.pending);
   const focus = input.dayFocus ? String(input.dayFocus).trim() : '';
