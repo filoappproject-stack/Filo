@@ -1,5 +1,11 @@
 import { env } from '../config/env.js';
 
+let aiAttemptCounter = 0;
+
+export function getAiAttemptCounter() {
+  return aiAttemptCounter;
+}
+
 function splitItems(raw) {
   if (!raw) return [];
   return String(raw)
@@ -53,6 +59,7 @@ export function buildFallbackSuggestions(input) {
 }
 
 async function askAnthropic(input) {
+  aiAttemptCounter += 1;
   if (!env.ANTHROPIC_API_KEY) return null;
 
   const prompt = `Sei Filo, assistente operativo per manager.

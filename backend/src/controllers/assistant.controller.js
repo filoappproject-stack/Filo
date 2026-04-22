@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { z } from 'zod';
 import { HttpError } from '../utils/httpError.js';
-import { analyzeDay, buildFallbackSuggestions } from '../services/assistant.service.js';
+import { analyzeDay, buildFallbackSuggestions, getAiAttemptCounter } from '../services/assistant.service.js';
 import { consumeAnalysisQuota } from '../services/quota.service.js';
 
 const AnalyzeDaySchema = z.object({
@@ -111,6 +111,9 @@ export async function postDayAnalysis(req, res) {
           used: quota.used,
           remaining: quota.remaining,
           dayKey: quota.dayKey
+        },
+        diagnostics: {
+          aiAttemptCounter: getAiAttemptCounter()
         }
       }
     });
@@ -137,7 +140,10 @@ export async function postDayAnalysis(req, res) {
         degradedReason: degradedReason.code,
         degradedHint: degradedReason.hint,
         diagnosticId,
-        source: 'local-fallback'
+        source: 'local-fallback',
+        diagnostics: {
+          aiAttemptCounter: getAiAttemptCounter()
+        }
       },
       message: 'Analisi AI temporaneamente non disponibile: mostrati suggerimenti locali.'
     });

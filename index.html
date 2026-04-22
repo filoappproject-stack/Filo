@@ -2479,6 +2479,8 @@ async function analyzeDay(){
       })
     });
     const payload=await res.json().catch(()=>null);
+    const aiAttemptCounter=Number(payload?.data?.diagnostics?.aiAttemptCounter);
+    const responseDebugSuffix=Number.isFinite(aiAttemptCounter)?` · AI=${aiAttemptCounter}`:'';
     if(!res.ok){
       if(res.status===404){
         const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
@@ -2486,7 +2488,7 @@ async function analyzeDay(){
         if(!analyzeCooldownTimeoutId)btn.disabled=false;
         errBox.classList.remove('active');
         setAnalyzeFallbackStatus(true,'Endpoint analisi non disponibile: uso suggerimenti locali.');
-        setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})`);
+        setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})${responseDebugSuffix}`);
         renderDaySuggestions(fallbackSuggestions);
         analyzeRequestInFlight=false;
         return;
@@ -2506,7 +2508,7 @@ async function analyzeDay(){
         loader.classList.remove('active');
         if(!analyzeCooldownTimeoutId)btn.disabled=false;
         setAnalyzeFallbackStatus(false);
-        setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})`);
+        setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})${responseDebugSuffix}`);
         analyzeRequestInFlight=false;
         return;
       }
@@ -2536,7 +2538,7 @@ async function analyzeDay(){
     }
     loader.classList.remove('active');
     if(!analyzeCooldownTimeoutId)btn.disabled=false;
-    setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})`);
+    setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})${responseDebugSuffix}`);
     renderDaySuggestions(suggestions);
     analyzeRequestInFlight=false;
   }catch(e){
