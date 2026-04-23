@@ -1202,48 +1202,18 @@ async function loginSuccess(user) {
   restoreDayDraft();
   renderAll();
   restorePostOauthPage();
-  await loadTasksFromApi();
-  await loadNotesFromApi();
-  mailboxBackgroundSyncInProgress=true;
-  renderAll();
-  try{
-    await loadInboxMessages();
-    if(INBOX.length){
-      setInboxConnectionState(true,Date.now());
-      saveInboxToCache();
-    }
-  }catch(err){
-    if(!cachedInbox){
-      setInboxConnectionState(false,null);
-      INBOX.length=0;
-    }
-  }finally{
-    mailboxBackgroundSyncInProgress=false;
+  // Evita chiamate backend automatiche al boot:
+  // in caso di deploy backend degradato causavano una cascata di 500 in console.
+  // I sync restano disponibili via azioni esplicite dell'utente (Collega/Sincronizza/Salva/Analizza).
+  mailboxBackgroundSyncInProgress=false;
+  if(!cachedInbox){
+    setInboxConnectionState(false,null);
+    INBOX.length=0;
   }
-  let calendarStatusOk=false;
-  try{
-    await loadCalendarStatus();
-    calendarStatusOk=true;
-  }catch(err){
-    console.info('Stato calendario non disponibile al boot (retry manuale su Collega/Sincronizza).');
-  }
-  if(calendarStatusOk&&calendarConnected){
-    try{
-      await loadCalendarEvents();
-      if(calendarEvents.length&&!calendarConnected){
-        setCalendarConnectionState(true,null);
-      }
-    }catch(err){
-      console.info('Eventi calendario non disponibili al boot (retry manuale su Sincronizza).');
-      calendarEvents=[];
-    }
-  }else{
-    calendarEvents=[];
-  }
+  calendarEvents=[];
   renderAll();
   analyzePatterns();
   bindAnalyzeQuotaWatchers();
-  await refreshAnalyzeQuota();
 }
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────

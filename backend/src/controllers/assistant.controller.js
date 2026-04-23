@@ -186,3 +186,18 @@ export async function postDayAnalysisQuotaStatus(req, res) {
     }
   });
 }
+
+export async function postDayAnalysisQuotaStatus(req, res) {
+  const parsed = AnalyzeQuotaSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Payload quota analisi non valido');
+  }
+
+  const quota = await getAnalysisQuotaStatus(req, parsed.data);
+
+  res.json({
+    data: {
+      quota
+    }
+  });
+}
