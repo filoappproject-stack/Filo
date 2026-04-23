@@ -2357,11 +2357,12 @@ function updateAnalyzeQuotaLabel(limit,remaining){
   el.textContent='Analisi rimanenti oggi: --';
   el.style.color='#9E9B94';
 }
-function setAnalyzeButtonAvailability(remaining){
+function setAnalyzeButtonAvailability(remaining,options){
   const btn=document.getElementById('analyze-btn');
   if(!btn)return;
   if(analyzeCooldownTimeoutId)return;
-  const canAnalyze=Number.isFinite(remaining)?remaining>0:true;
+  const enforceQuota=Boolean(options&&options.enforceQuota);
+  const canAnalyze=enforceQuota&&Number.isFinite(remaining)?remaining>0:true;
   btn.disabled=!canAnalyze;
 }
 function applyAnalyzeQuotaState(quota){
@@ -2514,10 +2515,10 @@ async function analyzeDay(){
         errBox.textContent=message;
         errBox.classList.add('active');
         updateAnalyzeQuotaLabel(Number(payload?.limit),Number(payload?.remaining));
-        setAnalyzeButtonAvailability(Number(payload?.remaining));
+        setAnalyzeButtonAvailability(Number(payload?.remaining),{enforceQuota:true});
         if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
         loader.classList.remove('active');
-        if(!analyzeCooldownTimeoutId)setAnalyzeButtonAvailability(Number(payload?.remaining));
+        if(!analyzeCooldownTimeoutId)setAnalyzeButtonAvailability(Number(payload?.remaining),{enforceQuota:true});
         return;
       }
       const fallbackMsg=payload?.message||`POST /assistant/day-analysis fallita (${res.status})`;
