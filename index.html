@@ -389,7 +389,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
               Analizza la mia giornata
             </button>
           </div>
-          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#9E9B94;">Analisi rimanenti oggi: 3</div>
+          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#9E9B94;">Analisi rimanenti oggi: 3/3</div>
         </div>
         <div class="error-box" id="ai-error"></div>
         <div class="loader" id="ai-loader">
@@ -1235,6 +1235,8 @@ async function loginSuccess(user) {
   }
   renderAll();
   analyzePatterns();
+  bindAnalyzeQuotaWatchers();
+  await refreshAnalyzeQuota();
 }
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────
@@ -1264,6 +1266,8 @@ let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
 let analyzeCooldownTimeoutId=null;
+let analyzeQuotaRefreshTimeoutId=null;
+let analyzeQuotaWatchersBound=false;
 let focusSessionTitle='';
 let focusSessionSeconds=0;
 let focusSessionIntervalId=null;
@@ -2297,6 +2301,59 @@ function updateAnalyzeQuotaLabel(limit,remaining){
   el.textContent='Analisi rimanenti oggi: --';
   el.style.color='#9E9B94';
 }
+function setAnalyzeButtonAvailability(remaining){
+  const btn=document.getElementById('analyze-btn');
+  if(!btn)return;
+  if(analyzeCooldownTimeoutId)return;
+  const canAnalyze=Number.isFinite(remaining)?remaining>0:true;
+  btn.disabled=!canAnalyze;
+}
+function applyAnalyzeQuotaState(quota){
+  if(!quota)return;
+  const limit=Number(quota.limit);
+  const remaining=Number(quota.remaining);
+  if(Number.isFinite(limit)&&Number.isFinite(remaining)){
+    updateAnalyzeQuotaLabel(limit,remaining);
+    setAnalyzeButtonAvailability(remaining);
+  }
+}
+async function refreshAnalyzeQuota(){
+  try{
+    const agenda=document.getElementById('agenda-input')?.value?.trim()||'';
+    const pending=document.getElementById('pending-input')?.value?.trim()||'';
+    const res=await fetchApi('/api/v1/assistant/day-analysis/quota',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        userId:currentUser?.id||null,
+        agenda,pending
+      })
+    });
+    if(!res.ok)return;
+    const payload=await res.json().catch(()=>null);
+    applyAnalyzeQuotaState(payload?.data?.quota||null);
+  }catch(err){
+    console.warn('Impossibile aggiornare quota analisi:',err);
+  }
+}
+function scheduleAnalyzeQuotaRefresh(){
+  if(analyzeQuotaRefreshTimeoutId){
+    clearTimeout(analyzeQuotaRefreshTimeoutId);
+    analyzeQuotaRefreshTimeoutId=null;
+  }
+  analyzeQuotaRefreshTimeoutId=setTimeout(()=>{
+    analyzeQuotaRefreshTimeoutId=null;
+    refreshAnalyzeQuota();
+  },250);
+}
+function bindAnalyzeQuotaWatchers(){
+  if(analyzeQuotaWatchersBound)return;
+  const agendaEl=document.getElementById('agenda-input');
+  const pendingEl=document.getElementById('pending-input');
+  if(agendaEl)agendaEl.addEventListener('input',scheduleAnalyzeQuotaRefresh);
+  if(pendingEl)pendingEl.addEventListener('input',scheduleAnalyzeQuotaRefresh);
+  analyzeQuotaWatchersBound=true;
+}
 function startAnalyzeCooldown(seconds){
   const btn=document.getElementById('analyze-btn');
   if(!btn)return;
@@ -2313,8 +2370,8 @@ function startAnalyzeCooldown(seconds){
     if(left<=0){
       clearInterval(analyzeCooldownTimeoutId);
       analyzeCooldownTimeoutId=null;
-      btn.disabled=false;
       btn.innerHTML=originalHtml;
+      refreshAnalyzeQuota();
       return;
     }
     btn.innerHTML=`Attendi ${left}s`;
@@ -2350,7 +2407,7 @@ async function analyzeDay(){
       if(res.status===404){
         const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
         loader.classList.remove('active');
-        btn.disabled=false;
+        setAnalyzeButtonAvailability(Number.NaN);
         errBox.classList.remove('active');
         renderDaySuggestions(fallbackSuggestions);
         return;
@@ -2360,9 +2417,10 @@ async function analyzeDay(){
         errBox.textContent=message;
         errBox.classList.add('active');
         updateAnalyzeQuotaLabel(Number(payload?.limit),Number(payload?.remaining));
+        setAnalyzeButtonAvailability(Number(payload?.remaining));
         if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
         loader.classList.remove('active');
-        if(!analyzeCooldownTimeoutId)btn.disabled=false;
+        if(!analyzeCooldownTimeoutId)setAnalyzeButtonAvailability(Number(payload?.remaining));
         return;
       }
       const fallbackMsg=payload?.message||`POST /assistant/day-analysis fallita (${res.status})`;
@@ -2370,14 +2428,14 @@ async function analyzeDay(){
     }
     const suggestions=Array.isArray(payload?.data?.suggerimenti)?payload.data.suggerimenti:[];
     const quota=payload?.data?.quota||null;
-    if(quota)updateAnalyzeQuotaLabel(Number(quota.limit),Number(quota.remaining));
+    if(quota)applyAnalyzeQuotaState(quota);
     loader.classList.remove('active');
-    btn.disabled=false;
+    if(!quota)setAnalyzeButtonAvailability(Number.NaN);
     renderDaySuggestions(suggestions);
   }catch(e){
     console.warn('Errore analisi giornata:',e);
     loader.classList.remove('active');
-    btn.disabled=false;
+    setAnalyzeButtonAvailability(Number.NaN);
     const msg=String(e?.message||'');
     const assistantEndpointMissing =
       msg.includes('/api/v1/assistant/day-analysis') ||
