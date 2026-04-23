@@ -2385,14 +2385,19 @@ async function refreshAnalyzeQuota(){
         agenda,pending
       })
     });
-    if(!res.ok)return;
+    if(!res.ok){
+      setAnalyzeButtonAvailability(Number.NaN);
+      return;
+    }
     const payload=await res.json().catch(()=>null);
     applyAnalyzeQuotaState(payload?.data?.quota||null);
   }catch(err){
     console.warn('Impossibile aggiornare quota analisi:',err);
+    setAnalyzeButtonAvailability(Number.NaN);
   }
 }
 function scheduleAnalyzeQuotaRefresh(){
+  setAnalyzeButtonAvailability(Number.NaN);
   if(analyzeQuotaRefreshTimeoutId){
     clearTimeout(analyzeQuotaRefreshTimeoutId);
     analyzeQuotaRefreshTimeoutId=null;
