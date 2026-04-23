@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { HttpError } from '../utils/httpError.js';
 import { analyzeDay } from '../services/assistant.service.js';
-import { consumeAnalysisQuota } from '../services/quota.service.js';
+import { consumeAnalysisQuota, getAnalysisQuotaStatus } from '../services/quota.service.js';
 
 const AnalyzeDaySchema = z.object({
   userId: z.string().uuid().optional().nullable(),
@@ -13,6 +13,12 @@ const AnalyzeDaySchema = z.object({
   memoryContext: z.string().trim().max(4000).optional().default(''),
   energy: z.coerce.number().min(1).max(5).optional().nullable(),
   stress: z.coerce.number().min(1).max(5).optional().nullable()
+});
+
+const AnalyzeQuotaSchema = z.object({
+  userId: z.string().uuid().optional().nullable(),
+  agenda: z.string().trim().max(5000).optional().default(''),
+  pending: z.string().trim().max(5000).optional().default('')
 });
 
 export async function postDayAnalysis(req, res) {
@@ -62,6 +68,21 @@ export async function postDayAnalysis(req, res) {
         remaining: quota.remaining,
         dayKey: quota.dayKey
       }
+    }
+  });
+}
+
+export async function postDayAnalysisQuota(req, res) {
+  const parsed = AnalyzeQuotaSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Payload quota analisi non valido');
+  }
+
+  const quota = await getAnalysisQuotaStatus(req, parsed.data);
+
+  res.json({
+    data: {
+      quota
     }
   });
 }
