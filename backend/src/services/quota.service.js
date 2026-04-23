@@ -176,7 +176,12 @@ export async function consumeAnalysisQuota(req, payload) {
     return consumeInMemory(actorKey, dayKey, allowedLimit, now.getTime());
   }
 
-  return consumeInDatabase(actorKey, dayKey, allowedLimit, now.toISOString());
+  try {
+    return consumeInDatabase(actorKey, dayKey, allowedLimit, now.toISOString());
+  } catch (error) {
+    console.warn('Quota DB non disponibile, fallback in-memory attivato:', error?.message || error);
+    return consumeInMemory(actorKey, dayKey, allowedLimit, now.getTime());
+  }
 }
 
 function getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, nowMs) {
