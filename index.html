@@ -1196,7 +1196,8 @@ async function loginSuccess(user) {
     cachedInbox.messages.forEach(m=>INBOX.push(m));
     setInboxConnectionState(cachedInbox.connected,cachedInbox.lastSync);
   }
-  await hydrateLatestCheckinFromApi();
+  // Evita fetch check-in da API al boot (in deploy degradati generava 500 a freddo).
+  // Manteniamo solo recupero profilo/cache locale.
   if(!hasCheckinForDate(formatLocalDate()))hydrateLatestCheckinFromSupabaseProfile();
   initCheckin();
   restoreDayDraft();
