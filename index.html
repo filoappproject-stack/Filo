@@ -1987,19 +1987,24 @@ async function connectCalendar(){
   renderCalendarControls();
   try{
     const state=`${getCalendarStatePrefix()}${currentUser.id}:${Date.now()}`;
-    const redirectUri=getCalendarConnectRedirectUri();
     removeCalendarTransient(CALENDAR_OAUTH_QUERY_STORAGE_KEY);
     setCalendarTransient('filo_calendar_oauth_state',state);
-    setCalendarTransient(CALENDAR_REDIRECT_URI_KEY,redirectUri);
     markCalendarOAuthPending(currentUser.id);
     sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'calendario');
-
-    const base=(API_BASES[0]||window.location.origin).replace(/\/$/,'');
-    const qs=new URLSearchParams({userId:currentUser.id,redirectUri,state});
+    const calendarAuth=await requestCalendarConnectUrl(currentUser.id,state);
+    const authUrl=typeof calendarAuth==='string'?calendarAuth:calendarAuth?.authUrl;
+    const redirectUri=typeof calendarAuth==='object'&&calendarAuth?.redirectUri?calendarAuth.redirectUri:getCalendarConnectRedirectUri();
+    if(!authUrl)throw new Error('URL autorizzazione calendario non disponibile');
+    setCalendarTransient(CALENDAR_REDIRECT_URI_KEY,redirectUri);
     setCalendarDiagnostic('IN CORSO',`redirect ${redirectUri}`);
-    window.location.assign(`${base}/api/v1/calendar/google/connect?${qs.toString()}`);
+    window.location.assign(authUrl);
   }catch(err){
-    const reason='Servizio backend non pronto (deploy). Riprova tra poco.';
+    let reason=err?.message?String(err.message):'errore sconosciuto';
+    if(reason.toLowerCase()==='failed to fetch'){
+      reason=`Failed to fetch (API base: ${API_BASES.join(', ')||'n/d'})`;
+    }
+    if(reason.includes('Autenticazione richiesta'))reason='Sessione scaduta: effettua di nuovo il login.';
+    if(reason.includes('API bootstrap failed'))reason='Servizio backend non pronto (deploy). Riprova tra poco.';
     calendarConnectionError=`Connessione calendario non riuscita: ${reason}`;
     setCalendarDiagnostic('KO',reason);
     clearCalendarOAuthFlowState();
