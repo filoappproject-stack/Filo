@@ -2354,27 +2354,9 @@ function applyAnalyzeQuotaState(quota){
   }
 }
 async function refreshAnalyzeQuota(){
-  try{
-    const agenda=document.getElementById('agenda-input')?.value?.trim()||'';
-    const pending=document.getElementById('pending-input')?.value?.trim()||'';
-    const res=await fetchApi('/api/v1/assistant/day-analysis/quota',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        userId:currentUser?.id||null,
-        agenda,pending
-      })
-    });
-    if(!res.ok){
-      setAnalyzeButtonAvailability(Number.NaN);
-      return;
-    }
-    const payload=await res.json().catch(()=>null);
-    applyAnalyzeQuotaState(payload?.data?.quota||null);
-  }catch(err){
-    console.warn('Impossibile aggiornare quota analisi:',err);
-    setAnalyzeButtonAvailability(Number.NaN);
-  }
+  // Quota endpoint rimosso per evitare bootstrap failure lato backend.
+  // La quota viene aggiornata solo dalle risposte reali di /day-analysis.
+  setAnalyzeButtonAvailability(Number.NaN);
 }
 function scheduleAnalyzeQuotaRefresh(){
   setAnalyzeButtonAvailability(Number.NaN);
