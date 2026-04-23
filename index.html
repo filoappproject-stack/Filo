@@ -1199,6 +1199,7 @@ async function loginSuccess(user) {
   await hydrateLatestCheckinFromApi();
   if(!hasCheckinForDate(formatLocalDate()))hydrateLatestCheckinFromSupabaseProfile();
   initCheckin();
+  restoreDayDraft();
   renderAll();
   restorePostOauthPage();
   await loadTasksFromApi();
@@ -1298,8 +1299,59 @@ const NOTES_CACHE_PREFIX='filo_notes_cache_';
 const NOTES_BACKFILL_DONE_PREFIX='filo_notes_backfill_done_';
 const INBOX_CACHE_PREFIX='filo_inbox_cache_';
 const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
+const DAY_ANALYSIS_DRAFT_PREFIX='filo_day_analysis_draft_';
 
 function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
+
+function getDayDraftStorageKey(){
+  if(!currentUser?.id)return null;
+  return `${DAY_ANALYSIS_DRAFT_PREFIX}${currentUser.id}`;
+}
+function getDayDraftFromInputs(){
+  return {
+    agenda:document.getElementById('agenda-input')?.value||'',
+    pending:document.getElementById('pending-input')?.value||'',
+    dayEnd:document.getElementById('day-end-input')?.value||'',
+    availability:document.getElementById('day-availability-input')?.value||'',
+    dayFocus:document.getElementById('day-focus-input')?.value||''
+  };
+}
+function applyDayDraftToInputs(draft){
+  if(!draft||typeof draft!=='object')return;
+  const agenda=document.getElementById('agenda-input');
+  const pending=document.getElementById('pending-input');
+  const dayEnd=document.getElementById('day-end-input');
+  const availability=document.getElementById('day-availability-input');
+  const dayFocus=document.getElementById('day-focus-input');
+  if(agenda&&typeof draft.agenda==='string')agenda.value=draft.agenda;
+  if(pending&&typeof draft.pending==='string')pending.value=draft.pending;
+  if(dayEnd&&typeof draft.dayEnd==='string')dayEnd.value=draft.dayEnd;
+  if(availability&&typeof draft.availability==='string')availability.value=draft.availability;
+  if(dayFocus&&typeof draft.dayFocus==='string')dayFocus.value=draft.dayFocus;
+}
+function saveDayDraft(){
+  const key=getDayDraftStorageKey();
+  if(!key)return;
+  try{localStorage.setItem(key,JSON.stringify(getDayDraftFromInputs()));}catch(e){}
+}
+function restoreDayDraft(){
+  const key=getDayDraftStorageKey();
+  if(!key)return;
+  try{
+    const raw=localStorage.getItem(key);
+    if(!raw)return;
+    applyDayDraftToInputs(JSON.parse(raw));
+  }catch(e){}
+}
+function initDayDraftAutosave(){
+  ['agenda-input','pending-input','day-end-input','day-availability-input','day-focus-input'].forEach((id)=>{
+    const el=document.getElementById(id);
+    if(!el||el.dataset.draftBound==='1')return;
+    el.addEventListener('input',saveDayDraft);
+    el.addEventListener('change',saveDayDraft);
+    el.dataset.draftBound='1';
+  });
+}
 function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
 function saveTasksToCache(){const key=getTaskCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(tasks));}catch(e){}}
 function loadTasksFromCache(){const key=getTaskCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
@@ -1627,19 +1679,21 @@ async function buildApiAuthHeaders(baseHeaders={}){
 }
 
 async function fetchApi(path,options={}){
+  const { singleAttempt=false, disableAuthRetry=false, ...fetchOptions } = options||{};
   let lastError=null;
-  const authHeaders=await buildApiAuthHeaders(options.headers||{});
-  let requestOptions={...options,headers:authHeaders};
-  for(const base of API_BASES){
+  const authHeaders=await buildApiAuthHeaders(fetchOptions.headers||{});
+  let requestOptions={...fetchOptions,headers:authHeaders};
+  const bases=singleAttempt?[API_BASES[0]].filter(Boolean):API_BASES;
+  for(const base of bases){
     try{
       const url=base.replace(/\/$/,'')+path;
       let res=await fetch(url,requestOptions);
-      if(res.status===401){
-        const retryHeaders=await buildApiAuthHeaders(options.headers||{});
+      if(res.status===401&&!disableAuthRetry){
+        const retryHeaders=await buildApiAuthHeaders(fetchOptions.headers||{});
         const oldAuth=(requestOptions.headers&&requestOptions.headers.Authorization)||'';
         const newAuth=retryHeaders.Authorization||'';
         if(newAuth&&newAuth!==oldAuth){
-          requestOptions={...options,headers:retryHeaders};
+          requestOptions={...fetchOptions,headers:retryHeaders};
           res=await fetch(url,requestOptions);
         }
       }
@@ -2089,6 +2143,7 @@ function appendGuidedInput(targetId,label){
   const value=input.value.trim();
   const entry=label.endsWith(':')?label:`${label}: `;
   input.value=value?`${value}, ${entry}`:entry;
+  saveDayDraft();
   input.focus();
   input.selectionStart=input.selectionEnd=input.value.length;
 }
@@ -2098,6 +2153,7 @@ function fillExample(){
   document.getElementById('day-end-input').value='18:30';
   document.getElementById('day-availability-input').value='2-4 ore';
   document.getElementById('day-focus-input').value='Chiudere il budget Q2 senza rimandare le urgenze clienti';
+  saveDayDraft();
 }
 function fmtFocusTime(totalSeconds){
   const minutes=Math.floor(totalSeconds/60);
@@ -2362,6 +2418,7 @@ function bindAnalyzeQuotaWatchers(){
 }
 function startAnalyzeCooldown(seconds){
   const btn=document.getElementById('analyze-btn');
+  const errBox=document.getElementById('ai-error');
   if(!btn)return;
   if(analyzeCooldownTimeoutId){
     clearInterval(analyzeCooldownTimeoutId);
@@ -2369,8 +2426,18 @@ function startAnalyzeCooldown(seconds){
   }
   let left=Math.max(1,Math.ceil(Number(seconds)||0));
   const originalHtml=`<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.1 2.2 2.4.35-1.75 1.7.42 2.4L6.5 6.6 4.33 7.65l.42-2.4L3 3.55l2.4-.35z" fill="white"/></svg>Analizza la mia giornata`;
+
+  const renderCooldownMessage=()=>{
+    if(!errBox)return;
+    errBox.textContent=`Attendi ${left}s prima di una nuova richiesta.`;
+    errBox.classList.add('active');
+    errBox.dataset.cooldownMessage='1';
+  };
+
   btn.disabled=true;
   btn.innerHTML=`Attendi ${left}s`;
+  renderCooldownMessage();
+
   analyzeCooldownTimeoutId=setInterval(()=>{
     left-=1;
     if(left<=0){
@@ -2381,8 +2448,10 @@ function startAnalyzeCooldown(seconds){
       return;
     }
     btn.innerHTML=`Attendi ${left}s`;
+    renderCooldownMessage();
   },1000);
 }
+
 async function analyzeDay(){
   const agenda=document.getElementById('agenda-input').value.trim();
   const pending=document.getElementById('pending-input').value.trim();
@@ -2390,6 +2459,17 @@ async function analyzeDay(){
   const availability=document.getElementById('day-availability-input')?.value||'';
   const dayFocus=document.getElementById('day-focus-input')?.value.trim()||'';
   if(!agenda&&!pending)return;
+  const now=Date.now();
+  if(analyzeCooldownUntilMs>now){
+    const left=Math.ceil((analyzeCooldownUntilMs-now)/1000);
+    startAnalyzeCooldown(left);
+    return;
+  }
+  if(analyzeRequestInFlight){
+    setAnalyzeRequestDebug('Richiesta già in corso (#in-flight)');
+    return;
+  }
+  analyzeRequestInFlight=true;
   const btn=document.getElementById('analyze-btn');
   const loader=document.getElementById('ai-loader');
   const errBox=document.getElementById('ai-error');
@@ -2398,8 +2478,15 @@ async function analyzeDay(){
   loader.classList.add('active');
   errBox.classList.remove('active');
   container.innerHTML='';
+  setAnalyzeFallbackStatus(false);
+  const requestId=++analyzeRequestSeq;
+  analyzeCooldownUntilMs=Date.now()+ANALYZE_MIN_INTERVAL_MS;
+  setAnalyzeRequestDebug(`Richiesta partita (#${requestId})`);
+  startAnalyzeCooldown(Math.ceil(ANALYZE_MIN_INTERVAL_MS/1000));
   try{
     const res=await fetchApi('/api/v1/assistant/day-analysis',{
+      singleAttempt:true,
+      disableAuthRetry:true,
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -2409,13 +2496,18 @@ async function analyzeDay(){
       })
     });
     const payload=await res.json().catch(()=>null);
+    const aiAttemptCounter=Number(payload?.data?.diagnostics?.aiAttemptCounter);
+    const responseDebugSuffix=Number.isFinite(aiAttemptCounter)?` · AI=${aiAttemptCounter}`:'';
     if(!res.ok){
       if(res.status===404){
         const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
         loader.classList.remove('active');
         setAnalyzeButtonAvailability(Number.NaN);
         errBox.classList.remove('active');
+        setAnalyzeFallbackStatus(true,'Endpoint analisi non disponibile: uso suggerimenti locali.');
+        setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})${responseDebugSuffix}`);
         renderDaySuggestions(fallbackSuggestions);
+        analyzeRequestInFlight=false;
         return;
       }
       if(res.status===429&&payload){
@@ -2438,6 +2530,7 @@ async function analyzeDay(){
     loader.classList.remove('active');
     if(!quota)setAnalyzeButtonAvailability(Number.NaN);
     renderDaySuggestions(suggestions);
+    analyzeRequestInFlight=false;
   }catch(e){
     console.warn('Errore analisi giornata:',e);
     loader.classList.remove('active');
@@ -2450,17 +2543,26 @@ async function analyzeDay(){
       errBox.textContent='Analisi AI non disponibile su questo deploy. Ti mostro suggerimenti locali.';
       errBox.classList.add('active');
       const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
+      const estimated=consumeAnalyzeQuotaEstimate();
+      updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
+      setAnalyzeFallbackStatus(true,'Endpoint analisi non disponibile: uso suggerimenti locali.');
+      setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
       renderDaySuggestions(fallbackSuggestions);
+      analyzeRequestInFlight=false;
       return;
     }
     errBox.textContent='Errore nell\'analisi. Riprova.';
     errBox.classList.add('active');
+    setAnalyzeFallbackStatus(false);
+    setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
+    analyzeRequestInFlight=false;
   }
 }
 
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
   if(window.__filoAbortInitAfterOAuthPreserve)return;
+  initDayDraftAutosave();
   document.getElementById('login-password').value = '';
   clearCorruptedPasswordAutofill();
   let isAuthBootstrapping = true;
