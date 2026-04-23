@@ -1274,6 +1274,7 @@ let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
 let analyzeCooldownTimeoutId=null;
 let analyzeCooldownUntilMs=0;
+let analyzeRequestInFlight=false;
 let analyzeQuotaRefreshTimeoutId=null;
 let analyzeQuotaWatchersBound=false;
 let focusSessionTitle='';
@@ -2462,6 +2463,7 @@ function startAnalyzeCooldown(seconds){
 }
 
 async function analyzeDay(){
+  if(analyzeRequestInFlight)return;
   const agenda=document.getElementById('agenda-input').value.trim();
   const pending=document.getElementById('pending-input').value.trim();
   const dayEnd=document.getElementById('day-end-input')?.value||'';
@@ -2483,6 +2485,7 @@ async function analyzeDay(){
   const loader=document.getElementById('ai-loader');
   const errBox=document.getElementById('ai-error');
   const container=document.getElementById('suggestions-container');
+  analyzeRequestInFlight=true;
   btn.disabled=true;
   loader.classList.add('active');
   errBox.classList.remove('active');
@@ -2528,6 +2531,7 @@ async function analyzeDay(){
         if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
         loader.classList.remove('active');
         if(!analyzeCooldownTimeoutId)setAnalyzeButtonAvailability(Number(payload?.remaining),{enforceQuota:true});
+        analyzeRequestInFlight=false;
         return;
       }
       const fallbackMsg=payload?.message||`POST /assistant/day-analysis fallita (${res.status})`;
@@ -2562,8 +2566,6 @@ async function analyzeDay(){
     }
     errBox.textContent='Errore nell\'analisi. Riprova.';
     errBox.classList.add('active');
-    setAnalyzeFallbackStatus(false);
-    setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
     analyzeRequestInFlight=false;
   }
 }
