@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import { z } from 'zod';
 import { HttpError } from '../utils/httpError.js';
-import { analyzeDay, buildFallbackSuggestions, getAiAttemptCounter } from '../services/assistant.service.js';
-import { consumeAnalysisQuota } from '../services/quota.service.js';
+import { analyzeDay } from '../services/assistant.service.js';
+import { consumeAnalysisQuota, getAnalysisQuotaStatus } from '../services/quota.service.js';
 
 const AnalyzeDaySchema = z.object({
   userId: z.string().uuid().optional().nullable(),
@@ -16,49 +16,11 @@ const AnalyzeDaySchema = z.object({
   stress: z.coerce.number().min(1).max(5).optional().nullable()
 });
 
-function buildDiagnosticId() {
-  return `asst_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
-}
-
-
-function buildDegradedReason(failureStage, error) {
-  const message = String(error?.message || '').toLowerCase();
-
-  if (failureStage === 'quota') {
-    return {
-      code: 'quota-temporarily-unavailable',
-      hint: 'Limiti analisi temporaneamente non verificabili: uso suggerimenti locali.'
-    };
-  }
-
-  if (message.includes('anthropic') || message.includes('api key')) {
-    return {
-      code: 'ai-provider-unavailable',
-      hint: 'Servizio AI temporaneamente non disponibile: uso suggerimenti locali.'
-    };
-  }
-
-  return {
-    code: 'analysis-temporarily-unavailable',
-    hint: 'Analisi avanzata temporaneamente non disponibile: uso suggerimenti locali.'
-  };
-}
-function logAssistantFailure(req, diagnosticId, error, data, failureStage) {
-  const authUserId = req.auth?.userId || null;
-  console.error('[assistant.day-analysis] failure', {
-    diagnosticId,
-    route: req.originalUrl,
-    method: req.method,
-    authUserId,
-    payloadUserId: data?.userId || null,
-    agendaLength: (data?.agenda || '').length,
-    pendingLength: (data?.pending || '').length,
-    dayFocusLength: (data?.dayFocus || '').length,
-    failureStage,
-    errorName: error?.name,
-    errorMessage: error?.message
-  });
-}
+const AnalyzeQuotaSchema = z.object({
+  userId: z.string().uuid().optional().nullable(),
+  agenda: z.string().trim().max(5000).optional().default(''),
+  pending: z.string().trim().max(5000).optional().default('')
+});
 
 export async function postDayAnalysis(req, res) {
   const parsed = AnalyzeDaySchema.safeParse(req.body);
@@ -148,4 +110,19 @@ export async function postDayAnalysis(req, res) {
       message: 'Analisi AI temporaneamente non disponibile: mostrati suggerimenti locali.'
     });
   }
+}
+
+export async function postDayAnalysisQuota(req, res) {
+  const parsed = AnalyzeQuotaSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Payload quota analisi non valido');
+  }
+
+  const quota = await getAnalysisQuotaStatus(req, parsed.data);
+
+  res.json({
+    data: {
+      quota
+    }
+  });
 }
