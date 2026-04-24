@@ -2610,7 +2610,8 @@ async function init() {
     try{
       const {data:{session}}=await supabaseClient.auth.getSession();
       if(session){
-        console.info(`UI fallback sospeso (${reason}): sessione valida`);
+        console.info(`UI fallback recovery (${reason}): sessione valida, forzo loginSuccess`);
+        await loginSuccess(session.user);
         return;
       }
     }catch(e){}
