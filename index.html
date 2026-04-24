@@ -389,7 +389,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
               Analizza la mia giornata
             </button>
           </div>
-          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#9E9B94;">Analisi rimanenti oggi: 3/3</div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div id="analyze-quota" style="font-size:12px;color:#9E9B94;">Analisi rimanenti oggi: 3/3</div>
+            <span id="analyze-fallback-badge" style="display:none;font-size:11px;line-height:1;padding:4px 8px;border-radius:999px;background:#F2F1EE;color:#6B6860;border:1px solid rgba(0,0,0,0.08);">Suggerimenti locali</span>
+          </div>
+          <div id="analyze-fallback-note" style="display:none;margin-top:6px;font-size:12px;color:#6B6860;"></div>
+          <div id="analyze-request-debug" style="display:none;margin-top:4px;font-size:12px;color:#1A4FBF;"></div>
         </div>
         <div class="error-box" id="ai-error"></div>
         <div class="loader" id="ai-loader">
@@ -1244,10 +1249,12 @@ let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
 let analyzeCooldownTimeoutId=null;
+let analyzeQuotaEstimateLimit=3;
+let analyzeQuotaEstimateRemaining=3;
+let analyzeRequestSeq=0;
 let analyzeCooldownUntilMs=0;
 let analyzeRequestInFlight=false;
-let analyzeQuotaRefreshTimeoutId=null;
-let analyzeQuotaWatchersBound=false;
+const ANALYZE_MIN_INTERVAL_MS=20000;
 let focusSessionTitle='';
 let focusSessionSeconds=0;
 let focusSessionIntervalId=null;
@@ -2377,46 +2384,36 @@ function updateAnalyzeQuotaLabel(limit,remaining){
   el.textContent='Analisi rimanenti oggi: --';
   el.style.color='#9E9B94';
 }
-function setAnalyzeButtonAvailability(remaining,options){
-  const btn=document.getElementById('analyze-btn');
-  if(!btn)return;
-  if(analyzeCooldownTimeoutId)return;
-  const enforceQuota=Boolean(options&&options.enforceQuota);
-  const canAnalyze=enforceQuota&&Number.isFinite(remaining)?remaining>0:true;
-  btn.disabled=!canAnalyze;
-}
-function applyAnalyzeQuotaState(quota){
-  if(!quota)return;
-  const limit=Number(quota.limit);
-  const remaining=Number(quota.remaining);
+function syncAnalyzeQuotaEstimate(limit,remaining){
   if(Number.isFinite(limit)&&Number.isFinite(remaining)){
-    updateAnalyzeQuotaLabel(limit,remaining);
-    setAnalyzeButtonAvailability(remaining);
+    analyzeQuotaEstimateLimit=Math.max(0,Math.floor(limit));
+    analyzeQuotaEstimateRemaining=Math.max(0,Math.floor(remaining));
   }
 }
-async function refreshAnalyzeQuota(){
-  // Quota endpoint rimosso per evitare bootstrap failure lato backend.
-  // La quota viene aggiornata solo dalle risposte reali di /day-analysis.
-  setAnalyzeButtonAvailability(Number.NaN);
-}
-function scheduleAnalyzeQuotaRefresh(){
-  setAnalyzeButtonAvailability(Number.NaN);
-  if(analyzeQuotaRefreshTimeoutId){
-    clearTimeout(analyzeQuotaRefreshTimeoutId);
-    analyzeQuotaRefreshTimeoutId=null;
+function consumeAnalyzeQuotaEstimate(){
+  if(!Number.isFinite(analyzeQuotaEstimateLimit)||analyzeQuotaEstimateLimit<=0){
+    analyzeQuotaEstimateLimit=3;
   }
-  analyzeQuotaRefreshTimeoutId=setTimeout(()=>{
-    analyzeQuotaRefreshTimeoutId=null;
-    refreshAnalyzeQuota();
-  },250);
+  if(!Number.isFinite(analyzeQuotaEstimateRemaining)||analyzeQuotaEstimateRemaining<0){
+    analyzeQuotaEstimateRemaining=analyzeQuotaEstimateLimit;
+  }
+  analyzeQuotaEstimateRemaining=Math.max(0,analyzeQuotaEstimateRemaining-1);
+  return {limit:analyzeQuotaEstimateLimit,remaining:analyzeQuotaEstimateRemaining};
 }
-function bindAnalyzeQuotaWatchers(){
-  if(analyzeQuotaWatchersBound)return;
-  const agendaEl=document.getElementById('agenda-input');
-  const pendingEl=document.getElementById('pending-input');
-  if(agendaEl)agendaEl.addEventListener('input',scheduleAnalyzeQuotaRefresh);
-  if(pendingEl)pendingEl.addEventListener('input',scheduleAnalyzeQuotaRefresh);
-  analyzeQuotaWatchersBound=true;
+function setAnalyzeFallbackStatus(active,message=''){
+  const badge=document.getElementById('analyze-fallback-badge');
+  const note=document.getElementById('analyze-fallback-note');
+  if(badge)badge.style.display=active?'inline-flex':'none';
+  if(note){
+    note.style.display=active&&message?'block':'none';
+    note.textContent=active&&message?message:'';
+  }
+}
+function setAnalyzeRequestDebug(message=''){
+  const el=document.getElementById('analyze-request-debug');
+  if(!el)return;
+  el.style.display=message?'block':'none';
+  el.textContent=message||'';
 }
 function startAnalyzeCooldown(seconds){
   const btn=document.getElementById('analyze-btn');
@@ -2446,9 +2443,13 @@ function startAnalyzeCooldown(seconds){
     if(left<=0){
       clearInterval(analyzeCooldownTimeoutId);
       analyzeCooldownTimeoutId=null;
-      analyzeCooldownUntilMs=0;
+      if(!analyzeRequestInFlight)btn.disabled=false;
       btn.innerHTML=originalHtml;
-      refreshAnalyzeQuota();
+      if(errBox?.dataset?.cooldownMessage==='1'){
+        errBox.classList.remove('active');
+        errBox.textContent='';
+        delete errBox.dataset.cooldownMessage;
+      }
       return;
     }
     btn.innerHTML=`Attendi ${left}s`;
@@ -2490,17 +2491,20 @@ async function analyzeDay(){
   setAnalyzeRequestDebug(`Richiesta partita (#${requestId})`);
   startAnalyzeCooldown(Math.ceil(ANALYZE_MIN_INTERVAL_MS/1000));
   try{
-    const res=await fetchApi('/api/v1/assistant/day-analysis',{
-      singleAttempt:true,
-      disableAuthRetry:true,
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        userId:currentUser?.id||null,
-        agenda,pending,dayEnd,availability,dayFocus,
-        memoryContext:getMemoryContext(),energy:todayEnergy,stress:todayStress
-      })
-    });
+    const res=await Promise.race([
+      fetchApi('/api/v1/assistant/day-analysis',{
+        singleAttempt:true,
+        disableAuthRetry:true,
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          userId:currentUser?.id||null,
+          agenda,pending,dayEnd,availability,dayFocus,
+          memoryContext:getMemoryContext(),energy:todayEnergy,stress:todayStress
+        })
+      }),
+      new Promise((_,reject)=>setTimeout(()=>reject(new Error('Timeout richiesta analisi')),15000))
+    ]);
     const payload=await res.json().catch(()=>null);
     const aiAttemptCounter=Number(payload?.data?.diagnostics?.aiAttemptCounter);
     const responseDebugSuffix=Number.isFinite(aiAttemptCounter)?` · AI=${aiAttemptCounter}`:'';
@@ -2508,7 +2512,7 @@ async function analyzeDay(){
       if(res.status===404){
         const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
         loader.classList.remove('active');
-        setAnalyzeButtonAvailability(Number.NaN);
+        if(!analyzeCooldownTimeoutId)btn.disabled=false;
         errBox.classList.remove('active');
         setAnalyzeFallbackStatus(true,'Endpoint analisi non disponibile: uso suggerimenti locali.');
         setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})${responseDebugSuffix}`);
@@ -2520,11 +2524,18 @@ async function analyzeDay(){
         const message=payload?.message||'Limite analisi raggiunto.';
         errBox.textContent=message;
         errBox.classList.add('active');
-        updateAnalyzeQuotaLabel(Number(payload?.limit),Number(payload?.remaining));
-        setAnalyzeButtonAvailability(Number(payload?.remaining),{enforceQuota:true});
-        if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
+        const limitVal=Number(payload?.limit);
+        const remainingVal=Number(payload?.remaining);
+        syncAnalyzeQuotaEstimate(limitVal,remainingVal);
+        updateAnalyzeQuotaLabel(limitVal,remainingVal);
+        if(Number(payload?.retryAfterSeconds)>0){
+          analyzeCooldownUntilMs=Date.now()+(Number(payload?.retryAfterSeconds)*1000);
+          startAnalyzeCooldown(payload.retryAfterSeconds);
+        }
         loader.classList.remove('active');
-        if(!analyzeCooldownTimeoutId)setAnalyzeButtonAvailability(Number(payload?.remaining),{enforceQuota:true});
+        if(!analyzeCooldownTimeoutId)btn.disabled=false;
+        setAnalyzeFallbackStatus(false);
+        setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})${responseDebugSuffix}`);
         analyzeRequestInFlight=false;
         return;
       }
@@ -2533,19 +2544,46 @@ async function analyzeDay(){
     }
     const suggestions=Array.isArray(payload?.data?.suggerimenti)?payload.data.suggerimenti:[];
     const quota=payload?.data?.quota||null;
-    if(quota)applyAnalyzeQuotaState(quota);
+    if(quota){
+      const limitVal=Number(quota.limit);
+      const remainingVal=Number(quota.remaining);
+      syncAnalyzeQuotaEstimate(limitVal,remainingVal);
+      updateAnalyzeQuotaLabel(limitVal,remainingVal);
+    }else{
+      const estimated=consumeAnalyzeQuotaEstimate();
+      updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
+    }
+    if(payload?.data?.degraded){
+      const diagnosticId=payload?.data?.diagnosticId||null;
+      if(diagnosticId)console.info('Day analysis in fallback locale. Ref:',diagnosticId);
+      const fallbackHint=String(payload?.data?.degradedHint||'Suggerimenti locali attivi.');
+      errBox.classList.remove('active');
+      setAnalyzeFallbackStatus(true,fallbackHint);
+    }else{
+      errBox.classList.remove('active');
+      setAnalyzeFallbackStatus(false);
+    }
     loader.classList.remove('active');
-    if(!quota)setAnalyzeButtonAvailability(Number.NaN);
+    if(!analyzeCooldownTimeoutId)btn.disabled=false;
+    setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})${responseDebugSuffix}`);
     renderDaySuggestions(suggestions);
     analyzeRequestInFlight=false;
   }catch(e){
     console.warn('Errore analisi giornata:',e);
     loader.classList.remove('active');
-    setAnalyzeButtonAvailability(Number.NaN);
+    if(!analyzeCooldownTimeoutId)btn.disabled=false;
     const msg=String(e?.message||'');
     const assistantEndpointMissing =
       msg.includes('/api/v1/assistant/day-analysis') ||
       (msg.includes('HTTP 404') && msg.includes('/api/v1'));
+    if(msg.includes('Timeout richiesta analisi')){
+      errBox.textContent='Richiesta analisi scaduta. Riprova tra pochi secondi.';
+      errBox.classList.add('active');
+      setAnalyzeFallbackStatus(false);
+      setAnalyzeRequestDebug(`Errore risposta (#${requestId}) · timeout`);
+      analyzeRequestInFlight=false;
+      return;
+    }
     if(assistantEndpointMissing){
       errBox.textContent='Analisi AI non disponibile su questo deploy. Ti mostro suggerimenti locali.';
       errBox.classList.add('active');
@@ -2560,6 +2598,8 @@ async function analyzeDay(){
     }
     errBox.textContent='Errore nell\'analisi. Riprova.';
     errBox.classList.add('active');
+    setAnalyzeFallbackStatus(false);
+    setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
     analyzeRequestInFlight=false;
   }
 }
