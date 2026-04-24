@@ -1,5 +1,11 @@
 import { env } from '../config/env.js';
 
+let aiAttemptCounter = 0;
+
+export function getAiAttemptCounter() {
+  return aiAttemptCounter;
+}
+
 function splitItems(raw) {
   if (!raw) return [];
   return String(raw)
@@ -9,7 +15,7 @@ function splitItems(raw) {
     .slice(0, 8);
 }
 
-function buildFallbackSuggestions(input) {
+export function buildFallbackSuggestions(input) {
   const agendaItems = splitItems(input.agenda);
   const pendingItems = splitItems(input.pending);
   const focus = input.dayFocus ? String(input.dayFocus).trim() : '';
@@ -53,6 +59,7 @@ function buildFallbackSuggestions(input) {
 }
 
 async function askAnthropic(input) {
+  aiAttemptCounter += 1;
   if (!env.ANTHROPIC_API_KEY) return null;
 
   const prompt = `Sei Filo, assistente operativo per manager.
