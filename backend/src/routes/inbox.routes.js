@@ -3,7 +3,8 @@ import {
   getGoogleConnectUrl,
   getInboxMessages,
   postGoogleCodeExchange,
-  postGoogleSync
+  postGoogleSync,
+  postInboxSync
 } from '../controllers/inbox.controller.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
@@ -13,6 +14,7 @@ router.post('/google/connect', asyncHandler(getGoogleConnectUrl));
 router.get('/google/connect', asyncHandler(getGoogleConnectUrl));
 router.post('/google/exchange', asyncHandler(postGoogleCodeExchange));
 router.post('/google/sync', asyncHandler(postGoogleSync));
+router.post('/sync', asyncHandler(postInboxSync));
 router.get('/messages', asyncHandler(getInboxMessages));
 
 export default router;
