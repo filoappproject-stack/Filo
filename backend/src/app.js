@@ -5,7 +5,6 @@ import morgan from 'morgan';
 import { env } from './config/env.js';
 import { requireAuth } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
-import assistantRoutes from './routes/assistant.routes.js';
 import calendarRoutes from './routes/calendar.routes.js';
 import checkinsRoutes from './routes/checkins.routes.js';
 import healthRoutes from './routes/health.routes.js';
@@ -35,7 +34,18 @@ app.use('/api/v1/notes', notesRoutes);
 app.use('/api/v1/checkins', checkinsRoutes);
 app.use('/api/v1/inbox', inboxRoutes);
 app.use('/api/v1/calendar', calendarRoutes);
-app.use('/api/v1/assistant', assistantRoutes);
+app.use('/api/v1/assistant', async (req, res, next) => {
+  try {
+    const module = await import('./routes/assistant.routes.js');
+    return module.default(req, res, next);
+  } catch (error) {
+    console.error('Assistant routes unavailable:', error);
+    return res.status(503).json({
+      error: 'AssistantUnavailable',
+      message: 'Servizio Assistant temporaneamente non disponibile.'
+    });
+  }
+});
 
 app.use(notFoundHandler);
 app.use(errorHandler);
