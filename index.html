@@ -2563,7 +2563,7 @@ async function analyzeDay(){
 async function init() {
   setTimeout(()=>{
     const loginScreen=document.getElementById('login-screen');
-    const shell=document.getElementById('shell');
+    const shell=document.getElementById('app-shell');
     if(!loginScreen||!shell)return;
     const loginHidden=getComputedStyle(loginScreen).display==='none';
     const shellActive=shell.classList.contains('active');
@@ -2574,7 +2574,7 @@ async function init() {
   },2000);
   window.addEventListener('error',()=>{
     const loginScreen=document.getElementById('login-screen');
-    const shell=document.getElementById('shell');
+    const shell=document.getElementById('app-shell');
     if(loginScreen&&shell&&!shell.classList.contains('active')){
       loginScreen.style.display='flex';
     }
