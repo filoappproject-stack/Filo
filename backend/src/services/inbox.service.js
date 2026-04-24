@@ -468,9 +468,9 @@ export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
   };
 }
 
-export async function listInboxMessages(userId, limit) {
+export async function listInboxMessages(userId, limit, options = {}) {
   await ensureInboxSchema();
-  await maybeSyncInboxForUser(userId);
+  await maybeSyncInboxForUser(userId, { force: options.forceSync === true });
 
   const sql = `
     SELECT

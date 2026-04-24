@@ -21,7 +21,8 @@ const ExchangeSchema = z.object({
 
 const MessagesQuerySchema = z.object({
   userId: z.string().uuid(),
-  limit: z.coerce.number().int().min(1).max(200).default(50)
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  forceSync: z.coerce.boolean().optional().default(false)
 });
 const SyncSchema = z.object({
   userId: z.string().uuid()
@@ -65,7 +66,9 @@ export async function getInboxMessages(req, res) {
     throw new HttpError(400, 'Query inbox non valida');
   }
 
-  const messages = await listInboxMessages(parsed.data.userId, parsed.data.limit);
+  const messages = await listInboxMessages(parsed.data.userId, parsed.data.limit, {
+    forceSync: parsed.data.forceSync
+  });
   res.set('Cache-Control', 'no-store');
   res.json({ data: messages });
 }
