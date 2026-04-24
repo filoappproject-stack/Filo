@@ -1205,7 +1205,7 @@ async function loginSuccess(user) {
   // Manteniamo solo recupero profilo/cache locale.
   if(!hasCheckinForDate(formatLocalDate()))hydrateLatestCheckinFromSupabaseProfile();
   initCheckin();
-  restoreDayDraft();
+  bindAnalyzeQuotaWatchers();
   renderAll();
   restorePostOauthPage();
   // Evita chiamate backend automatiche al boot:
@@ -2373,6 +2373,11 @@ function renderDaySuggestions(suggestions){
   const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
   container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#9E9B94;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
 }
+function bindAnalyzeQuotaWatchers(){
+  // Compatibilità con deploy precedenti che chiamavano questa funzione.
+  // Intenzionalmente no-op: la UI quota viene aggiornata nei flussi analyzeDay().
+}
+
 function updateAnalyzeQuotaLabel(limit,remaining){
   const el=document.getElementById('analyze-quota');
   if(!el)return;
@@ -2569,10 +2574,14 @@ async function analyzeDay(){
     renderDaySuggestions(suggestions);
     analyzeRequestInFlight=false;
   }catch(e){
-    console.warn('Errore analisi giornata:',e);
     loader.classList.remove('active');
     if(!analyzeCooldownTimeoutId)btn.disabled=false;
     const msg=String(e?.message||'');
+    const expectedAnalyzeFallbackError =
+      msg.includes('/api/v1/assistant/day-analysis') ||
+      msg.includes('Timeout richiesta analisi') ||
+      msg.includes('HTTP 503');
+    if(!expectedAnalyzeFallbackError)console.warn('Errore analisi giornata:',e);
     const assistantEndpointMissing =
       msg.includes('/api/v1/assistant/day-analysis') ||
       (msg.includes('HTTP 404') && msg.includes('/api/v1'));
