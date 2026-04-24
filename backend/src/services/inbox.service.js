@@ -87,6 +87,15 @@ async function refreshAccessToken(refreshToken) {
 
   if (!response.ok) {
     const payload = await response.text();
+    let parsed = null;
+    try {
+      parsed = JSON.parse(payload);
+    } catch (_) {
+      parsed = null;
+    }
+    if (parsed?.error === 'invalid_grant') {
+      throw new HttpError(401, 'GoogleRefreshTokenInvalid');
+    }
     throw new HttpError(401, `Refresh token Google fallito: ${payload}`);
   }
 
@@ -205,7 +214,7 @@ async function upsertInboxAccount(input) {
     DO UPDATE SET
       provider_email = EXCLUDED.provider_email,
       access_token = EXCLUDED.access_token,
-      refresh_token = COALESCE(EXCLUDED.refresh_token, inbox_accounts.refresh_token),
+      refresh_token = EXCLUDED.refresh_token,
       token_expires_at = EXCLUDED.token_expires_at,
       scope = EXCLUDED.scope,
       updated_at = NOW()
@@ -336,23 +345,17 @@ async function syncInboxMessages(account, accessToken) {
   }
 
   if (collectedIds.length === 0) {
-    await query(
-      `
-        DELETE FROM inbox_messages
-        WHERE account_id = $1
-      `,
-      [account.id]
-    );
-  } else {
-    await query(
-      `
-        DELETE FROM inbox_messages
-        WHERE account_id = $1
-          AND provider_message_id != ALL($2::text[])
-      `,
-      [account.id, collectedIds]
-    );
+    return 0;
   }
+
+  await query(
+    `
+      DELETE FROM inbox_messages
+      WHERE account_id = $1
+        AND provider_message_id != ALL($2::text[])
+    `,
+    [account.id, collectedIds]
+  );
 
   await markLastSynced(account.id);
   return collectedIds.length;
@@ -367,11 +370,18 @@ async function resolveAccountAccessToken(account) {
     throw new HttpError(401, 'Refresh token non disponibile. Ricollega account Google.');
   }
 
-  const refreshed = await refreshAccessToken(account.refresh_token);
-  const expiresAt = new Date(Date.now() + (refreshed.expires_in ?? 3600) * 1000).toISOString();
+  try {
+    const refreshed = await refreshAccessToken(account.refresh_token);
+    const expiresAt = new Date(Date.now() + (refreshed.expires_in ?? 3600) * 1000).toISOString();
 
-  await updateAccountTokens(account.id, refreshed.access_token, expiresAt);
-  return refreshed.access_token;
+    await updateAccountTokens(account.id, refreshed.access_token, expiresAt);
+    return refreshed.access_token;
+  } catch (error) {
+    if (error instanceof HttpError && error.statusCode === 401 && error.message === 'GoogleRefreshTokenInvalid') {
+      await query('DELETE FROM inbox_accounts WHERE id = $1', [account.id]);
+    }
+    throw error;
+  }
 }
 
 async function findGoogleAccountByUserId(userId) {
@@ -384,6 +394,19 @@ async function findGoogleAccountByUserId(userId) {
 
   const { rows } = await query(sql, [userId]);
   return rows[0] ?? null;
+}
+
+async function accountHasSyncedMessages(accountId) {
+  const { rows } = await query(
+    `
+      SELECT 1
+      FROM inbox_messages
+      WHERE account_id = $1
+      LIMIT 1
+    `,
+    [accountId]
+  );
+  return rows.length > 0;
 }
 
 function shouldSyncAccount(account) {
@@ -406,8 +429,9 @@ async function maybeSyncInboxForUser(userId, options = {}) {
   if (!account) {
     return { connected: false, importedCount: 0, synced: false };
   }
+  const hasMessages = await accountHasSyncedMessages(account.id);
 
-  if (!forceSync && !shouldSyncAccount(account)) {
+  if (!forceSync && hasMessages && !shouldSyncAccount(account)) {
     return { connected: true, importedCount: 0, synced: false };
   }
 
@@ -452,9 +476,9 @@ export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
   };
 }
 
-export async function listInboxMessages(userId, limit) {
+export async function listInboxMessages(userId, limit, options = {}) {
   await ensureInboxSchema();
-  await maybeSyncInboxForUser(userId);
+  await maybeSyncInboxForUser(userId, { force: options.forceSync === true });
 
   const sql = `
     SELECT
