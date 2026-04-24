@@ -2562,7 +2562,17 @@ async function analyzeDay(){
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
   if(window.__filoAbortInitAfterOAuthPreserve)return;
-  initDayDraftAutosave();
+  setTimeout(()=>{
+    const loginScreen=document.getElementById('login-screen');
+    const shell=document.getElementById('shell');
+    if(!loginScreen||!shell)return;
+    const loginHidden=getComputedStyle(loginScreen).display==='none';
+    const shellActive=shell.classList.contains('active');
+    if(loginHidden&&!shellActive){
+      console.warn('UI fallback: shell non attivo con login nascosto, ripristino schermata login');
+      loginScreen.style.display='flex';
+    }
+  },2000);
   document.getElementById('login-password').value = '';
   clearCorruptedPasswordAutofill();
   let isAuthBootstrapping = true;
