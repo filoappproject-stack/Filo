@@ -345,23 +345,17 @@ async function syncInboxMessages(account, accessToken) {
   }
 
   if (collectedIds.length === 0) {
-    await query(
-      `
-        DELETE FROM inbox_messages
-        WHERE account_id = $1
-      `,
-      [account.id]
-    );
-  } else {
-    await query(
-      `
-        DELETE FROM inbox_messages
-        WHERE account_id = $1
-          AND provider_message_id != ALL($2::text[])
-      `,
-      [account.id, collectedIds]
-    );
+    return 0;
   }
+
+  await query(
+    `
+      DELETE FROM inbox_messages
+      WHERE account_id = $1
+        AND provider_message_id != ALL($2::text[])
+    `,
+    [account.id, collectedIds]
+  );
 
   await markLastSynced(account.id);
   return collectedIds.length;
