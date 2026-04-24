@@ -2561,6 +2561,9 @@ async function analyzeDay(){
 
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
+  const initStartedAt=Date.now();
+  const UI_FALLBACK_OAUTH_MAX_WAIT_MS=15000;
+  let fallbackRetryTimer=null;
   const hasPendingOAuthNavigation=()=>{
     try{
       const url=new URL(window.location.href);
@@ -2580,10 +2583,29 @@ async function init() {
     if(!loginScreen||!shell)return;
     const loginHidden=getComputedStyle(loginScreen).display==='none';
     const shellActive=shell.classList.contains('active');
-    if(!loginHidden||shellActive)return;
-    if(hasPendingOAuthNavigation()){
-      console.info(`UI fallback sospeso (${reason}): callback OAuth in corso`);
+    if(!loginHidden||shellActive){
+      if(fallbackRetryTimer){
+        clearTimeout(fallbackRetryTimer);
+        fallbackRetryTimer=null;
+      }
       return;
+    }
+    if(hasPendingOAuthNavigation()){
+      const elapsed=Date.now()-initStartedAt;
+      if(elapsed<UI_FALLBACK_OAUTH_MAX_WAIT_MS){
+        console.info(`UI fallback sospeso (${reason}): callback OAuth in corso`);
+        if(!fallbackRetryTimer){
+          fallbackRetryTimer=setTimeout(()=>{
+            fallbackRetryTimer=null;
+            void maybeRestoreLoginFallback('oauth-wait-retry');
+          },1500);
+        }
+        return;
+      }
+      console.warn(`UI fallback: callback OAuth bloccato oltre ${UI_FALLBACK_OAUTH_MAX_WAIT_MS}ms, pulisco stato transiente`);
+      sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
+      sessionStorage.removeItem('filo_inbox_oauth_state');
+      clearCalendarOAuthFlowState();
     }
     try{
       const {data:{session}}=await supabaseClient.auth.getSession();
