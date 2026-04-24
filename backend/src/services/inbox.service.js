@@ -214,7 +214,7 @@ async function upsertInboxAccount(input) {
     DO UPDATE SET
       provider_email = EXCLUDED.provider_email,
       access_token = EXCLUDED.access_token,
-      refresh_token = COALESCE(EXCLUDED.refresh_token, inbox_accounts.refresh_token),
+      refresh_token = EXCLUDED.refresh_token,
       token_expires_at = EXCLUDED.token_expires_at,
       scope = EXCLUDED.scope,
       updated_at = NOW()
