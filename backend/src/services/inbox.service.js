@@ -396,6 +396,19 @@ async function findGoogleAccountByUserId(userId) {
   return rows[0] ?? null;
 }
 
+async function accountHasSyncedMessages(accountId) {
+  const { rows } = await query(
+    `
+      SELECT 1
+      FROM inbox_messages
+      WHERE account_id = $1
+      LIMIT 1
+    `,
+    [accountId]
+  );
+  return rows.length > 0;
+}
+
 function shouldSyncAccount(account) {
   if (!account?.last_synced_at) {
     return true;
@@ -416,8 +429,9 @@ async function maybeSyncInboxForUser(userId, options = {}) {
   if (!account) {
     return { connected: false, importedCount: 0, synced: false };
   }
+  const hasMessages = await accountHasSyncedMessages(account.id);
 
-  if (!forceSync && !shouldSyncAccount(account)) {
+  if (!forceSync && hasMessages && !shouldSyncAccount(account)) {
     return { connected: true, importedCount: 0, synced: false };
   }
 
