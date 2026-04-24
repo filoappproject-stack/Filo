@@ -49,16 +49,13 @@ export async function postGoogleCodeExchange(req, res) {
 }
 
 export async function postGoogleSync(req, res) {
-  const parsed = z
-    .object({
-      userId: z.string().uuid()
-    })
-    .safeParse(req.body);
+  const parsed = SyncSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(400, 'Payload sync inbox non valido');
   }
 
   const result = await syncGoogleInbox(parsed.data.userId);
+  res.set('Cache-Control', 'no-store');
   res.json({ data: result });
 }
 
@@ -74,12 +71,5 @@ export async function getInboxMessages(req, res) {
 }
 
 export async function postInboxSync(req, res) {
-  const parsed = SyncSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new HttpError(400, 'Payload sync inbox non valido');
-  }
-
-  const result = await syncInboxForUser(parsed.data.userId);
-  res.set('Cache-Control', 'no-store');
-  res.json({ data: result });
+  return postGoogleSync(req, res);
 }
