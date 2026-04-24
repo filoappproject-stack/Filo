@@ -1207,46 +1207,25 @@ async function loginSuccess(user) {
     cachedInbox.messages.forEach(m=>INBOX.push(m));
     setInboxConnectionState(cachedInbox.connected,cachedInbox.lastSync);
   }
-  await hydrateLatestCheckinFromApi();
+  // Evita fetch check-in da API al boot (in deploy degradati generava 500 a freddo).
+  // Manteniamo solo recupero profilo/cache locale.
   if(!hasCheckinForDate(formatLocalDate()))hydrateLatestCheckinFromSupabaseProfile();
   initCheckin();
   bindAnalyzeQuotaWatchers();
   renderAll();
   restorePostOauthPage();
-  await loadTasksFromApi();
-  await loadNotesFromApi();
-  mailboxBackgroundSyncInProgress=true;
-  renderAll();
-  try{
-    await loadInboxMessages();
-    if(INBOX.length){
-      setInboxConnectionState(true,Date.now());
-      saveInboxToCache();
-    }
-  }catch(err){
-    if(!cachedInbox){
-      setInboxConnectionState(false,null);
-      INBOX.length=0;
-    }
-  }finally{
-    mailboxBackgroundSyncInProgress=false;
+  // Evita chiamate backend automatiche al boot:
+  // in caso di deploy backend degradato causavano una cascata di 500 in console.
+  // I sync restano disponibili via azioni esplicite dell'utente (Collega/Sincronizza/Salva/Analizza).
+  mailboxBackgroundSyncInProgress=false;
+  if(!cachedInbox){
+    setInboxConnectionState(false,null);
+    INBOX.length=0;
   }
-  try{
-    await loadCalendarStatus();
-  }catch(err){
-    console.warn('Impossibile caricare stato calendario da backend:',err);
-  }
-  try{
-    await loadCalendarEvents();
-    if(calendarEvents.length&&!calendarConnected){
-      setCalendarConnectionState(true,null);
-    }
-  }catch(err){
-    console.warn('Impossibile caricare eventi calendario da backend:',err);
-    calendarEvents=[];
-  }
+  calendarEvents=[];
   renderAll();
   analyzePatterns();
+  bindAnalyzeQuotaWatchers();
 }
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────
@@ -1312,8 +1291,59 @@ const NOTES_CACHE_PREFIX='filo_notes_cache_';
 const NOTES_BACKFILL_DONE_PREFIX='filo_notes_backfill_done_';
 const INBOX_CACHE_PREFIX='filo_inbox_cache_';
 const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
+const DAY_ANALYSIS_DRAFT_PREFIX='filo_day_analysis_draft_';
 
 function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
+
+function getDayDraftStorageKey(){
+  if(!currentUser?.id)return null;
+  return `${DAY_ANALYSIS_DRAFT_PREFIX}${currentUser.id}`;
+}
+function getDayDraftFromInputs(){
+  return {
+    agenda:document.getElementById('agenda-input')?.value||'',
+    pending:document.getElementById('pending-input')?.value||'',
+    dayEnd:document.getElementById('day-end-input')?.value||'',
+    availability:document.getElementById('day-availability-input')?.value||'',
+    dayFocus:document.getElementById('day-focus-input')?.value||''
+  };
+}
+function applyDayDraftToInputs(draft){
+  if(!draft||typeof draft!=='object')return;
+  const agenda=document.getElementById('agenda-input');
+  const pending=document.getElementById('pending-input');
+  const dayEnd=document.getElementById('day-end-input');
+  const availability=document.getElementById('day-availability-input');
+  const dayFocus=document.getElementById('day-focus-input');
+  if(agenda&&typeof draft.agenda==='string')agenda.value=draft.agenda;
+  if(pending&&typeof draft.pending==='string')pending.value=draft.pending;
+  if(dayEnd&&typeof draft.dayEnd==='string')dayEnd.value=draft.dayEnd;
+  if(availability&&typeof draft.availability==='string')availability.value=draft.availability;
+  if(dayFocus&&typeof draft.dayFocus==='string')dayFocus.value=draft.dayFocus;
+}
+function saveDayDraft(){
+  const key=getDayDraftStorageKey();
+  if(!key)return;
+  try{localStorage.setItem(key,JSON.stringify(getDayDraftFromInputs()));}catch(e){}
+}
+function restoreDayDraft(){
+  const key=getDayDraftStorageKey();
+  if(!key)return;
+  try{
+    const raw=localStorage.getItem(key);
+    if(!raw)return;
+    applyDayDraftToInputs(JSON.parse(raw));
+  }catch(e){}
+}
+function initDayDraftAutosave(){
+  ['agenda-input','pending-input','day-end-input','day-availability-input','day-focus-input'].forEach((id)=>{
+    const el=document.getElementById(id);
+    if(!el||el.dataset.draftBound==='1')return;
+    el.addEventListener('input',saveDayDraft);
+    el.addEventListener('change',saveDayDraft);
+    el.dataset.draftBound='1';
+  });
+}
 function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
 function saveTasksToCache(){const key=getTaskCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(tasks));}catch(e){}}
 function loadTasksFromCache(){const key=getTaskCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
@@ -1554,7 +1584,7 @@ async function requestMailboxConnectUrl(userId,state){
 async function requestCalendarConnectUrl(userId,state){
   const payload={userId,redirectUri:getCalendarConnectRedirectUri(),state};
   let lastDetail='';
-  const endpointPaths=['/api/v1/calendar/google/connect','/api/v1/calendar/connect'];
+  const endpointPaths=['/api/v1/calendar/google/connect'];
   for(const base of API_BASES){
     const root=base.replace(/\/$/,'');
     for(const path of endpointPaths){
@@ -2066,6 +2096,7 @@ function appendGuidedInput(targetId,label){
   const value=input.value.trim();
   const entry=label.endsWith(':')?label:`${label}: `;
   input.value=value?`${value}, ${entry}`:entry;
+  saveDayDraft();
   input.focus();
   input.selectionStart=input.selectionEnd=input.value.length;
 }
@@ -2075,6 +2106,7 @@ function fillExample(){
   document.getElementById('day-end-input').value='18:30';
   document.getElementById('day-availability-input').value='2-4 ore';
   document.getElementById('day-focus-input').value='Chiudere il budget Q2 senza rimandare le urgenze clienti';
+  saveDayDraft();
 }
 function fmtFocusTime(totalSeconds){
   const minutes=Math.floor(totalSeconds/60);
@@ -2323,6 +2355,7 @@ function startAnalyzeCooldown(seconds){
     analyzeCooldownTimeoutId=null;
   }
   let left=Math.max(1,Math.ceil(Number(seconds)||0));
+  analyzeCooldownUntilMs=Date.now()+(left*1000);
   const originalHtml=`<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.1 2.2 2.4.35-1.75 1.7.42 2.4L6.5 6.6 4.33 7.65l.42-2.4L3 3.55l2.4-.35z" fill="white"/></svg>Analizza la mia giornata`;
 
   const renderCooldownMessage=()=>{
@@ -2387,6 +2420,7 @@ async function analyzeDay(){
   const btn=document.getElementById('analyze-btn');
   const loader=document.getElementById('ai-loader');
   const container=document.getElementById('suggestions-container');
+  analyzeRequestInFlight=true;
   btn.disabled=true;
   loader.classList.add('active');
   errBox.classList.remove('active');
@@ -2517,6 +2551,7 @@ async function analyzeDay(){
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
   if(window.__filoAbortInitAfterOAuthPreserve)return;
+  initDayDraftAutosave();
   document.getElementById('login-password').value = '';
   clearCorruptedPasswordAutofill();
   let isAuthBootstrapping = true;
