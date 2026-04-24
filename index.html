@@ -918,6 +918,12 @@ async function tryHandleMailboxOauthCallback() {
 
   let code = getQueryParamPreservePlus(url,'code');
   let state = url.searchParams.get('state');
+  if (code && !isMailboxOauthState(state)) {
+    const expectedState = sessionStorage.getItem('filo_inbox_oauth_state');
+    if (isMailboxOauthState(expectedState)) {
+      state = expectedState;
+    }
+  }
   if (!code || !isMailboxOauthState(state)) {
     try {
       const raw = sessionStorage.getItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
