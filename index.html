@@ -701,8 +701,7 @@ function getQueryParamPreservePlus(url,key){
     }
     ['code','error','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     const cleanUrl = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash;
-    window.__filoAbortInitAfterOAuthPreserve = true;
-    window.location.replace(cleanUrl);
+    window.history.replaceState({}, document.title, cleanUrl);
   }catch(e){}
 })();
 
