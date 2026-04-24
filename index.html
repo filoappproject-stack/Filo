@@ -2561,24 +2561,42 @@ async function analyzeDay(){
 
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
-  setTimeout(()=>{
+  const hasPendingOAuthNavigation=()=>{
+    try{
+      const url=new URL(window.location.href);
+      const state=url.searchParams.get('state')||'';
+      if(url.searchParams.get('code'))return true;
+      if(state.startsWith('mailbox:')||state.startsWith('calendar:'))return true;
+      if(sessionStorage.getItem(INBOX_OAUTH_QUERY_STORAGE_KEY))return true;
+      if(getCalendarTransient(CALENDAR_OAUTH_QUERY_STORAGE_KEY))return true;
+      if(sessionStorage.getItem('filo_inbox_oauth_state'))return true;
+      if(hasActiveCalendarOAuthPending())return true;
+      return false;
+    }catch(e){return false;}
+  };
+  const maybeRestoreLoginFallback=async(reason)=>{
     const loginScreen=document.getElementById('login-screen');
     const shell=document.getElementById('app-shell');
     if(!loginScreen||!shell)return;
     const loginHidden=getComputedStyle(loginScreen).display==='none';
     const shellActive=shell.classList.contains('active');
-    if(loginHidden&&!shellActive){
-      console.warn('UI fallback: shell non attivo con login nascosto, ripristino schermata login');
-      loginScreen.style.display='flex';
+    if(!loginHidden||shellActive)return;
+    if(hasPendingOAuthNavigation()){
+      console.info(`UI fallback sospeso (${reason}): callback OAuth in corso`);
+      return;
     }
-  },2000);
-  window.addEventListener('error',()=>{
-    const loginScreen=document.getElementById('login-screen');
-    const shell=document.getElementById('app-shell');
-    if(loginScreen&&shell&&!shell.classList.contains('active')){
-      loginScreen.style.display='flex';
-    }
-  },{once:true});
+    try{
+      const {data:{session}}=await supabaseClient.auth.getSession();
+      if(session){
+        console.info(`UI fallback sospeso (${reason}): sessione valida`);
+        return;
+      }
+    }catch(e){}
+    console.warn(`UI fallback (${reason}): shell non attivo con login nascosto, ripristino schermata login`);
+    loginScreen.style.display='flex';
+  };
+  setTimeout(()=>{maybeRestoreLoginFallback('timeout-init');},2000);
+  window.addEventListener('error',()=>{void maybeRestoreLoginFallback('window-error');},{once:true});
   document.getElementById('login-password').value = '';
   clearCorruptedPasswordAutofill();
   let isAuthBootstrapping = true;
