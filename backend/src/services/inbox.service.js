@@ -376,11 +376,18 @@ async function resolveAccountAccessToken(account) {
     throw new HttpError(401, 'Refresh token non disponibile. Ricollega account Google.');
   }
 
-  const refreshed = await refreshAccessToken(account.refresh_token);
-  const expiresAt = new Date(Date.now() + (refreshed.expires_in ?? 3600) * 1000).toISOString();
+  try {
+    const refreshed = await refreshAccessToken(account.refresh_token);
+    const expiresAt = new Date(Date.now() + (refreshed.expires_in ?? 3600) * 1000).toISOString();
 
-  await updateAccountTokens(account.id, refreshed.access_token, expiresAt);
-  return refreshed.access_token;
+    await updateAccountTokens(account.id, refreshed.access_token, expiresAt);
+    return refreshed.access_token;
+  } catch (error) {
+    if (error instanceof HttpError && error.statusCode === 401 && error.message === 'GoogleRefreshTokenInvalid') {
+      await query('DELETE FROM inbox_accounts WHERE id = $1', [account.id]);
+    }
+    throw error;
+  }
 }
 
 async function findGoogleAccountByUserId(userId) {
