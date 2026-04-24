@@ -943,13 +943,22 @@ async function tryHandleMailboxOauthCallback() {
 
   const userId = extractUserIdFromMailboxState(state);
   if (!userId) return false;
+  let resolvedUserId = userId;
+  try{
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const sessionUserId = session?.user?.id;
+    if (isUuid(sessionUserId) && sessionUserId !== userId) {
+      resolvedUserId = sessionUserId;
+      console.info('Mailbox OAuth state userId differente dalla sessione corrente, uso session.user.id');
+    }
+  }catch(e){}
 
   try {
     const redirectUri = sessionStorage.getItem(MAILBOX_REDIRECT_URI_KEY) || getInboxConnectRedirectUri();
     const res = await fetchApi('/api/v1/inbox/google/exchange', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, code, redirectUri })
+      body: JSON.stringify({ userId: resolvedUserId, code, redirectUri })
     });
 
     if (!res.ok) {
