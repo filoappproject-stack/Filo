@@ -691,7 +691,9 @@ function getQueryParamPreservePlus(url,key){
       prompt: url.searchParams.get('prompt'),
       capturedAt: Date.now()
     };
-    const storageKey = isCalendarOAuthCallback ? CALENDAR_OAUTH_QUERY_STORAGE_KEY : INBOX_OAUTH_QUERY_STORAGE_KEY;
+    const storageKey = isInboxOAuthCallback
+      ? INBOX_OAUTH_QUERY_STORAGE_KEY
+      : CALENDAR_OAUTH_QUERY_STORAGE_KEY;
     if(storageKey===CALENDAR_OAUTH_QUERY_STORAGE_KEY){
       setCalendarTransient(storageKey,JSON.stringify(payload));
     }else{
