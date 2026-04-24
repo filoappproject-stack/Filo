@@ -2561,7 +2561,6 @@ async function analyzeDay(){
 
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
-  if(window.__filoAbortInitAfterOAuthPreserve)return;
   setTimeout(()=>{
     const loginScreen=document.getElementById('login-screen');
     const shell=document.getElementById('shell');
@@ -2573,6 +2572,13 @@ async function init() {
       loginScreen.style.display='flex';
     }
   },2000);
+  window.addEventListener('error',()=>{
+    const loginScreen=document.getElementById('login-screen');
+    const shell=document.getElementById('shell');
+    if(loginScreen&&shell&&!shell.classList.contains('active')){
+      loginScreen.style.display='flex';
+    }
+  },{once:true});
   document.getElementById('login-password').value = '';
   clearCorruptedPasswordAutofill();
   let isAuthBootstrapping = true;
