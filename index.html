@@ -667,10 +667,11 @@ function getQueryParamPreservePlus(url,key){
     const expectedInboxState = sessionStorage.getItem('filo_inbox_oauth_state');
     const expectedCalendarState = getCalendarTransient('filo_calendar_oauth_state');
     const matchesInboxState = !!(expectedInboxState && state && expectedInboxState === state);
+    const inboxMissingStateButPending = !!(expectedInboxState && code && !state && !error);
     const matchesCalendarState = !!(expectedCalendarState && state && expectedCalendarState === state);
     const hasInboxStatePrefix = typeof state === 'string' && state.startsWith('mailbox:');
     const hasCalendarStatePrefix = typeof state === 'string' && state.startsWith('calendar:');
-    const isInboxOAuthCallback = matchesInboxState || hasInboxStatePrefix;
+    const isInboxOAuthCallback = matchesInboxState || hasInboxStatePrefix || inboxMissingStateButPending;
     const hasCalendarPendingMarker = hasActiveCalendarOAuthPending();
     const scopeRaw = url.searchParams.get('scope') || '';
     const hasCalendarScope = scopeRaw.includes('calendar');
@@ -684,7 +685,7 @@ function getQueryParamPreservePlus(url,key){
     const payload = {
       code,
       error,
-      state,
+      state: state || (inboxMissingStateButPending ? expectedInboxState : state),
       scope: url.searchParams.get('scope'),
       authuser: url.searchParams.get('authuser'),
       prompt: url.searchParams.get('prompt'),
