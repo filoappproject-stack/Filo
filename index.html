@@ -179,19 +179,19 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
     <div class="login-error" id="login-error"></div>
     <div class="login-success" id="login-success"></div>
 
-    <div id="form-login">
+    <form id="form-login" onsubmit="event.preventDefault();doEmailLogin();">
       <div class="login-input-group">
         <label class="login-label">Email</label>
-        <input class="login-input" id="login-email" type="email" placeholder="nome@email.it" onkeydown="if(event.key==='Enter')doEmailLogin()">
+        <input class="login-input" id="login-email" type="email" placeholder="nome@email.it">
       </div>
       <div class="login-input-group">
         <label class="login-label">Password</label>
-        <input class="login-input" id="login-password" type="password" autocomplete="new-password" spellcheck="false" placeholder="••••••••" onkeydown="if(event.key==='Enter')doEmailLogin()">
+        <input class="login-input" id="login-password" type="password" autocomplete="new-password" spellcheck="false" placeholder="••••••••">
       </div>
-      <button class="login-btn" onclick="doEmailLogin()" id="btn-email-login">Accedi</button>
-    </div>
+      <button class="login-btn" type="submit" id="btn-email-login">Accedi</button>
+    </form>
 
-    <div id="form-register" style="display:none;">
+    <form id="form-register" style="display:none;" onsubmit="event.preventDefault();doRegister();">
       <div class="login-input-group">
         <label class="login-label">Nome completo</label>
         <input class="login-input" id="reg-name" type="text" placeholder="Mario Rossi">
@@ -204,8 +204,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
         <label class="login-label">Password</label>
         <input class="login-input" id="reg-password" type="password" placeholder="Almeno 6 caratteri">
       </div>
-      <button class="login-btn" onclick="doRegister()" id="btn-register">Crea account</button>
-    </div>
+      <button class="login-btn" type="submit" id="btn-register">Crea account</button>
+    </form>
 
     <div class="login-divider">
       <div class="login-divider-line"></div>
