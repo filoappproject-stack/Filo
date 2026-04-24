@@ -87,6 +87,15 @@ async function refreshAccessToken(refreshToken) {
 
   if (!response.ok) {
     const payload = await response.text();
+    let parsed = null;
+    try {
+      parsed = JSON.parse(payload);
+    } catch (_) {
+      parsed = null;
+    }
+    if (parsed?.error === 'invalid_grant') {
+      throw new HttpError(401, 'GoogleRefreshTokenInvalid');
+    }
     throw new HttpError(401, `Refresh token Google fallito: ${payload}`);
   }
 
@@ -205,7 +214,7 @@ async function upsertInboxAccount(input) {
     DO UPDATE SET
       provider_email = EXCLUDED.provider_email,
       access_token = EXCLUDED.access_token,
-      refresh_token = COALESCE(EXCLUDED.refresh_token, inbox_accounts.refresh_token),
+      refresh_token = EXCLUDED.refresh_token,
       token_expires_at = EXCLUDED.token_expires_at,
       scope = EXCLUDED.scope,
       updated_at = NOW()
