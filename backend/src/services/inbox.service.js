@@ -478,7 +478,7 @@ export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
 
 export async function listInboxMessages(userId, limit, options = {}) {
   await ensureInboxSchema();
-  await maybeSyncInboxForUser(userId, { force: options.forceSync === true });
+  const sync = await maybeSyncInboxForUser(userId, { force: options.forceSync === true });
 
   const sql = `
     SELECT
@@ -498,7 +498,7 @@ export async function listInboxMessages(userId, limit, options = {}) {
   `;
 
   const { rows } = await query(sql, [userId, limit]);
-  return rows;
+  return { messages: rows, sync };
 }
 
 export async function syncGoogleInbox(userId) {

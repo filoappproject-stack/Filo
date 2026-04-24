@@ -66,11 +66,17 @@ export async function getInboxMessages(req, res) {
     throw new HttpError(400, 'Query inbox non valida');
   }
 
-  const messages = await listInboxMessages(parsed.data.userId, parsed.data.limit, {
+  const result = await listInboxMessages(parsed.data.userId, parsed.data.limit, {
     forceSync: parsed.data.forceSync
   });
   res.set('Cache-Control', 'no-store');
-  res.json({ data: messages });
+  res.json({
+    data: result.messages,
+    meta: {
+      count: result.messages.length,
+      sync: result.sync
+    }
+  });
 }
 
 export async function postInboxSync(req, res) {
