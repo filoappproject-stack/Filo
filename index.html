@@ -2463,13 +2463,23 @@ function startAnalyzeCooldown(seconds){
 }
 
 async function analyzeDay(){
-  if(analyzeRequestInFlight)return;
-  const agenda=document.getElementById('agenda-input').value.trim();
-  const pending=document.getElementById('pending-input').value.trim();
+  const agendaEl=document.getElementById('agenda-input');
+  const pendingEl=document.getElementById('pending-input');
+  const agenda=agendaEl?.value.trim()||'';
+  const pending=pendingEl?.value.trim()||'';
   const dayEnd=document.getElementById('day-end-input')?.value||'';
   const availability=document.getElementById('day-availability-input')?.value||'';
   const dayFocus=document.getElementById('day-focus-input')?.value.trim()||'';
-  if(!agenda&&!pending)return;
+  const errBox=document.getElementById('ai-error');
+  if(!agenda&&!pending){
+    if(errBox){
+      errBox.textContent='Inserisci almeno agenda o sospesi prima di analizzare la giornata.';
+      errBox.classList.add('active');
+    }
+    if(agendaEl)agendaEl.focus();
+    setAnalyzeRequestDebug('Richiesta non inviata: input vuoto');
+    return;
+  }
   const now=Date.now();
   if(analyzeCooldownUntilMs>now){
     const left=Math.ceil((analyzeCooldownUntilMs-now)/1000);
@@ -2483,7 +2493,6 @@ async function analyzeDay(){
   analyzeRequestInFlight=true;
   const btn=document.getElementById('analyze-btn');
   const loader=document.getElementById('ai-loader');
-  const errBox=document.getElementById('ai-error');
   const container=document.getElementById('suggestions-container');
   analyzeRequestInFlight=true;
   btn.disabled=true;
