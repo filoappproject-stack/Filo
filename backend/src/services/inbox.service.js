@@ -87,6 +87,15 @@ async function refreshAccessToken(refreshToken) {
 
   if (!response.ok) {
     const payload = await response.text();
+    let parsed = null;
+    try {
+      parsed = JSON.parse(payload);
+    } catch (_) {
+      parsed = null;
+    }
+    if (parsed?.error === 'invalid_grant') {
+      throw new HttpError(401, 'GoogleRefreshTokenInvalid');
+    }
     throw new HttpError(401, `Refresh token Google fallito: ${payload}`);
   }
 
