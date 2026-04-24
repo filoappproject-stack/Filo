@@ -179,19 +179,19 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
     <div class="login-error" id="login-error"></div>
     <div class="login-success" id="login-success"></div>
 
-    <div id="form-login">
+    <form id="form-login" onsubmit="event.preventDefault();doEmailLogin();">
       <div class="login-input-group">
         <label class="login-label">Email</label>
-        <input class="login-input" id="login-email" type="email" placeholder="nome@email.it" onkeydown="if(event.key==='Enter')doEmailLogin()">
+        <input class="login-input" id="login-email" type="email" placeholder="nome@email.it">
       </div>
       <div class="login-input-group">
         <label class="login-label">Password</label>
-        <input class="login-input" id="login-password" type="password" autocomplete="new-password" spellcheck="false" placeholder="••••••••" onkeydown="if(event.key==='Enter')doEmailLogin()">
+        <input class="login-input" id="login-password" type="password" autocomplete="new-password" spellcheck="false" placeholder="••••••••">
       </div>
-      <button class="login-btn" onclick="doEmailLogin()" id="btn-email-login">Accedi</button>
-    </div>
+      <button class="login-btn" type="submit" id="btn-email-login">Accedi</button>
+    </form>
 
-    <div id="form-register" style="display:none;">
+    <form id="form-register" style="display:none;" onsubmit="event.preventDefault();doRegister();">
       <div class="login-input-group">
         <label class="login-label">Nome completo</label>
         <input class="login-input" id="reg-name" type="text" placeholder="Mario Rossi">
@@ -204,8 +204,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
         <label class="login-label">Password</label>
         <input class="login-input" id="reg-password" type="password" placeholder="Almeno 6 caratteri">
       </div>
-      <button class="login-btn" onclick="doRegister()" id="btn-register">Crea account</button>
-    </div>
+      <button class="login-btn" type="submit" id="btn-register">Crea account</button>
+    </form>
 
     <div class="login-divider">
       <div class="login-divider-line"></div>
@@ -389,7 +389,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
               Analizza la mia giornata
             </button>
           </div>
-          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#9E9B94;">Analisi rimanenti oggi: 3/3</div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div id="analyze-quota" style="font-size:12px;color:#9E9B94;">Analisi rimanenti oggi: 3/3</div>
+            <span id="analyze-fallback-badge" style="display:none;font-size:11px;line-height:1;padding:4px 8px;border-radius:999px;background:#F2F1EE;color:#6B6860;border:1px solid rgba(0,0,0,0.08);">Suggerimenti locali</span>
+          </div>
+          <div id="analyze-fallback-note" style="display:none;margin-top:6px;font-size:12px;color:#6B6860;"></div>
+          <div id="analyze-request-debug" style="display:none;margin-top:4px;font-size:12px;color:#1A4FBF;"></div>
         </div>
         <div class="error-box" id="ai-error"></div>
         <div class="loader" id="ai-loader">
@@ -1199,6 +1204,7 @@ async function loginSuccess(user) {
   await hydrateLatestCheckinFromApi();
   if(!hasCheckinForDate(formatLocalDate()))hydrateLatestCheckinFromSupabaseProfile();
   initCheckin();
+  bindAnalyzeQuotaWatchers();
   renderAll();
   restorePostOauthPage();
   await loadTasksFromApi();
@@ -1264,6 +1270,12 @@ let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
 let analyzeCooldownTimeoutId=null;
+let analyzeQuotaEstimateLimit=3;
+let analyzeQuotaEstimateRemaining=3;
+let analyzeRequestSeq=0;
+let analyzeCooldownUntilMs=0;
+let analyzeRequestInFlight=false;
+const ANALYZE_MIN_INTERVAL_MS=20000;
 let focusSessionTitle='';
 let focusSessionSeconds=0;
 let focusSessionIntervalId=null;
@@ -1389,7 +1401,7 @@ function formatCalendarTime(ts){if(!ts)return '';const d=new Date(ts);if(Number.
 function escapeHtml(str){return String(str??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');}
 function avatarFromSender(sender){const raw=(sender||'').replace(/<[^>]+>/g,'').replace(/["']/g,'').trim();const display=raw||'Sconosciuto';const initials=display.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'?';return{display,initials};}
 function mapInboxMessageToUi(item){const labels=Array.isArray(item?.labels)?item.labels:[];const unread=labels.includes('UNREAD');const sender=avatarFromSender(item?.sender);return{id:item?.id,from:sender.display,subj:item?.subject||'(Senza oggetto)',prev:item?.snippet||'',time:formatInboxTime(item?.received_at||item?.created_at),source:'Email',initials:sender.initials,bg:'#E8EEFB',tc:'#0D2E7A',unread};}
-async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));saveInboxToCache();}
+async function loadInboxMessages(limit=50,options={}){if(!currentUser?.id)return;const forceSync=options?.forceSync===true;const qs=new URLSearchParams({userId:currentUser.id,limit:String(limit)});if(forceSync)qs.set('forceSync','1');const res=await fetchApi(`/api/v1/inbox/messages?${qs.toString()}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));saveInboxToCache();}
 function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)mailboxConnectionError='';}
 function setCalendarConnectionState(connected,lastSyncedAt){calendarConnected=!!connected;calendarLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)calendarConnectionError='';}
 function mapCalendarEventToUi(item){
@@ -1492,49 +1504,6 @@ async function loadCalendarStatus(){
   setCalendarConnectionState(!!data.connected,data.last_synced_at||null);
   if(data.connected)setCalendarDiagnostic('OK','stato backend: collegato');
 }
-function getJwtExpMs(token){
-  try{
-    const payloadPart=token.split('.')[1];
-    if(!payloadPart)return null;
-    const payload=JSON.parse(atob(payloadPart.replace(/-/g,'+').replace(/_/g,'/')));
-    if(!payload||typeof payload.exp!=='number')return null;
-    return payload.exp*1000;
-  }catch(e){
-    return null;
-  }
-}
-
-async function getValidAccessToken(){
-  try{
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if(!session?.access_token)return null;
-    const expMs=getJwtExpMs(session.access_token);
-    const now=Date.now();
-    const needsRefresh=expMs?expMs<=now+30_000:false;
-    if(!needsRefresh)return session.access_token;
-    const { data, error } = await supabaseClient.auth.refreshSession();
-    if(error){
-      console.warn('Refresh session fallito prima della chiamata API:',error);
-      return session.access_token;
-    }
-    return data?.session?.access_token||session.access_token;
-  }catch(err){
-    console.warn('Impossibile recuperare sessione auth per API:',err);
-    return null;
-  }
-}
-
-async function buildApiAuthHeaders(baseHeaders={}){
-  const headers={...baseHeaders};
-  try{
-    const token=await getValidAccessToken();
-    if(token)headers.Authorization=`Bearer ${token}`;
-  }catch(err){
-    console.warn('Impossibile recuperare token auth per API:',err);
-  }
-  return headers;
-}
-
 async function requestMailboxConnectUrl(userId,state){
   const payload={userId,redirectUri:getInboxConnectRedirectUri(),state};
   let lastDetail='';
@@ -1610,9 +1579,13 @@ async function requestCalendarConnectUrl(userId,state){
   throw new Error(lastDetail||'Endpoint calendario connect non raggiungibile');
 }
 
-async function buildApiAuthHeaders(baseHeaders={}){
+async function buildApiAuthHeaders(baseHeaders={},options={}){
+  const {forceRefresh=false}=options||{};
   const merged={...baseHeaders};
   try{
+    if(forceRefresh){
+      await supabaseClient.auth.refreshSession().catch(()=>null);
+    }
     const {data:{session}}=await supabaseClient.auth.getSession();
     const accessToken=session?.access_token;
     if(accessToken){
@@ -1623,19 +1596,21 @@ async function buildApiAuthHeaders(baseHeaders={}){
 }
 
 async function fetchApi(path,options={}){
+  const { singleAttempt=false, disableAuthRetry=false, ...fetchOptions } = options||{};
   let lastError=null;
-  const authHeaders=await buildApiAuthHeaders(options.headers||{});
-  let requestOptions={...options,headers:authHeaders};
-  for(const base of API_BASES){
+  const authHeaders=await buildApiAuthHeaders(fetchOptions.headers||{});
+  let requestOptions={...fetchOptions,headers:authHeaders};
+  const bases=singleAttempt?[API_BASES[0]].filter(Boolean):API_BASES;
+  for(const base of bases){
     try{
       const url=base.replace(/\/$/,'')+path;
       let res=await fetch(url,requestOptions);
-      if(res.status===401){
-        const retryHeaders=await buildApiAuthHeaders(options.headers||{});
+      if(res.status===401&&!disableAuthRetry){
+        const retryHeaders=await buildApiAuthHeaders(fetchOptions.headers||{},{forceRefresh:true});
         const oldAuth=(requestOptions.headers&&requestOptions.headers.Authorization)||'';
         const newAuth=retryHeaders.Authorization||'';
         if(newAuth&&newAuth!==oldAuth){
-          requestOptions={...options,headers:retryHeaders};
+          requestOptions={...fetchOptions,headers:retryHeaders};
           res=await fetch(url,requestOptions);
         }
       }
@@ -1933,7 +1908,7 @@ function updateInboxSubtitle(){const total=INBOX.length;const unread=INBOX.filte
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
-async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}finally{mailboxSyncInProgress=false;renderAll();}}
+async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const syncPaths=['/api/v1/inbox/google/sync','/api/v1/inbox/sync'];let res=null;let lastFallbackError='';for(const path of syncPaths){try{res=await fetchApi(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});break;}catch(fetchErr){const msg=String(fetchErr?.message||'');if(/HTTP\s+(404|405)\s+su\s+/i.test(msg)){lastFallbackError=msg;continue;}throw fetchErr;}}if(!res){if(/HTTP\s+(404|405)\s+su\s+/i.test(lastFallbackError)){await loadInboxMessages(50,{forceSync:true});setInboxConnectionState(true,new Date().toISOString());}else{throw new Error(lastFallbackError||'Endpoint sync mailbox non raggiungibile');}}if(!res){return;}if(!res.ok){const txt=await res.text();let apiMessage='';try{const parsed=JSON.parse(txt);apiMessage=String(parsed?.message||'');}catch(_){apiMessage=txt;}const normalizedMessage=apiMessage.toLowerCase();if(res.status===401&&(apiMessage.includes('GoogleRefreshTokenInvalid')||apiMessage.includes('Refresh token non disponibile'))){throw new Error('GoogleRefreshTokenInvalid');}if(res.status===404&&(normalizedMessage.includes('nessun account google collegato')||normalizedMessage.includes('google account not connected'))){throw new Error('GoogleAccountNotConnected');}throw new Error(`POST /inbox/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){const reason=String(err?.message||'');if(reason.includes('GoogleRefreshTokenInvalid')||reason.includes('GoogleAccountNotConnected')){setInboxConnectionState(false,null);mailboxConnectionError='Mailbox Google non più collegata. Clicca "Collega mailbox" per riconnettere.';showError('La connessione Gmail non è più valida. Ricollega la mailbox per riprendere la sincronizzazione.');}else{console.warn('Errore sync mailbox:',err);if(currentUser?.id){mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}}finally{mailboxSyncInProgress=false;renderAll();}}
 async function connectCalendar(){if(!currentUser?.id||calendarSyncInProgress)return;if(!isUuid(currentUser.id)){const reason=`userId non UUID valido (${currentUser.id})`;calendarConnectionError=reason;setCalendarDiagnostic('KO',reason);showError('Impossibile collegare Google Calendar: utente non valido.');renderCalendarControls();return;}calendarConnectionError='';calendarSyncInProgress=true;setCalendarDiagnostic('IN CORSO','reindirizzamento a Google');renderCalendarControls();try{const state=`${getCalendarStatePrefix()}${currentUser.id}:${Date.now()}`;removeCalendarTransient(CALENDAR_OAUTH_QUERY_STORAGE_KEY);setCalendarTransient('filo_calendar_oauth_state',state);markCalendarOAuthPending(currentUser.id);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'calendario');const calendarAuth=await requestCalendarConnectUrl(currentUser.id,state);const authUrl=typeof calendarAuth==='string'?calendarAuth:calendarAuth?.authUrl;const redirectUri=typeof calendarAuth==='object'&&calendarAuth?.redirectUri?calendarAuth.redirectUri:getCalendarConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione calendario non disponibile');setCalendarTransient(CALENDAR_REDIRECT_URI_KEY,redirectUri);setCalendarDiagnostic('IN CORSO',`redirect ${redirectUri}`);window.location.assign(authUrl);}catch(err){let reason=err?.message?String(err.message):'errore sconosciuto';if(reason.toLowerCase()==='failed to fetch'){reason=`Failed to fetch (API base: ${API_BASES.join(', ')||'n/d'})`;}console.warn('Errore collegamento calendario:',reason,err);calendarConnectionError=`Connessione calendario non riuscita: ${reason}`;setCalendarDiagnostic('KO',reason);clearCalendarOAuthFlowState();showError('Impossibile collegare Google Calendar.');calendarSyncInProgress=false;renderCalendarControls();}}
 async function syncCalendar(){
   if(!currentUser?.id){
@@ -2286,6 +2261,11 @@ function renderDaySuggestions(suggestions){
   const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
   container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#9E9B94;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
 }
+function bindAnalyzeQuotaWatchers(){
+  // Compatibilità con deploy precedenti che chiamavano questa funzione.
+  // Intenzionalmente no-op: la UI quota viene aggiornata nei flussi analyzeDay().
+}
+
 function updateAnalyzeQuotaLabel(limit,remaining){
   const el=document.getElementById('analyze-quota');
   if(!el)return;
@@ -2297,8 +2277,40 @@ function updateAnalyzeQuotaLabel(limit,remaining){
   el.textContent='Analisi rimanenti oggi: --';
   el.style.color='#9E9B94';
 }
+function syncAnalyzeQuotaEstimate(limit,remaining){
+  if(Number.isFinite(limit)&&Number.isFinite(remaining)){
+    analyzeQuotaEstimateLimit=Math.max(0,Math.floor(limit));
+    analyzeQuotaEstimateRemaining=Math.max(0,Math.floor(remaining));
+  }
+}
+function consumeAnalyzeQuotaEstimate(){
+  if(!Number.isFinite(analyzeQuotaEstimateLimit)||analyzeQuotaEstimateLimit<=0){
+    analyzeQuotaEstimateLimit=3;
+  }
+  if(!Number.isFinite(analyzeQuotaEstimateRemaining)||analyzeQuotaEstimateRemaining<0){
+    analyzeQuotaEstimateRemaining=analyzeQuotaEstimateLimit;
+  }
+  analyzeQuotaEstimateRemaining=Math.max(0,analyzeQuotaEstimateRemaining-1);
+  return {limit:analyzeQuotaEstimateLimit,remaining:analyzeQuotaEstimateRemaining};
+}
+function setAnalyzeFallbackStatus(active,message=''){
+  const badge=document.getElementById('analyze-fallback-badge');
+  const note=document.getElementById('analyze-fallback-note');
+  if(badge)badge.style.display=active?'inline-flex':'none';
+  if(note){
+    note.style.display=active&&message?'block':'none';
+    note.textContent=active&&message?message:'';
+  }
+}
+function setAnalyzeRequestDebug(message=''){
+  const el=document.getElementById('analyze-request-debug');
+  if(!el)return;
+  el.style.display=message?'block':'none';
+  el.textContent=message||'';
+}
 function startAnalyzeCooldown(seconds){
   const btn=document.getElementById('analyze-btn');
+  const errBox=document.getElementById('ai-error');
   if(!btn)return;
   if(analyzeCooldownTimeoutId){
     clearInterval(analyzeCooldownTimeoutId);
@@ -2306,63 +2318,125 @@ function startAnalyzeCooldown(seconds){
   }
   let left=Math.max(1,Math.ceil(Number(seconds)||0));
   const originalHtml=`<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.1 2.2 2.4.35-1.75 1.7.42 2.4L6.5 6.6 4.33 7.65l.42-2.4L3 3.55l2.4-.35z" fill="white"/></svg>Analizza la mia giornata`;
+
+  const renderCooldownMessage=()=>{
+    if(!errBox)return;
+    errBox.textContent=`Attendi ${left}s prima di una nuova richiesta.`;
+    errBox.classList.add('active');
+    errBox.dataset.cooldownMessage='1';
+  };
+
   btn.disabled=true;
   btn.innerHTML=`Attendi ${left}s`;
+  renderCooldownMessage();
+
   analyzeCooldownTimeoutId=setInterval(()=>{
     left-=1;
     if(left<=0){
       clearInterval(analyzeCooldownTimeoutId);
       analyzeCooldownTimeoutId=null;
-      btn.disabled=false;
+      if(!analyzeRequestInFlight)btn.disabled=false;
       btn.innerHTML=originalHtml;
+      if(errBox?.dataset?.cooldownMessage==='1'){
+        errBox.classList.remove('active');
+        errBox.textContent='';
+        delete errBox.dataset.cooldownMessage;
+      }
       return;
     }
     btn.innerHTML=`Attendi ${left}s`;
+    renderCooldownMessage();
   },1000);
 }
+
 async function analyzeDay(){
-  const agenda=document.getElementById('agenda-input').value.trim();
-  const pending=document.getElementById('pending-input').value.trim();
+  const agendaEl=document.getElementById('agenda-input');
+  const pendingEl=document.getElementById('pending-input');
+  const agenda=agendaEl?.value.trim()||'';
+  const pending=pendingEl?.value.trim()||'';
   const dayEnd=document.getElementById('day-end-input')?.value||'';
   const availability=document.getElementById('day-availability-input')?.value||'';
   const dayFocus=document.getElementById('day-focus-input')?.value.trim()||'';
-  if(!agenda&&!pending)return;
+  const errBox=document.getElementById('ai-error');
+  if(!agenda&&!pending){
+    if(errBox){
+      errBox.textContent='Inserisci almeno agenda o sospesi prima di analizzare la giornata.';
+      errBox.classList.add('active');
+    }
+    if(agendaEl)agendaEl.focus();
+    setAnalyzeRequestDebug('Richiesta non inviata: input vuoto');
+    return;
+  }
+  const now=Date.now();
+  if(analyzeCooldownUntilMs>now){
+    const left=Math.ceil((analyzeCooldownUntilMs-now)/1000);
+    startAnalyzeCooldown(left);
+    return;
+  }
+  if(analyzeRequestInFlight){
+    setAnalyzeRequestDebug('Richiesta già in corso (#in-flight)');
+    return;
+  }
+  analyzeRequestInFlight=true;
   const btn=document.getElementById('analyze-btn');
   const loader=document.getElementById('ai-loader');
-  const errBox=document.getElementById('ai-error');
   const container=document.getElementById('suggestions-container');
   btn.disabled=true;
   loader.classList.add('active');
   errBox.classList.remove('active');
   container.innerHTML='';
+  setAnalyzeFallbackStatus(false);
+  const requestId=++analyzeRequestSeq;
+  analyzeCooldownUntilMs=Date.now()+ANALYZE_MIN_INTERVAL_MS;
+  setAnalyzeRequestDebug(`Richiesta partita (#${requestId})`);
+  startAnalyzeCooldown(Math.ceil(ANALYZE_MIN_INTERVAL_MS/1000));
   try{
-    const res=await fetchApi('/api/v1/assistant/day-analysis',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        userId:currentUser?.id||null,
-        agenda,pending,dayEnd,availability,dayFocus,
-        memoryContext:getMemoryContext(),energy:todayEnergy,stress:todayStress
-      })
-    });
+    const res=await Promise.race([
+      fetchApi('/api/v1/assistant/day-analysis',{
+        singleAttempt:true,
+        disableAuthRetry:true,
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          userId:currentUser?.id||null,
+          agenda,pending,dayEnd,availability,dayFocus,
+          memoryContext:getMemoryContext(),energy:todayEnergy,stress:todayStress
+        })
+      }),
+      new Promise((_,reject)=>setTimeout(()=>reject(new Error('Timeout richiesta analisi')),15000))
+    ]);
     const payload=await res.json().catch(()=>null);
+    const aiAttemptCounter=Number(payload?.data?.diagnostics?.aiAttemptCounter);
+    const responseDebugSuffix=Number.isFinite(aiAttemptCounter)?` · AI=${aiAttemptCounter}`:'';
     if(!res.ok){
       if(res.status===404){
         const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
         loader.classList.remove('active');
-        btn.disabled=false;
+        if(!analyzeCooldownTimeoutId)btn.disabled=false;
         errBox.classList.remove('active');
+        setAnalyzeFallbackStatus(true,'Endpoint analisi non disponibile: uso suggerimenti locali.');
+        setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})${responseDebugSuffix}`);
         renderDaySuggestions(fallbackSuggestions);
+        analyzeRequestInFlight=false;
         return;
       }
       if(res.status===429&&payload){
         const message=payload?.message||'Limite analisi raggiunto.';
         errBox.textContent=message;
         errBox.classList.add('active');
-        updateAnalyzeQuotaLabel(Number(payload?.limit),Number(payload?.remaining));
-        if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
+        const limitVal=Number(payload?.limit);
+        const remainingVal=Number(payload?.remaining);
+        syncAnalyzeQuotaEstimate(limitVal,remainingVal);
+        updateAnalyzeQuotaLabel(limitVal,remainingVal);
+        if(Number(payload?.retryAfterSeconds)>0){
+          analyzeCooldownUntilMs=Date.now()+(Number(payload?.retryAfterSeconds)*1000);
+          startAnalyzeCooldown(payload.retryAfterSeconds);
+        }
         loader.classList.remove('active');
         if(!analyzeCooldownTimeoutId)btn.disabled=false;
+        setAnalyzeFallbackStatus(false);
+        setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})${responseDebugSuffix}`);
+        analyzeRequestInFlight=false;
         return;
       }
       const fallbackMsg=payload?.message||`POST /assistant/day-analysis fallita (${res.status})`;
@@ -2370,27 +2444,67 @@ async function analyzeDay(){
     }
     const suggestions=Array.isArray(payload?.data?.suggerimenti)?payload.data.suggerimenti:[];
     const quota=payload?.data?.quota||null;
-    if(quota)updateAnalyzeQuotaLabel(Number(quota.limit),Number(quota.remaining));
+    if(quota){
+      const limitVal=Number(quota.limit);
+      const remainingVal=Number(quota.remaining);
+      syncAnalyzeQuotaEstimate(limitVal,remainingVal);
+      updateAnalyzeQuotaLabel(limitVal,remainingVal);
+    }else{
+      const estimated=consumeAnalyzeQuotaEstimate();
+      updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
+    }
+    if(payload?.data?.degraded){
+      const diagnosticId=payload?.data?.diagnosticId||null;
+      if(diagnosticId)console.info('Day analysis in fallback locale. Ref:',diagnosticId);
+      const fallbackHint=String(payload?.data?.degradedHint||'Suggerimenti locali attivi.');
+      errBox.classList.remove('active');
+      setAnalyzeFallbackStatus(true,fallbackHint);
+    }else{
+      errBox.classList.remove('active');
+      setAnalyzeFallbackStatus(false);
+    }
     loader.classList.remove('active');
-    btn.disabled=false;
+    if(!analyzeCooldownTimeoutId)btn.disabled=false;
+    setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})${responseDebugSuffix}`);
     renderDaySuggestions(suggestions);
+    analyzeRequestInFlight=false;
   }catch(e){
-    console.warn('Errore analisi giornata:',e);
     loader.classList.remove('active');
-    btn.disabled=false;
+    if(!analyzeCooldownTimeoutId)btn.disabled=false;
     const msg=String(e?.message||'');
+    const expectedAnalyzeFallbackError =
+      msg.includes('/api/v1/assistant/day-analysis') ||
+      msg.includes('Timeout richiesta analisi') ||
+      msg.includes('HTTP 503');
+    if(!expectedAnalyzeFallbackError)console.warn('Errore analisi giornata:',e);
     const assistantEndpointMissing =
       msg.includes('/api/v1/assistant/day-analysis') ||
       (msg.includes('HTTP 404') && msg.includes('/api/v1'));
+    if(msg.includes('Timeout richiesta analisi')){
+      errBox.textContent='Richiesta analisi scaduta. Riprova tra pochi secondi.';
+      errBox.classList.add('active');
+      setAnalyzeFallbackStatus(false);
+      setAnalyzeRequestDebug(`Errore risposta (#${requestId}) · timeout`);
+      analyzeRequestInFlight=false;
+      return;
+    }
     if(assistantEndpointMissing){
       errBox.textContent='Analisi AI non disponibile su questo deploy. Ti mostro suggerimenti locali.';
       errBox.classList.add('active');
       const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
+      const estimated=consumeAnalyzeQuotaEstimate();
+      updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
+      setAnalyzeFallbackStatus(true,'Endpoint analisi non disponibile: uso suggerimenti locali.');
+      setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
       renderDaySuggestions(fallbackSuggestions);
+      analyzeRequestInFlight=false;
       return;
     }
     errBox.textContent='Errore nell\'analisi. Riprova.';
     errBox.classList.add('active');
+    setAnalyzeFallbackStatus(false);
+    setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
+    analyzeRequestInFlight=false;
   }
 }
 
