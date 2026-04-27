@@ -21,8 +21,7 @@ const ExchangeSchema = z.object({
 
 const MessagesQuerySchema = z.object({
   userId: z.string().uuid(),
-  limit: z.coerce.number().int().min(1).max(200).default(50),
-  forceSync: z.coerce.boolean().optional().default(false)
+  limit: z.coerce.number().int().min(1).max(200).default(50)
 });
 const SyncSchema = z.object({
   userId: z.string().uuid()
@@ -50,13 +49,16 @@ export async function postGoogleCodeExchange(req, res) {
 }
 
 export async function postGoogleSync(req, res) {
-  const parsed = SyncSchema.safeParse(req.body);
+  const parsed = z
+    .object({
+      userId: z.string().uuid()
+    })
+    .safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(400, 'Payload sync inbox non valido');
   }
 
   const result = await syncGoogleInbox(parsed.data.userId);
-  res.set('Cache-Control', 'no-store');
   res.json({ data: result });
 }
 
@@ -66,19 +68,18 @@ export async function getInboxMessages(req, res) {
     throw new HttpError(400, 'Query inbox non valida');
   }
 
-  const result = await listInboxMessages(parsed.data.userId, parsed.data.limit, {
-    forceSync: parsed.data.forceSync
-  });
+  const messages = await listInboxMessages(parsed.data.userId, parsed.data.limit);
   res.set('Cache-Control', 'no-store');
-  res.json({
-    data: result.messages,
-    meta: {
-      count: result.messages.length,
-      sync: result.sync
-    }
-  });
+  res.json({ data: messages });
 }
 
 export async function postInboxSync(req, res) {
-  return postGoogleSync(req, res);
+  const parsed = SyncSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Payload sync inbox non valido');
+  }
+
+  const result = await syncInboxForUser(parsed.data.userId);
+  res.set('Cache-Control', 'no-store');
+  res.json({ data: result });
 }
