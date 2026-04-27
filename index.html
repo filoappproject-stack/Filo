@@ -2516,6 +2516,11 @@ function startAnalyzeCooldown(seconds){
       analyzeCooldownTimeoutId=null;
       analyzeCooldownUntilMs=0;
       btn.innerHTML=originalHtml;
+      if(errBox?.dataset?.cooldownMessage==='1'){
+        errBox.textContent='';
+        errBox.classList.remove('active');
+        delete errBox.dataset.cooldownMessage;
+      }
       refreshAnalyzeQuota();
       return;
     }
@@ -2551,6 +2556,7 @@ async function analyzeDay(){
   btn.disabled=true;
   loader.classList.add('active');
   errBox.classList.remove('active');
+  delete errBox.dataset.cooldownMessage;
   container.innerHTML='';
   setAnalyzeFallbackStatus(false);
   const requestId=++analyzeRequestSeq;
