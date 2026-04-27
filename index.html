@@ -2411,6 +2411,31 @@ function consumeAnalyzeQuotaEstimate(){
   const limit=Number(match[2])||fallback.limit;
   return {limit,remaining};
 }
+function shouldUseLocalAnalyzeFallbackFromStatus(status){
+  return status===404 || status===502 || status===503 || status===504;
+}
+function shouldUseLocalAnalyzeFallbackFromErrorMessage(message){
+  const msg=String(message||'');
+  return (
+    msg.includes('/api/v1/assistant/day-analysis') ||
+    msg.includes('HTTP 404') ||
+    msg.includes('HTTP 502') ||
+    msg.includes('HTTP 503') ||
+    msg.includes('HTTP 504')
+  );
+}
+function applyLocalAnalyzeFallbackState(input,requestId,message){
+  const errBox=document.getElementById('ai-error');
+  if(!errBox)return;
+  errBox.textContent=message||'Analisi AI temporaneamente non disponibile. Ti mostro suggerimenti locali.';
+  errBox.classList.add('active');
+  const fallbackSuggestions=buildLocalDayFallback(input);
+  const estimated=consumeAnalyzeQuotaEstimate();
+  updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
+  setAnalyzeFallbackStatus(true,errBox.textContent);
+  setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
+  renderDaySuggestions(fallbackSuggestions);
+}
 function setAnalyzeButtonAvailability(remaining,options){
   const btn=document.getElementById('analyze-btn');
   if(!btn)return;
@@ -2539,14 +2564,17 @@ async function analyzeDay(){
     const aiAttemptCounter=Number(payload?.data?.diagnostics?.aiAttemptCounter);
     const responseDebugSuffix=Number.isFinite(aiAttemptCounter)?` · AI=${aiAttemptCounter}`:'';
     if(!res.ok){
-      if(res.status===404){
-        const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
+      if(shouldUseLocalAnalyzeFallbackFromStatus(res.status)){
         loader.classList.remove('active');
         setAnalyzeButtonAvailability(Number.NaN);
-        errBox.classList.remove('active');
-        setAnalyzeFallbackStatus(true,'Endpoint analisi non disponibile: uso suggerimenti locali.');
-        setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})${responseDebugSuffix}`);
-        renderDaySuggestions(fallbackSuggestions);
+        applyLocalAnalyzeFallbackState(
+          {agenda,pending,dayFocus},
+          requestId,
+          res.status===404
+            ? 'Endpoint analisi non disponibile: uso suggerimenti locali.'
+            : 'Servizio analisi temporaneamente non disponibile: uso suggerimenti locali.'
+        );
+        setAnalyzeRequestDebug(`Risposta fallback (#${requestId})${responseDebugSuffix}`);
         analyzeRequestInFlight=false;
         return;
       }
@@ -2577,18 +2605,12 @@ async function analyzeDay(){
     loader.classList.remove('active');
     setAnalyzeButtonAvailability(Number.NaN);
     const msg=String(e?.message||'');
-    const assistantEndpointMissing =
-      msg.includes('/api/v1/assistant/day-analysis') ||
-      (msg.includes('HTTP 404') && msg.includes('/api/v1'));
-    if(assistantEndpointMissing){
-      errBox.textContent='Analisi AI non disponibile su questo deploy. Ti mostro suggerimenti locali.';
-      errBox.classList.add('active');
-      const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
-      const estimated=consumeAnalyzeQuotaEstimate();
-      updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
-      setAnalyzeFallbackStatus(true,'Endpoint analisi non disponibile: uso suggerimenti locali.');
-      setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
-      renderDaySuggestions(fallbackSuggestions);
+    if(shouldUseLocalAnalyzeFallbackFromErrorMessage(msg)){
+      applyLocalAnalyzeFallbackState(
+        {agenda,pending,dayFocus},
+        requestId,
+        'Servizio analisi temporaneamente non disponibile: uso suggerimenti locali.'
+      );
       analyzeRequestInFlight=false;
       return;
     }
