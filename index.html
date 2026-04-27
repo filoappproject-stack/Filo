@@ -1243,9 +1243,13 @@ let inboxSelectedId=null;
 let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
+const ANALYZE_MIN_INTERVAL_MS=10000;
+const ANALYZE_REMOTE_BACKOFF_MS=5*60*1000;
 let analyzeCooldownTimeoutId=null;
 let analyzeCooldownUntilMs=0;
 let analyzeRequestInFlight=false;
+let analyzeRequestSeq=0;
+let analyzeRemoteBackoffUntilMs=0;
 let analyzeQuotaRefreshTimeoutId=null;
 let analyzeQuotaWatchersBound=false;
 let focusSessionTitle='';
@@ -2377,6 +2381,70 @@ function updateAnalyzeQuotaLabel(limit,remaining){
   el.textContent='Analisi rimanenti oggi: --';
   el.style.color='#9E9B94';
 }
+function setAnalyzeRequestDebug(message){
+  if(!message)return;
+  console.debug('[DayAnalysis]',message);
+}
+function setAnalyzeFallbackStatus(isActive,message){
+  const errBox=document.getElementById('ai-error');
+  if(!errBox)return;
+  errBox.dataset.analyzeFallback=isActive?'1':'0';
+  if(!isActive){
+    if(errBox.dataset.cooldownMessage==='1')return;
+    if((errBox.textContent||'').includes('suggerimenti locali.')){
+      errBox.textContent='';
+      errBox.classList.remove('active');
+    }
+    return;
+  }
+  if(message){
+    errBox.textContent=message;
+    errBox.classList.add('active');
+  }
+}
+function consumeAnalyzeQuotaEstimate(){
+  const quotaEl=document.getElementById('analyze-quota');
+  const fallback={limit:3,remaining:2};
+  if(!quotaEl)return fallback;
+  const text=(quotaEl.textContent||'').trim();
+  const match=text.match(/(\d+)\s*\/\s*(\d+)/);
+  if(!match)return fallback;
+  const remaining=Math.max(0,Number(match[1])-1);
+  const limit=Number(match[2])||fallback.limit;
+  return {limit,remaining};
+}
+function shouldUseLocalAnalyzeFallbackFromStatus(status){
+  return status===404 || status===502 || status===503 || status===504;
+}
+function shouldUseLocalAnalyzeFallbackFromErrorMessage(message){
+  const msg=String(message||'');
+  return (
+    msg.includes('/api/v1/assistant/day-analysis') ||
+    msg.includes('HTTP 404') ||
+    msg.includes('HTTP 502') ||
+    msg.includes('HTTP 503') ||
+    msg.includes('HTTP 504')
+  );
+}
+function applyLocalAnalyzeFallbackState(input,requestId,message){
+  const errBox=document.getElementById('ai-error');
+  if(!errBox)return;
+  errBox.textContent=message||'Analisi AI temporaneamente non disponibile. Ti mostro suggerimenti locali.';
+  errBox.classList.add('active');
+  const fallbackSuggestions=buildLocalDayFallback(input);
+  const estimated=consumeAnalyzeQuotaEstimate();
+  updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
+  setAnalyzeFallbackStatus(true,errBox.textContent);
+  setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
+  renderDaySuggestions(fallbackSuggestions);
+}
+function markAnalyzeRemoteUnavailable(status){
+  const multiplier=status===404?12:1;
+  analyzeRemoteBackoffUntilMs=Date.now()+(ANALYZE_REMOTE_BACKOFF_MS*multiplier);
+}
+function isAnalyzeRemoteInBackoff(){
+  return analyzeRemoteBackoffUntilMs>Date.now();
+}
 function setAnalyzeButtonAvailability(remaining,options){
   const btn=document.getElementById('analyze-btn');
   if(!btn)return;
@@ -2489,6 +2557,17 @@ async function analyzeDay(){
   analyzeCooldownUntilMs=Date.now()+ANALYZE_MIN_INTERVAL_MS;
   setAnalyzeRequestDebug(`Richiesta partita (#${requestId})`);
   startAnalyzeCooldown(Math.ceil(ANALYZE_MIN_INTERVAL_MS/1000));
+  if(isAnalyzeRemoteInBackoff()){
+    loader.classList.remove('active');
+    setAnalyzeButtonAvailability(Number.NaN);
+    applyLocalAnalyzeFallbackState(
+      {agenda,pending,dayFocus},
+      requestId,
+      'Servizio analisi temporaneamente non disponibile: uso suggerimenti locali.'
+    );
+    analyzeRequestInFlight=false;
+    return;
+  }
   try{
     const res=await fetchApi('/api/v1/assistant/day-analysis',{
       singleAttempt:true,
@@ -2505,14 +2584,18 @@ async function analyzeDay(){
     const aiAttemptCounter=Number(payload?.data?.diagnostics?.aiAttemptCounter);
     const responseDebugSuffix=Number.isFinite(aiAttemptCounter)?` · AI=${aiAttemptCounter}`:'';
     if(!res.ok){
-      if(res.status===404){
-        const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
+      if(shouldUseLocalAnalyzeFallbackFromStatus(res.status)){
+        markAnalyzeRemoteUnavailable(res.status);
         loader.classList.remove('active');
         setAnalyzeButtonAvailability(Number.NaN);
-        errBox.classList.remove('active');
-        setAnalyzeFallbackStatus(true,'Endpoint analisi non disponibile: uso suggerimenti locali.');
-        setAnalyzeRequestDebug(`Risposta ricevuta (#${requestId})${responseDebugSuffix}`);
-        renderDaySuggestions(fallbackSuggestions);
+        applyLocalAnalyzeFallbackState(
+          {agenda,pending,dayFocus},
+          requestId,
+          res.status===404
+            ? 'Endpoint analisi non disponibile: uso suggerimenti locali.'
+            : 'Servizio analisi temporaneamente non disponibile: uso suggerimenti locali.'
+        );
+        setAnalyzeRequestDebug(`Risposta fallback (#${requestId})${responseDebugSuffix}`);
         analyzeRequestInFlight=false;
         return;
       }
@@ -2539,25 +2622,22 @@ async function analyzeDay(){
     renderDaySuggestions(suggestions);
     analyzeRequestInFlight=false;
   }catch(e){
-    console.warn('Errore analisi giornata:',e);
     loader.classList.remove('active');
     setAnalyzeButtonAvailability(Number.NaN);
     const msg=String(e?.message||'');
-    const assistantEndpointMissing =
-      msg.includes('/api/v1/assistant/day-analysis') ||
-      (msg.includes('HTTP 404') && msg.includes('/api/v1'));
-    if(assistantEndpointMissing){
-      errBox.textContent='Analisi AI non disponibile su questo deploy. Ti mostro suggerimenti locali.';
-      errBox.classList.add('active');
-      const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
-      const estimated=consumeAnalyzeQuotaEstimate();
-      updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
-      setAnalyzeFallbackStatus(true,'Endpoint analisi non disponibile: uso suggerimenti locali.');
-      setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
-      renderDaySuggestions(fallbackSuggestions);
+    if(shouldUseLocalAnalyzeFallbackFromErrorMessage(msg)){
+      console.info('Analisi AI non disponibile, uso fallback locale.');
+      const statusMatch=msg.match(/HTTP\s+(404|502|503|504)/);
+      markAnalyzeRemoteUnavailable(statusMatch?Number(statusMatch[1]):503);
+      applyLocalAnalyzeFallbackState(
+        {agenda,pending,dayFocus},
+        requestId,
+        'Servizio analisi temporaneamente non disponibile: uso suggerimenti locali.'
+      );
       analyzeRequestInFlight=false;
       return;
     }
+    console.warn('Errore analisi giornata:',e);
     errBox.textContent='Errore nell\'analisi. Riprova.';
     errBox.classList.add('active');
     analyzeRequestInFlight=false;
