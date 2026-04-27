@@ -1244,10 +1244,12 @@ let prefs={checkin:true,memoria:true,ai:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
 const ANALYZE_MIN_INTERVAL_MS=10000;
+const ANALYZE_REMOTE_BACKOFF_MS=5*60*1000;
 let analyzeCooldownTimeoutId=null;
 let analyzeCooldownUntilMs=0;
 let analyzeRequestInFlight=false;
 let analyzeRequestSeq=0;
+let analyzeRemoteBackoffUntilMs=0;
 let analyzeQuotaRefreshTimeoutId=null;
 let analyzeQuotaWatchersBound=false;
 let focusSessionTitle='';
@@ -2436,6 +2438,13 @@ function applyLocalAnalyzeFallbackState(input,requestId,message){
   setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
   renderDaySuggestions(fallbackSuggestions);
 }
+function markAnalyzeRemoteUnavailable(status){
+  const multiplier=status===404?12:1;
+  analyzeRemoteBackoffUntilMs=Date.now()+(ANALYZE_REMOTE_BACKOFF_MS*multiplier);
+}
+function isAnalyzeRemoteInBackoff(){
+  return analyzeRemoteBackoffUntilMs>Date.now();
+}
 function setAnalyzeButtonAvailability(remaining,options){
   const btn=document.getElementById('analyze-btn');
   if(!btn)return;
@@ -2548,6 +2557,17 @@ async function analyzeDay(){
   analyzeCooldownUntilMs=Date.now()+ANALYZE_MIN_INTERVAL_MS;
   setAnalyzeRequestDebug(`Richiesta partita (#${requestId})`);
   startAnalyzeCooldown(Math.ceil(ANALYZE_MIN_INTERVAL_MS/1000));
+  if(isAnalyzeRemoteInBackoff()){
+    loader.classList.remove('active');
+    setAnalyzeButtonAvailability(Number.NaN);
+    applyLocalAnalyzeFallbackState(
+      {agenda,pending,dayFocus},
+      requestId,
+      'Servizio analisi temporaneamente non disponibile: uso suggerimenti locali.'
+    );
+    analyzeRequestInFlight=false;
+    return;
+  }
   try{
     const res=await fetchApi('/api/v1/assistant/day-analysis',{
       singleAttempt:true,
@@ -2565,6 +2585,7 @@ async function analyzeDay(){
     const responseDebugSuffix=Number.isFinite(aiAttemptCounter)?` · AI=${aiAttemptCounter}`:'';
     if(!res.ok){
       if(shouldUseLocalAnalyzeFallbackFromStatus(res.status)){
+        markAnalyzeRemoteUnavailable(res.status);
         loader.classList.remove('active');
         setAnalyzeButtonAvailability(Number.NaN);
         applyLocalAnalyzeFallbackState(
@@ -2601,11 +2622,13 @@ async function analyzeDay(){
     renderDaySuggestions(suggestions);
     analyzeRequestInFlight=false;
   }catch(e){
-    console.warn('Errore analisi giornata:',e);
     loader.classList.remove('active');
     setAnalyzeButtonAvailability(Number.NaN);
     const msg=String(e?.message||'');
     if(shouldUseLocalAnalyzeFallbackFromErrorMessage(msg)){
+      console.info('Analisi AI non disponibile, uso fallback locale.');
+      const statusMatch=msg.match(/HTTP\s+(404|502|503|504)/);
+      markAnalyzeRemoteUnavailable(statusMatch?Number(statusMatch[1]):503);
       applyLocalAnalyzeFallbackState(
         {agenda,pending,dayFocus},
         requestId,
@@ -2614,6 +2637,7 @@ async function analyzeDay(){
       analyzeRequestInFlight=false;
       return;
     }
+    console.warn('Errore analisi giornata:',e);
     errBox.textContent='Errore nell\'analisi. Riprova.';
     errBox.classList.add('active');
     analyzeRequestInFlight=false;
