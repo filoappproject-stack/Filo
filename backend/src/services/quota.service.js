@@ -4,7 +4,7 @@ import { pool } from '../config/db.js';
 
 const BASE_DAILY_LIMIT = 3;
 const BURST_DAILY_LIMIT = 5;
-const COOLDOWN_MS = 20_000;
+const COOLDOWN_MS = 60_000;
 
 const usageByActor = new Map();
 
