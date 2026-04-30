@@ -2,6 +2,25 @@ import { env } from '../config/env.js';
 
 let aiAttemptCounter = 0;
 
+let lastAnalyzedSignature = null;
+let lastSuggestions = null;
+
+function normalizeInputForCache(input) {
+  const normalizeText = (value) => String(value ?? '').trim().replace(/\s+/g, ' ');
+  const normalizeNumber = (value) => (Number.isFinite(value) ? Number(value) : null);
+
+  return JSON.stringify({
+    agenda: normalizeText(input?.agenda),
+    pending: normalizeText(input?.pending),
+    dayEnd: normalizeText(input?.dayEnd),
+    availability: normalizeText(input?.availability),
+    dayFocus: normalizeText(input?.dayFocus),
+    memoryContext: normalizeText(input?.memoryContext),
+    energy: normalizeNumber(input?.energy),
+    stress: normalizeNumber(input?.stress)
+  });
+}
+
 export function getAiAttemptCounter() {
   return aiAttemptCounter;
 }
@@ -105,14 +124,29 @@ Fornisci 3-5 suggerimenti concreti.`;
 }
 
 export async function analyzeDay(input) {
+  const inputSignature = normalizeInputForCache(input);
+
+  if (inputSignature === lastAnalyzedSignature && Array.isArray(lastSuggestions)) {
+    return lastSuggestions;
+  }
+
+  let suggestions;
+
   try {
     const aiSuggestions = await askAnthropic(input);
     if (aiSuggestions?.length) {
-      return aiSuggestions.slice(0, 5);
+      suggestions = aiSuggestions.slice(0, 5);
     }
   } catch (err) {
     console.warn('AI day analysis fallback attivato:', err?.message || err);
   }
 
-  return buildFallbackSuggestions(input);
+  if (!suggestions) {
+    suggestions = buildFallbackSuggestions(input);
+  }
+
+  lastAnalyzedSignature = inputSignature;
+  lastSuggestions = suggestions;
+
+  return suggestions;
 }
