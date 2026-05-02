@@ -537,7 +537,7 @@ export async function getGoogleInboxStatus(userId) {
 
   const { rows } = await query(
     `
-      SELECT id, provider_email, last_synced_at
+      SELECT id, provider_email, access_token, refresh_token, token_expires_at, last_synced_at
       FROM inbox_accounts
       WHERE user_id = $1 AND provider = 'google'
       LIMIT 1
@@ -552,6 +552,21 @@ export async function getGoogleInboxStatus(userId) {
       provider_email: null,
       last_synced_at: null
     };
+  }
+
+  // Verifica credenziali: se il refresh token è revocato/scaduto, l'account viene rimosso
+  // e lo stato torna "non collegato" per evitare UI incoerente ("collegata" ma sync impossibile).
+  try {
+    await resolveAccountAccessToken(account);
+  } catch (error) {
+    if (error instanceof HttpError && error.statusCode === 401) {
+      return {
+        connected: false,
+        provider_email: null,
+        last_synced_at: null
+      };
+    }
+    throw error;
   }
 
   return {
