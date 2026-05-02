@@ -685,11 +685,13 @@ function getQueryParamPreservePlus(url,key){
       prompt: url.searchParams.get('prompt'),
       capturedAt: Date.now()
     };
-    const storageKey = isCalendarOAuthCallback ? CALENDAR_OAUTH_QUERY_STORAGE_KEY : INBOX_OAUTH_QUERY_STORAGE_KEY;
-    if(storageKey===CALENDAR_OAUTH_QUERY_STORAGE_KEY){
-      setCalendarTransient(storageKey,JSON.stringify(payload));
-    }else{
-      sessionStorage.setItem(storageKey, JSON.stringify(payload));
+    // In alcuni casi Google restituisce scope multipli (es. calendar+gmail) anche per flow mailbox:
+    // se usassimo un solo storageKey potremmo perdere il callback inbox e finire in loop "Collega mailbox".
+    if(isInboxOAuthCallback){
+      sessionStorage.setItem(INBOX_OAUTH_QUERY_STORAGE_KEY, JSON.stringify(payload));
+    }
+    if(isCalendarOAuthCallback){
+      setCalendarTransient(CALENDAR_OAUTH_QUERY_STORAGE_KEY,JSON.stringify(payload));
     }
     ['code','error','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     const cleanUrl = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash;
