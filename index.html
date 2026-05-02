@@ -948,6 +948,7 @@ async function tryHandleMailboxOauthCallback() {
     const payload = await res.json();
     const syncedAt = payload?.data?.account?.last_synced_at || new Date().toISOString();
     setInboxConnectionState(true, syncedAt);
+    mailboxOauthJustConnected=true;
     try{
       await loadInboxMessages();
     }catch(syncErr){
@@ -1216,7 +1217,7 @@ async function loginSuccess(user) {
     setInboxConnectionState(false,null);
     INBOX.length=0;
   }
-  if(currentUser?.id){
+  if(currentUser?.id&&!mailboxOauthJustConnected){
     try{
       await loadInboxStatus();
     }catch(err){
@@ -1226,6 +1227,7 @@ async function loginSuccess(user) {
       }
     }
   }
+  mailboxOauthJustConnected=false;
   calendarEvents=[];
   renderAll();
   analyzePatterns();
@@ -1244,6 +1246,7 @@ let mailboxLastSync=null;
 let mailboxSyncInProgress=false;
 let mailboxBackgroundSyncInProgress=false;
 let mailboxConnectionError='';
+let mailboxOauthJustConnected=false;
 let calendarConnected=false;
 let calendarLastSync=null;
 let calendarSyncInProgress=false;
