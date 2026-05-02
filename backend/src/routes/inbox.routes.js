@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getGoogleConnectUrl,
+  getGoogleInboxConnectionStatus,
   getInboxMessages,
   postGoogleCodeExchange,
   postGoogleSync
@@ -13,6 +14,7 @@ router.post('/google/connect', asyncHandler(getGoogleConnectUrl));
 router.get('/google/connect', asyncHandler(getGoogleConnectUrl));
 router.post('/google/exchange', asyncHandler(postGoogleCodeExchange));
 router.post('/google/sync', asyncHandler(postGoogleSync));
+router.get('/google/status', asyncHandler(getGoogleInboxConnectionStatus));
 router.get('/messages', asyncHandler(getInboxMessages));
 
 export default router;
