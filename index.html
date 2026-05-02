@@ -1450,7 +1450,7 @@ function isMailboxAuthExpiredError(err){
 function markMailboxReconnectRequired(){
   setInboxConnectionState(false,null);
   mailboxConnectionError='Sessione Google Mail scaduta. Ricollega la mailbox.';
-  INBOX.length=0;
+  // Manteniamo i messaggi già presenti in cache/UI per non azzerare badge e storico locale.
   saveInboxToCache();
 }
 async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));saveInboxToCache();}
