@@ -14,7 +14,8 @@ const EnvSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().url().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
-  ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-20250514')
+  ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-20250514'),
+  ANTHROPIC_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(15_000)
 });
 
 const parsed = EnvSchema.safeParse(process.env);
