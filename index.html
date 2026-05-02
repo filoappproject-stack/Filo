@@ -948,7 +948,12 @@ async function tryHandleMailboxOauthCallback() {
     const payload = await res.json();
     const syncedAt = payload?.data?.account?.last_synced_at || new Date().toISOString();
     setInboxConnectionState(true, syncedAt);
-    await loadInboxMessages();
+    try{
+      await loadInboxMessages();
+    }catch(syncErr){
+      console.warn('Mailbox collegata ma fetch messaggi non riuscito subito dopo OAuth:',syncErr);
+      if(isMailboxAuthExpiredError(syncErr))markMailboxReconnectRequired();
+    }
 
     ['code','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     window.history.replaceState(
@@ -1214,9 +1219,6 @@ async function loginSuccess(user) {
   if(currentUser?.id){
     try{
       await loadInboxStatus();
-      if(mailboxConnected){
-        await loadInboxMessages();
-      }
     }catch(err){
       console.warn('Impossibile aggiornare stato inbox da backend:',err);
       if(isMailboxAuthExpiredError(err)){
