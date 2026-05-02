@@ -93,6 +93,11 @@ async function refreshAccessToken(refreshToken) {
   return response.json();
 }
 
+function isInvalidGrantError(error) {
+  const message = String(error?.message ?? '').toLowerCase();
+  return message.includes('invalid_grant') || message.includes('token has been expired or revoked');
+}
+
 async function gmailRequest(path, accessToken, queryParams = {}) {
   const qs = new URLSearchParams();
   Object.entries(queryParams).forEach(([key, value]) => {
@@ -367,7 +372,16 @@ async function resolveAccountAccessToken(account) {
     throw new HttpError(401, 'Refresh token non disponibile. Ricollega account Google.');
   }
 
-  const refreshed = await refreshAccessToken(account.refresh_token);
+  let refreshed;
+  try {
+    refreshed = await refreshAccessToken(account.refresh_token);
+  } catch (error) {
+    if (error instanceof HttpError && error.statusCode === 401 && isInvalidGrantError(error)) {
+      await query('DELETE FROM inbox_accounts WHERE id = $1', [account.id]);
+      throw new HttpError(401, 'Token Google scaduto o revocato. Ricollega la mailbox.');
+    }
+    throw error;
+  }
   const expiresAt = new Date(Date.now() + (refreshed.expires_in ?? 3600) * 1000).toISOString();
 
   await updateAccountTokens(account.id, refreshed.access_token, expiresAt);
@@ -515,5 +529,34 @@ export async function syncGoogleInbox(userId) {
       provider_email: account.provider_email,
       last_synced_at: new Date().toISOString()
     }
+  };
+}
+
+export async function getGoogleInboxStatus(userId) {
+  await ensureInboxSchema();
+
+  const { rows } = await query(
+    `
+      SELECT id, provider_email, last_synced_at
+      FROM inbox_accounts
+      WHERE user_id = $1 AND provider = 'google'
+      LIMIT 1
+    `,
+    [userId]
+  );
+
+  const account = rows[0];
+  if (!account) {
+    return {
+      connected: false,
+      provider_email: null,
+      last_synced_at: null
+    };
+  }
+
+  return {
+    connected: true,
+    provider_email: account.provider_email,
+    last_synced_at: account.last_synced_at
   };
 }
