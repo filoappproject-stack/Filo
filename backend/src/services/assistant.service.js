@@ -79,6 +79,10 @@ export function buildFallbackSuggestions(input) {
 
 async function askAnthropic(input) {
   aiAttemptCounter += 1;
+  if (!env.AI_ENABLED) {
+    console.info('AI disabilitata da kill switch (AI_ENABLED=false), uso fallback locale.');
+    return null;
+  }
   if (!env.ANTHROPIC_API_KEY) return null;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), env.ANTHROPIC_TIMEOUT_MS);
