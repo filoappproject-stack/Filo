@@ -1211,6 +1211,16 @@ async function loginSuccess(user) {
     setInboxConnectionState(false,null);
     INBOX.length=0;
   }
+  if(currentUser?.id){
+    try{
+      await loadInboxStatus();
+      if(mailboxConnected){
+        await loadInboxMessages();
+      }
+    }catch(err){
+      console.warn('Impossibile aggiornare stato inbox da backend:',err);
+    }
+  }
   calendarEvents=[];
   renderAll();
   analyzePatterns();
@@ -1429,6 +1439,7 @@ function escapeHtml(str){return String(str??'').replaceAll('&','&amp;').replaceA
 function avatarFromSender(sender){const raw=(sender||'').replace(/<[^>]+>/g,'').replace(/["']/g,'').trim();const display=raw||'Sconosciuto';const initials=display.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'?';return{display,initials};}
 function mapInboxMessageToUi(item){const labels=Array.isArray(item?.labels)?item.labels:[];const unread=labels.includes('UNREAD');const sender=avatarFromSender(item?.sender);return{id:item?.id,from:sender.display,subj:item?.subject||'(Senza oggetto)',prev:item?.snippet||'',time:formatInboxTime(item?.received_at||item?.created_at),source:'Email',initials:sender.initials,bg:'#E8EEFB',tc:'#0D2E7A',unread};}
 async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));saveInboxToCache();}
+async function loadInboxStatus(){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/google/status?userId=${encodeURIComponent(currentUser.id)}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/google/status fallita (${res.status}): ${txt}`);}const payload=await res.json();const data=payload?.data||{};setInboxConnectionState(!!data.connected,data.last_synced_at||null);}
 function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)mailboxConnectionError='';}
 function setCalendarConnectionState(connected,lastSyncedAt){calendarConnected=!!connected;calendarLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)calendarConnectionError='';}
 function mapCalendarEventToUi(item){

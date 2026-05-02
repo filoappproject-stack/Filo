@@ -517,3 +517,32 @@ export async function syncGoogleInbox(userId) {
     }
   };
 }
+
+export async function getGoogleInboxStatus(userId) {
+  await ensureInboxSchema();
+
+  const { rows } = await query(
+    `
+      SELECT id, provider_email, last_synced_at
+      FROM inbox_accounts
+      WHERE user_id = $1 AND provider = 'google'
+      LIMIT 1
+    `,
+    [userId]
+  );
+
+  const account = rows[0];
+  if (!account) {
+    return {
+      connected: false,
+      provider_email: null,
+      last_synced_at: null
+    };
+  }
+
+  return {
+    connected: true,
+    provider_email: account.provider_email,
+    last_synced_at: account.last_synced_at
+  };
+}
