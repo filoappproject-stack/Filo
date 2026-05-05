@@ -685,11 +685,13 @@ function getQueryParamPreservePlus(url,key){
       prompt: url.searchParams.get('prompt'),
       capturedAt: Date.now()
     };
-    const storageKey = isCalendarOAuthCallback ? CALENDAR_OAUTH_QUERY_STORAGE_KEY : INBOX_OAUTH_QUERY_STORAGE_KEY;
-    if(storageKey===CALENDAR_OAUTH_QUERY_STORAGE_KEY){
-      setCalendarTransient(storageKey,JSON.stringify(payload));
-    }else{
-      sessionStorage.setItem(storageKey, JSON.stringify(payload));
+    // In alcuni casi Google restituisce scope multipli (es. calendar+gmail) anche per flow mailbox:
+    // se usassimo un solo storageKey potremmo perdere il callback inbox e finire in loop "Collega mailbox".
+    if(isInboxOAuthCallback){
+      sessionStorage.setItem(INBOX_OAUTH_QUERY_STORAGE_KEY, JSON.stringify(payload));
+    }
+    if(isCalendarOAuthCallback){
+      setCalendarTransient(CALENDAR_OAUTH_QUERY_STORAGE_KEY,JSON.stringify(payload));
     }
     ['code','error','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     const cleanUrl = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash;
@@ -948,7 +950,13 @@ async function tryHandleMailboxOauthCallback() {
     const payload = await res.json();
     const syncedAt = payload?.data?.account?.last_synced_at || new Date().toISOString();
     setInboxConnectionState(true, syncedAt);
-    await loadInboxMessages();
+    mailboxOauthJustConnected=true;
+    try{
+      await loadInboxMessages();
+    }catch(syncErr){
+      console.warn('Mailbox collegata ma fetch messaggi non riuscito subito dopo OAuth:',syncErr);
+      if(isMailboxAuthExpiredError(syncErr))markMailboxReconnectRequired();
+    }
 
     ['code','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     window.history.replaceState(
@@ -1211,6 +1219,17 @@ async function loginSuccess(user) {
     setInboxConnectionState(false,null);
     INBOX.length=0;
   }
+  if(currentUser?.id&&!mailboxOauthJustConnected){
+    try{
+      await loadInboxStatus();
+    }catch(err){
+      console.warn('Impossibile aggiornare stato inbox da backend:',err);
+      if(isMailboxAuthExpiredError(err)){
+        markMailboxReconnectRequired();
+      }
+    }
+  }
+  mailboxOauthJustConnected=false;
   calendarEvents=[];
   renderAll();
   analyzePatterns();
@@ -1229,6 +1248,7 @@ let mailboxLastSync=null;
 let mailboxSyncInProgress=false;
 let mailboxBackgroundSyncInProgress=false;
 let mailboxConnectionError='';
+let mailboxOauthJustConnected=false;
 let calendarConnected=false;
 let calendarLastSync=null;
 let calendarSyncInProgress=false;
@@ -1428,7 +1448,18 @@ function formatCalendarTime(ts){if(!ts)return '';const d=new Date(ts);if(Number.
 function escapeHtml(str){return String(str??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');}
 function avatarFromSender(sender){const raw=(sender||'').replace(/<[^>]+>/g,'').replace(/["']/g,'').trim();const display=raw||'Sconosciuto';const initials=display.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'?';return{display,initials};}
 function mapInboxMessageToUi(item){const labels=Array.isArray(item?.labels)?item.labels:[];const unread=labels.includes('UNREAD');const sender=avatarFromSender(item?.sender);return{id:item?.id,from:sender.display,subj:item?.subject||'(Senza oggetto)',prev:item?.snippet||'',time:formatInboxTime(item?.received_at||item?.created_at),source:'Email',initials:sender.initials,bg:'#E8EEFB',tc:'#0D2E7A',unread};}
+function isMailboxAuthExpiredError(err){
+  const message=(err?.message?String(err.message):'').toLowerCase();
+  return message.includes('(401)')&&(message.includes('invalid_grant')||message.includes('token has been expired or revoked')||message.includes('refresh token google fallito'));
+}
+function markMailboxReconnectRequired(){
+  setInboxConnectionState(false,null);
+  mailboxConnectionError='Sessione Google Mail scaduta. Ricollega la mailbox.';
+  // Manteniamo i messaggi già presenti in cache/UI per non azzerare badge e storico locale.
+  saveInboxToCache();
+}
 async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));saveInboxToCache();}
+async function loadInboxStatus(){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/google/status?userId=${encodeURIComponent(currentUser.id)}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/google/status fallita (${res.status}): ${txt}`);}const payload=await res.json();const data=payload?.data||{};setInboxConnectionState(!!data.connected,data.last_synced_at||null);}
 function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)mailboxConnectionError='';}
 function setCalendarConnectionState(connected,lastSyncedAt){calendarConnected=!!connected;calendarLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)calendarConnectionError='';}
 function mapCalendarEventToUi(item){
@@ -1974,7 +2005,7 @@ function updateInboxSubtitle(){const total=INBOX.length;const unread=INBOX.filte
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
-async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}finally{mailboxSyncInProgress=false;renderAll();}}
+async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){if(isMailboxAuthExpiredError(err)){markMailboxReconnectRequired();}else{mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}}finally{mailboxSyncInProgress=false;renderAll();}}
 async function connectCalendar(){
   if(!currentUser?.id||calendarSyncInProgress)return;
   if(!isUuid(currentUser.id)){

@@ -3,6 +3,7 @@ import { HttpError } from '../utils/httpError.js';
 import {
   buildGoogleAuthUrl,
   exchangeGoogleCodeAndSync,
+  getGoogleInboxStatus,
   listInboxMessages,
   syncGoogleInbox
 } from '../services/inbox.service.js';
@@ -71,6 +72,21 @@ export async function getInboxMessages(req, res) {
   const messages = await listInboxMessages(parsed.data.userId, parsed.data.limit);
   res.set('Cache-Control', 'no-store');
   res.json({ data: messages });
+}
+
+export async function getGoogleInboxConnectionStatus(req, res) {
+  const parsed = z
+    .object({
+      userId: z.string().uuid()
+    })
+    .safeParse(req.query);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Query stato inbox non valida');
+  }
+
+  const status = await getGoogleInboxStatus(parsed.data.userId);
+  res.set('Cache-Control', 'no-store');
+  res.json({ data: status });
 }
 
 export async function postInboxSync(req, res) {
