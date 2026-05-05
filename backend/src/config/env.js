@@ -23,7 +23,17 @@ const EnvSchema = z.object({
   }, z.boolean().default(true)),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-20250514'),
-  ANTHROPIC_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(15_000)
+  ANTHROPIC_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(15_000),
+  AI_RATE_LIMIT_ENABLED: z.preprocess((value) => {
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+      if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+    }
+    return value;
+  }, z.boolean().default(true)),
+  AI_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(60_000),
+  AI_RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(100).default(6)
 });
 
 const parsed = EnvSchema.safeParse(process.env);
