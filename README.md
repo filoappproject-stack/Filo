@@ -208,3 +208,36 @@ Se la risposta contiene:
 allora il runtime backend è sano e la chiave Anthropic è caricata correttamente.
 
 In quel caso, eventuali fallback locali non dipendono dalla chiave mancante ma da errori su `/api/v1/assistant/day-analysis` (es. route/import, quota, timeout provider).
+
+
+### Test `POST /api/v1/assistant/day-analysis` (senza errori in Console)
+
+Se in DevTools Console scrivi solo `POST /api/...`, JavaScript interpreta `POST` come variabile e mostra `ReferenceError: POST is not defined`.
+
+Usa uno di questi due metodi:
+
+1. **Da terminale (consigliato)**
+
+```bash
+curl -sS -X POST "https://filo-new.vercel.app/api/v1/assistant/day-analysis" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "agenda":"review clienti 11:00",
+    "pending":"chiudere preventivo"
+  }'
+```
+
+2. **Da DevTools Console (con `fetch`)**
+
+```js
+fetch('/api/v1/assistant/day-analysis', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    agenda: 'review clienti 11:00',
+    pending: 'chiudere preventivo'
+  })
+}).then(r => r.json()).then(console.log)
+```
+
+Se la risposta contiene `data.suggerimenti`, la chiamata POST è andata a buon fine.
