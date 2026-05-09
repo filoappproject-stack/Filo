@@ -133,9 +133,10 @@ function buildDiagnosticId() {
 
 function buildDegradedReason(stage, error) {
   if (stage === 'quota') {
+    const detail = error?.message ? ` Dettaglio: ${error.message}` : '';
     return {
       code: 'QUOTA_SERVICE_UNAVAILABLE',
-      hint: 'Impossibile verificare quota in questo momento.'
+      hint: `Impossibile verificare quota in questo momento.${detail}`
     };
   }
 

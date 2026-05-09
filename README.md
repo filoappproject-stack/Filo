@@ -292,3 +292,102 @@ curl -sS -X POST "https://filo-new.vercel.app/api/v1/assistant/day-analysis" \
   -H "Content-Type: application/json" \
   --data '{"agenda":"review clienti 11:00","pending":"chiudere preventivo"}'
 ```
+
+
+### Quando la POST risponde con fallback locale (`degraded`)
+
+Se vedi il messaggio `Analisi AI temporaneamente non disponibile: mostrati suggerimenti locali.`, la chiamata è autenticata e funziona, ma il backend è andato in modalità degradata (fallback locale).
+
+Per vedere il motivo preciso, usa questo snippet in Console:
+
+```js
+const { data: { session } } = await supabaseClient.auth.getSession();
+const token = session?.access_token;
+
+const res = await fetch('/api/v1/assistant/day-analysis', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`
+  },
+  body: JSON.stringify({
+    agenda: 'review clienti 11:00',
+    pending: 'chiudere preventivo'
+  })
+});
+
+const json = await res.json();
+console.log('HTTP', res.status);
+console.log('message', json?.message);
+console.log('degraded', json?.data?.degraded);
+console.log('degradedStage', json?.data?.degradedStage);
+console.log('degradedReason', json?.data?.degradedReason);
+console.log('degradedHint', json?.data?.degradedHint);
+console.log('diagnosticId', json?.data?.diagnosticId);
+```
+
+Poi cerca `diagnosticId` nei log Vercel Functions per trovare l'errore originale (provider AI, timeout, quota service, ecc.).
+
+
+### Interpretazione `degradedStage: quota`
+
+Se la risposta mostra:
+
+- `degraded: true`
+- `degradedStage: quota`
+- `degradedReason: QUOTA_SERVICE_UNAVAILABLE`
+
+allora il problema è nel servizio quota (non nella chiave Anthropic).
+
+Controlli consigliati su Vercel:
+
+1. Verifica che `DATABASE_URL` sia valorizzata in **Environment Variables** (Production/Preview corretto).
+2. Verifica che nel database esista la tabella `ai_usage_limits` (schema migrato).
+3. Cerca nei log Functions il `diagnosticId` stampato in risposta e il relativo errore SQL/connessione.
+
+Dopo la correzione, ripeti la POST: `degraded` deve diventare `false` e i suggerimenti devono arrivare dal provider AI (quando disponibile).
+
+
+### Fix rapido: errore `relation "ai_usage_limits" does not exist`
+
+Se nei log Vercel compare `relation "ai_usage_limits" does not exist`, devi applicare lo schema DB nell'ambiente usato da Vercel (tipicamente Supabase Postgres).
+
+Puoi eseguire in SQL Editor:
+
+```sql
+CREATE TABLE IF NOT EXISTS ai_usage_limits (
+  actor_key TEXT NOT NULL,
+  day_key DATE NOT NULL,
+  used_count INTEGER NOT NULL DEFAULT 0 CHECK (used_count >= 0),
+  last_request_at TIMESTAMPTZ NOT NULL DEFAULT TO_TIMESTAMP(0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (actor_key, day_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_limits_day_key ON ai_usage_limits(day_key);
+```
+
+Poi rilancia la POST ` /api/v1/assistant/day-analysis `: il campo `degradedStage` non deve più essere `quota`.
+
+
+### Popup Supabase su RLS (`Run without RLS` vs `Run and enable RLS`)
+
+Se appare il popup per la tabella `ai_usage_limits`, scegli **Run and enable RLS**.
+
+Motivo: è l'opzione più sicura di default. La tabella quota viene usata dal backend server-side (non dal client anon) e non hai bisogno di esporla pubblicamente.
+
+Dopo aver confermato, riesegui il test POST e verifica che `degradedStage` non sia più `quota`.
+
+
+### Dopo la query SQL: come rilanciare `/api/v1/assistant/day-analysis`
+
+Sì: il modo più semplice è cliccare in Filo il bottone **"Analizza la mia giornata"**.
+
+Quel bottone esegue la chiamata `POST /api/v1/assistant/day-analysis` nel flusso reale dell'app.
+
+Verifica attesa dopo il click:
+
+- niente messaggio di fallback locale;
+- suggerimenti AI aggiornati;
+- nei log/debug response `degraded` dovrebbe essere `false`.
