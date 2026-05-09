@@ -151,3 +151,47 @@ Dopo aver aggiunto la variabile ambiente (es. `ANTHROPIC_API_KEY`) in Vercel, ve
    Prova il flusso reale in frontend (es. "Suggerimenti AI") e conferma che l'utente riceve risposta senza fallback/placeholder.
 
 Suggerimento pratico: usa una chiave distinta per `Preview` e `Production`, così puoi validare i deploy in anteprima senza impattare l'ambiente live.
+
+### Esempio pratico: chiamata `GET /api/v1/health`
+
+### Dove eseguire il comando
+
+Lancia il comando in un **terminale del tuo computer** (macOS Terminal, Windows PowerShell, Linux shell), non dentro Vercel dashboard.
+
+- Se usi **URL Vercel** (`https://...vercel.app/api/v1/health`), puoi lanciarlo da qualunque terminale con internet.
+- Se usi **localhost** (`http://localhost:4000/api/v1/health`), devi essere sulla macchina dove gira il backend locale (`npm run dev`).
+
+Con il backend locale attivo su porta 4000:
+
+```bash
+curl -sS http://localhost:4000/api/v1/health | jq
+```
+
+Su deploy Vercel (sostituisci il dominio):
+
+```bash
+curl -sS https://filo-new.vercel.app/api/v1/health | jq
+```
+
+Se non hai `jq` installato:
+
+```bash
+curl -sS https://filo-new.vercel.app/api/v1/health
+```
+
+Output atteso (esempio):
+
+```json
+{
+  "status": "ok",
+  "service": "filo-backend",
+  "timestamp": "2026-05-09T12:34:56.789Z",
+  "ai": {
+    "enabled": true,
+    "hasAnthropicKey": true,
+    "model": "claude-sonnet-4-20250514"
+  }
+}
+```
+
+Se `hasAnthropicKey` è `false`, la variabile ambiente non è disponibile nel runtime del deployment corrente.
