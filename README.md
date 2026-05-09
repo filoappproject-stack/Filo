@@ -523,3 +523,19 @@ Se in Console vedi:
 allora l'AI remota **non** è ancora operativa: stai ricevendo fallback locale.
 
 In questo caso non basta guardare solo lo status 200 in Vercel: devi cercare nei log il `diagnosticId` e il relativo evento `assistant.degraded` per trovare la causa concreta.
+
+
+### Errore 429 (Too Many Requests) su `Analizza la mia giornata`
+
+`429` in questo flusso è atteso quando superi la frequenza/quota di analisi:
+
+- cooldown tra richieste ravvicinate (es. ~60 secondi);
+- limite massimo giornaliero (es. 3 o 5 in base al payload).
+
+Cosa fare:
+
+1. Attendi il countdown mostrato nel pulsante (es. `Attendi 53s`) e riprova una sola volta.
+2. Se `Analisi rimanenti oggi` è `0/x`, attendi il giorno successivo (reset quota) oppure testa con un altro utente/IP.
+3. Evita click ripetuti o chiamate manuali parallele dalla Console.
+
+Finché ricevi `429`, non è un errore Anthropic: è il rate/quota guardrail che sta funzionando.
