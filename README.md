@@ -539,3 +539,8 @@ Cosa fare:
 3. Evita click ripetuti o chiamate manuali parallele dalla Console.
 
 Finché ricevi `429`, non è un errore Anthropic: è il rate/quota guardrail che sta funzionando.
+
+
+### Quando fermarsi e riprendere il giorno dopo
+
+Se vedi `Analisi rimanenti oggi: 0/5`, il comportamento corretto è fermarsi e riprovare il giorno successivo dopo il reset quota.
