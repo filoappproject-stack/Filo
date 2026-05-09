@@ -195,3 +195,16 @@ Output atteso (esempio):
 ```
 
 Se `hasAnthropicKey` è `false`, la variabile ambiente non è disponibile nel runtime del deployment corrente.
+
+
+### Interpretazione rapida risposta `/api/v1/health`
+
+Se la risposta contiene:
+
+- `"status": "ok"`
+- `"ai.enabled": true`
+- `"ai.hasAnthropicKey": true`
+
+allora il runtime backend è sano e la chiave Anthropic è caricata correttamente.
+
+In quel caso, eventuali fallback locali non dipendono dalla chiave mancante ma da errori su `/api/v1/assistant/day-analysis` (es. route/import, quota, timeout provider).
