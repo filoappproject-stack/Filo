@@ -432,3 +432,110 @@ Passo successivo: rilancia `Analizza la mia giornata` e verifica in risposta/deb
 
 
 Nota: `GET /api/v1/health` ora include anche `quota.dbConfigured` e `quota.aiUsageTableExists` per verificare se il deployment vede davvero la tabella quota nel DB runtime.
+
+
+### Dove impostare `ANTHROPIC_MODEL` in Vercel
+
+Sì, esatto: puoi farlo da **Environment Variables** in Vercel (come nello screenshot).
+
+Per questo progetto (`filo-new`), aggiungi/controlla:
+
+- `ANTHROPIC_MODEL=claude-sonnet-4-20250514`
+
+Importante:
+
+1. assegna la variabile almeno a **Production** (e a **Preview** se testi lì);
+2. salva la variabile sul progetto corretto (`filo-new`);
+3. fai **Redeploy** dopo la modifica, altrimenti il runtime non la vede.
+
+
+### Passi click-by-click in Vercel (screen come il tuo)
+
+Nel pannello che hai aperto stai modificando **ANTHROPIC_API_KEY**.
+
+Per impostare anche il modello devi creare una **nuova variabile**:
+
+1. Clicca in alto a destra **Add Environment Variable**.
+2. In **Key** inserisci: `ANTHROPIC_MODEL`
+3. In **Value** inserisci: `claude-sonnet-4-20250514`
+4. In **Environments** seleziona almeno **Production** (e anche **Preview** se testi lì).
+5. Clicca **Save**.
+6. Fai **Redeploy** dell'ultimo deployment.
+
+Senza questo passaggio il backend usa un valore modello non valido o non allineato all'ambiente.
+
+
+### Check finale dopo redeploy
+
+Dopo aver impostato `ANTHROPIC_MODEL` e fatto redeploy:
+
+1. Apri `GET /api/v1/health` e verifica:
+   - `ai.hasAnthropicKey = true`
+   - `quota.dbConfigured = true`
+   - `quota.aiUsageTableExists = true`
+2. In app clicca **Analizza la mia giornata**.
+3. In debug/console verifica che la risposta non sia degradata:
+   - `degraded = false`
+   - nessun messaggio "mostrati suggerimenti locali".
+
+
+### Dove digitare `GET /api/v1/health`
+
+Non devi scrivere la parola `GET` da sola in Console.
+
+Hai 2 modi semplici:
+
+1. **Browser (più facile)**: nella barra indirizzi apri direttamente
+   `https://filo-new.vercel.app/api/v1/health`
+
+2. **Terminale**:
+
+```bash
+curl -sS https://filo-new.vercel.app/api/v1/health
+```
+
+Se vedi un JSON, la chiamata health è andata a buon fine.
+
+
+### Interpretazione payload health completamente OK
+
+Se `/api/v1/health` risponde con:
+
+- `ai.enabled: true`
+- `ai.hasAnthropicKey: true`
+- `quota.dbConfigured: true`
+- `quota.aiUsageTableExists: true`
+- `quota.checkError: null`
+
+allora configurazione env, chiave Anthropic e prerequisiti quota DB sono corretti sul deployment corrente.
+
+A quel punto l'ultimo check è funzionale: clicca **Analizza la mia giornata** e verifica che `degraded` sia `false`.
+
+
+### Anche se i log sembrano "tranquilli"
+
+Se in Console vedi:
+
+- `HTTP 200`
+- `degraded: true`
+- `degradedStage: quota`
+
+allora l'AI remota **non** è ancora operativa: stai ricevendo fallback locale.
+
+In questo caso non basta guardare solo lo status 200 in Vercel: devi cercare nei log il `diagnosticId` e il relativo evento `assistant.degraded` per trovare la causa concreta.
+
+
+### Errore 429 (Too Many Requests) su `Analizza la mia giornata`
+
+`429` in questo flusso è atteso quando superi la frequenza/quota di analisi:
+
+- cooldown tra richieste ravvicinate (es. ~60 secondi);
+- limite massimo giornaliero (es. 3 o 5 in base al payload).
+
+Cosa fare:
+
+1. Attendi il countdown mostrato nel pulsante (es. `Attendi 53s`) e riprova una sola volta.
+2. Se `Analisi rimanenti oggi` è `0/x`, attendi il giorno successivo (reset quota) oppure testa con un altro utente/IP.
+3. Evita click ripetuti o chiamate manuali parallele dalla Console.
+
+Finché ricevi `429`, non è un errore Anthropic: è il rate/quota guardrail che sta funzionando.
