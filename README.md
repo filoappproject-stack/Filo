@@ -123,3 +123,271 @@ Progetto privato — tutti i diritti riservati.
 ---
 
 *Filo è in sviluppo attivo. Versione corrente: 0.8.0*
+
+## Verifica integrazione Anthropic su Vercel
+
+Dopo aver aggiunto la variabile ambiente (es. `ANTHROPIC_API_KEY`) in Vercel, verifica in questo ordine:
+
+1. **Redeploy dopo la modifica env**  
+   In Vercel, ogni cambiamento alle environment variables richiede un nuovo deploy del progetto (o "Redeploy" dell'ultimo commit).
+
+2. **Controllo presenza variabile nel runtime**  
+   Aggiungi un endpoint di health interno che non esponga la chiave, ma confermi la presenza della variabile (es. `hasAnthropicKey: true/false`).
+
+3. **Test end-to-end endpoint AI**  
+   Esegui una chiamata reale all'endpoint backend che usa Claude (con un prompt minimo) e verifica:
+   - status HTTP 200;
+   - risposta testuale non vuota;
+   - latenza ragionevole;
+   - assenza di errori `401`/`403` (chiave errata), `429` (rate limit), `5xx` (upstream).
+
+4. **Verifica log Vercel Functions**  
+   In caso di errore, leggi i log runtime per distinguere problemi di:
+   - env mancante;
+   - timeout funzione;
+   - payload non valido verso Anthropic.
+
+5. **Smoke test da UI**  
+   Prova il flusso reale in frontend (es. "Suggerimenti AI") e conferma che l'utente riceve risposta senza fallback/placeholder.
+
+Suggerimento pratico: usa una chiave distinta per `Preview` e `Production`, così puoi validare i deploy in anteprima senza impattare l'ambiente live.
+
+### Esempio pratico: chiamata `GET /api/v1/health`
+
+### Dove eseguire il comando
+
+Lancia il comando in un **terminale del tuo computer** (macOS Terminal, Windows PowerShell, Linux shell), non dentro Vercel dashboard.
+
+- Se usi **URL Vercel** (`https://...vercel.app/api/v1/health`), puoi lanciarlo da qualunque terminale con internet.
+- Se usi **localhost** (`http://localhost:4000/api/v1/health`), devi essere sulla macchina dove gira il backend locale (`npm run dev`).
+
+Con il backend locale attivo su porta 4000:
+
+```bash
+curl -sS http://localhost:4000/api/v1/health | jq
+```
+
+Su deploy Vercel (sostituisci il dominio):
+
+```bash
+curl -sS https://filo-new.vercel.app/api/v1/health | jq
+```
+
+Se non hai `jq` installato:
+
+```bash
+curl -sS https://filo-new.vercel.app/api/v1/health
+```
+
+Output atteso (esempio):
+
+```json
+{
+  "status": "ok",
+  "service": "filo-backend",
+  "timestamp": "2026-05-09T12:34:56.789Z",
+  "ai": {
+    "enabled": true,
+    "hasAnthropicKey": true,
+    "model": "claude-sonnet-4-20250514"
+  }
+}
+```
+
+Se `hasAnthropicKey` è `false`, la variabile ambiente non è disponibile nel runtime del deployment corrente.
+
+
+### Interpretazione rapida risposta `/api/v1/health`
+
+Se la risposta contiene:
+
+- `"status": "ok"`
+- `"ai.enabled": true`
+- `"ai.hasAnthropicKey": true`
+
+allora il runtime backend è sano e la chiave Anthropic è caricata correttamente.
+
+In quel caso, eventuali fallback locali non dipendono dalla chiave mancante ma da errori su `/api/v1/assistant/day-analysis` (es. route/import, quota, timeout provider).
+
+
+### Test `POST /api/v1/assistant/day-analysis` (senza errori in Console)
+
+Se in DevTools Console scrivi solo `POST /api/...`, JavaScript interpreta `POST` come variabile e mostra `ReferenceError: POST is not defined`.
+
+Usa uno di questi due metodi:
+
+1. **Da terminale (consigliato)**
+
+```bash
+curl -sS -X POST "https://filo-new.vercel.app/api/v1/assistant/day-analysis" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "agenda":"review clienti 11:00",
+    "pending":"chiudere preventivo"
+  }'
+```
+
+2. **Da DevTools Console (con `fetch`)**
+
+```js
+fetch('/api/v1/assistant/day-analysis', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    agenda: 'review clienti 11:00',
+    pending: 'chiudere preventivo'
+  })
+}).then(r => r.json()).then(console.log)
+```
+
+Se la risposta contiene `data.suggerimenti`, la chiamata POST è andata a buon fine.
+
+
+### Perché ricevi `401 Unauthorized` su `POST /api/v1/assistant/day-analysis`
+
+`/api/v1/assistant/day-analysis` è protetto da autenticazione backend. Se chiami la POST senza token, la risposta è `401` con messaggio `Autenticazione richiesta`.
+
+Per test rapido da DevTools (utente già loggato):
+
+```js
+fetch('/api/v1/assistant/day-analysis', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    agenda: 'review clienti 11:00',
+    pending: 'chiudere preventivo'
+  })
+}).then(r => r.json()).then(console.log)
+```
+
+
+
+> Nota importante: nel codice frontend normale (`fetchApi`) il token `Authorization: Bearer ...` viene aggiunto automaticamente. Se testi manualmente con `fetch(...)` in Console, devi aggiungerlo tu.
+
+Esempio DevTools completo con token Supabase:
+
+```js
+const { data: { session } } = await supabaseClient.auth.getSession();
+const token = session?.access_token;
+
+fetch('/api/v1/assistant/day-analysis', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`
+  },
+  body: JSON.stringify({
+    agenda: 'review clienti 11:00',
+    pending: 'chiudere preventivo'
+  })
+}).then(r => r.json()).then(console.log)
+```
+
+Per test da terminale devi passare un Bearer token valido:
+
+```bash
+curl -sS -X POST "https://filo-new.vercel.app/api/v1/assistant/day-analysis" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  --data '{"agenda":"review clienti 11:00","pending":"chiudere preventivo"}'
+```
+
+
+### Quando la POST risponde con fallback locale (`degraded`)
+
+Se vedi il messaggio `Analisi AI temporaneamente non disponibile: mostrati suggerimenti locali.`, la chiamata è autenticata e funziona, ma il backend è andato in modalità degradata (fallback locale).
+
+Per vedere il motivo preciso, usa questo snippet in Console:
+
+```js
+const { data: { session } } = await supabaseClient.auth.getSession();
+const token = session?.access_token;
+
+const res = await fetch('/api/v1/assistant/day-analysis', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`
+  },
+  body: JSON.stringify({
+    agenda: 'review clienti 11:00',
+    pending: 'chiudere preventivo'
+  })
+});
+
+const json = await res.json();
+console.log('HTTP', res.status);
+console.log('message', json?.message);
+console.log('degraded', json?.data?.degraded);
+console.log('degradedStage', json?.data?.degradedStage);
+console.log('degradedReason', json?.data?.degradedReason);
+console.log('degradedHint', json?.data?.degradedHint);
+console.log('diagnosticId', json?.data?.diagnosticId);
+```
+
+Poi cerca `diagnosticId` nei log Vercel Functions per trovare l'errore originale (provider AI, timeout, quota service, ecc.).
+
+
+### Interpretazione `degradedStage: quota`
+
+Se la risposta mostra:
+
+- `degraded: true`
+- `degradedStage: quota`
+- `degradedReason: QUOTA_SERVICE_UNAVAILABLE`
+
+allora il problema è nel servizio quota (non nella chiave Anthropic).
+
+Controlli consigliati su Vercel:
+
+1. Verifica che `DATABASE_URL` sia valorizzata in **Environment Variables** (Production/Preview corretto).
+2. Verifica che nel database esista la tabella `ai_usage_limits` (schema migrato).
+3. Cerca nei log Functions il `diagnosticId` stampato in risposta e il relativo errore SQL/connessione.
+
+Dopo la correzione, ripeti la POST: `degraded` deve diventare `false` e i suggerimenti devono arrivare dal provider AI (quando disponibile).
+
+
+### Fix rapido: errore `relation "ai_usage_limits" does not exist`
+
+Se nei log Vercel compare `relation "ai_usage_limits" does not exist`, devi applicare lo schema DB nell'ambiente usato da Vercel (tipicamente Supabase Postgres).
+
+Puoi eseguire in SQL Editor:
+
+```sql
+CREATE TABLE IF NOT EXISTS ai_usage_limits (
+  actor_key TEXT NOT NULL,
+  day_key DATE NOT NULL,
+  used_count INTEGER NOT NULL DEFAULT 0 CHECK (used_count >= 0),
+  last_request_at TIMESTAMPTZ NOT NULL DEFAULT TO_TIMESTAMP(0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (actor_key, day_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_limits_day_key ON ai_usage_limits(day_key);
+```
+
+Poi rilancia la POST ` /api/v1/assistant/day-analysis `: il campo `degradedStage` non deve più essere `quota`.
+
+
+### Popup Supabase su RLS (`Run without RLS` vs `Run and enable RLS`)
+
+Se appare il popup per la tabella `ai_usage_limits`, scegli **Run and enable RLS**.
+
+Motivo: è l'opzione più sicura di default. La tabella quota viene usata dal backend server-side (non dal client anon) e non hai bisogno di esporla pubblicamente.
+
+Dopo aver confermato, riesegui il test POST e verifica che `degradedStage` non sia più `quota`.
+
+
+### Dopo la query SQL: come rilanciare `/api/v1/assistant/day-analysis`
+
+Sì: il modo più semplice è cliccare in Filo il bottone **"Analizza la mia giornata"**.
+
+Quel bottone esegue la chiamata `POST /api/v1/assistant/day-analysis` nel flusso reale dell'app.
+
+Verifica attesa dopo il click:
+
+- niente messaggio di fallback locale;
+- suggerimenti AI aggiornati;
+- nei log/debug response `degraded` dovrebbe essere `false`.
