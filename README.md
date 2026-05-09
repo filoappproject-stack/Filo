@@ -123,3 +123,31 @@ Progetto privato — tutti i diritti riservati.
 ---
 
 *Filo è in sviluppo attivo. Versione corrente: 0.8.0*
+
+## Verifica integrazione Anthropic su Vercel
+
+Dopo aver aggiunto la variabile ambiente (es. `ANTHROPIC_API_KEY`) in Vercel, verifica in questo ordine:
+
+1. **Redeploy dopo la modifica env**  
+   In Vercel, ogni cambiamento alle environment variables richiede un nuovo deploy del progetto (o "Redeploy" dell'ultimo commit).
+
+2. **Controllo presenza variabile nel runtime**  
+   Aggiungi un endpoint di health interno che non esponga la chiave, ma confermi la presenza della variabile (es. `hasAnthropicKey: true/false`).
+
+3. **Test end-to-end endpoint AI**  
+   Esegui una chiamata reale all'endpoint backend che usa Claude (con un prompt minimo) e verifica:
+   - status HTTP 200;
+   - risposta testuale non vuota;
+   - latenza ragionevole;
+   - assenza di errori `401`/`403` (chiave errata), `429` (rate limit), `5xx` (upstream).
+
+4. **Verifica log Vercel Functions**  
+   In caso di errore, leggi i log runtime per distinguere problemi di:
+   - env mancante;
+   - timeout funzione;
+   - payload non valido verso Anthropic.
+
+5. **Smoke test da UI**  
+   Prova il flusso reale in frontend (es. "Suggerimenti AI") e conferma che l'utente riceve risposta senza fallback/placeholder.
+
+Suggerimento pratico: usa una chiave distinta per `Preview` e `Production`, così puoi validare i deploy in anteprima senza impattare l'ambiente live.
