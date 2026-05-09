@@ -261,6 +261,29 @@ fetch('/api/v1/assistant/day-analysis', {
 }).then(r => r.json()).then(console.log)
 ```
 
+
+
+> Nota importante: nel codice frontend normale (`fetchApi`) il token `Authorization: Bearer ...` viene aggiunto automaticamente. Se testi manualmente con `fetch(...)` in Console, devi aggiungerlo tu.
+
+Esempio DevTools completo con token Supabase:
+
+```js
+const { data: { session } } = await supabaseClient.auth.getSession();
+const token = session?.access_token;
+
+fetch('/api/v1/assistant/day-analysis', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`
+  },
+  body: JSON.stringify({
+    agenda: 'review clienti 11:00',
+    pending: 'chiudere preventivo'
+  })
+}).then(r => r.json()).then(console.log)
+```
+
 Per test da terminale devi passare un Bearer token valido:
 
 ```bash
