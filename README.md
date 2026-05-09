@@ -241,3 +241,31 @@ fetch('/api/v1/assistant/day-analysis', {
 ```
 
 Se la risposta contiene `data.suggerimenti`, la chiamata POST è andata a buon fine.
+
+
+### Perché ricevi `401 Unauthorized` su `POST /api/v1/assistant/day-analysis`
+
+`/api/v1/assistant/day-analysis` è protetto da autenticazione backend. Se chiami la POST senza token, la risposta è `401` con messaggio `Autenticazione richiesta`.
+
+Per test rapido da DevTools (utente già loggato):
+
+```js
+fetch('/api/v1/assistant/day-analysis', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    agenda: 'review clienti 11:00',
+    pending: 'chiudere preventivo'
+  })
+}).then(r => r.json()).then(console.log)
+```
+
+Per test da terminale devi passare un Bearer token valido:
+
+```bash
+curl -sS -X POST "https://filo-new.vercel.app/api/v1/assistant/day-analysis" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  --data '{"agenda":"review clienti 11:00","pending":"chiudere preventivo"}'
+```
