@@ -2663,7 +2663,8 @@ async function analyzeDay(){
     setAnalyzeButtonAvailability(Number.NaN);
     const msg=String(e?.message||'');
     if(shouldUseLocalAnalyzeFallbackFromErrorMessage(msg)){
-      console.info('Analisi AI non disponibile, uso fallback locale.');
+      const fallbackReason=msg || 'motivo non specificato';
+      console.info(`Analisi AI non disponibile, uso fallback locale. Motivo: ${fallbackReason}`);
       const statusMatch=msg.match(/HTTP\s+(404|502|503|504)/);
       markAnalyzeRemoteUnavailable(statusMatch?Number(statusMatch[1]):503);
       applyLocalAnalyzeFallbackState(
