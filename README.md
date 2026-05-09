@@ -391,3 +391,44 @@ Verifica attesa dopo il click:
 - niente messaggio di fallback locale;
 - suggerimenti AI aggiornati;
 - nei log/debug response `degraded` dovrebbe essere `false`.
+
+
+### Come confermare davvero che l'AI remota sta rispondendo
+
+Se in risposta vedi `degraded: true`, **l'AI remota non sta rispondendo** (stai vedendo fallback locale).
+
+Conferma in 3 passaggi:
+
+1. In SQL Editor verifica che la tabella esista nello schema giusto:
+
+```sql
+select table_schema, table_name
+from information_schema.tables
+where table_name = 'ai_usage_limits';
+```
+
+Deve risultare almeno una riga con `table_schema = public`.
+
+2. Verifica che la stessa connessione usata da Vercel punti a quel DB/progetto (controlla `DATABASE_URL` in Vercel).
+
+3. Rilancia la POST e controlla questi campi:
+
+- `degraded` deve essere `false`;
+- `message` non deve dire "mostrati suggerimenti locali";
+- `data.source` non deve essere `local-fallback`.
+
+Se resta `degraded: true`, riapri i log con `diagnosticId`: il primo errore che vedi è la causa reale corrente.
+
+
+### Stato atteso quando `ai_usage_limits` esiste in `public`
+
+Se la query SQL restituisce `public | ai_usage_limits`, il prerequisito quota DB è corretto.
+
+Passo successivo: rilancia `Analizza la mia giornata` e verifica in risposta/debug che:
+
+- `degraded` sia `false`;
+- non compaia il messaggio di fallback locale;
+- i suggerimenti siano generati normalmente.
+
+
+Nota: `GET /api/v1/health` ora include anche `quota.dbConfigured` e `quota.aiUsageTableExists` per verificare se il deployment vede davvero la tabella quota nel DB runtime.
