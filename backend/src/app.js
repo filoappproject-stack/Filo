@@ -42,7 +42,9 @@ app.use('/api/v1/assistant', async (req, res, next) => {
     console.error('Assistant routes unavailable:', error);
     return res.status(503).json({
       error: 'AssistantUnavailable',
-      message: 'Servizio Assistant temporaneamente non disponibile.'
+      code: 'ASSISTANT_ROUTES_IMPORT_FAILED',
+      message: 'Servizio Assistant temporaneamente non disponibile.',
+      hint: 'Controlla i log backend: import ./routes/assistant.routes.js fallito.'
     });
   }
 });

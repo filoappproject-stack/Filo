@@ -22,7 +22,10 @@ const EnvSchema = z.object({
     return value;
   }, z.boolean().default(true)),
   ANTHROPIC_API_KEY: z.string().optional(),
-  ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-20250514'),
+  ANTHROPIC_MODEL: z.preprocess((value) => {
+    if (typeof value === 'string') return value.trim();
+    return value;
+  }, z.string().min(1).default('claude-sonnet-4-20250514')),
   ANTHROPIC_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(15_000),
   AI_RATE_LIMIT_ENABLED: z.preprocess((value) => {
     if (typeof value === 'string') {

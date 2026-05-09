@@ -5,6 +5,9 @@ let aiAttemptCounter = 0;
 let lastAnalyzedSignature = null;
 let lastSuggestions = null;
 
+const FALLBACK_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+
+
 function normalizeInputForCache(input) {
   const normalizeText = (value) => String(value ?? '').trim().replace(/\s+/g, ' ');
   const normalizeNumber = (value) => (Number.isFinite(value) ? Number(value) : null);
@@ -101,22 +104,24 @@ Rispondi SOLO con JSON valido:
 {"suggerimenti":[{"titolo":"azione","perche":"perché adesso in 1-2 frasi","priorita":"urgente|alta|normale|bassa","azioni":["Inizia","Rimanda"]}]}
 Fornisci 3-5 suggerimenti concreti.`;
 
+  const requestAnthropic = async (model) => fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }]
+    }),
+    signal: controller.signal
+  });
+
   let response;
   try {
-    response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: env.ANTHROPIC_MODEL,
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
-      }),
-      signal: controller.signal
-    });
+    response = await requestAnthropic(env.ANTHROPIC_MODEL);
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw new Error(`Anthropic API timeout dopo ${env.ANTHROPIC_TIMEOUT_MS}ms`);
@@ -128,7 +133,18 @@ Fornisci 3-5 suggerimenti concreti.`;
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    throw new Error(`Anthropic API error (${response.status}): ${detail}`);
+    const invalidModel = response.status === 404 && /model/i.test(detail);
+
+    if (invalidModel && env.ANTHROPIC_MODEL !== FALLBACK_ANTHROPIC_MODEL) {
+      console.warn(`Anthropic model non trovato (${env.ANTHROPIC_MODEL}), retry con fallback ${FALLBACK_ANTHROPIC_MODEL}.`);
+      response = await requestAnthropic(FALLBACK_ANTHROPIC_MODEL);
+      if (!response.ok) {
+        const retryDetail = await response.text().catch(() => '');
+        throw new Error(`Anthropic API error (${response.status}): ${retryDetail}`);
+      }
+    } else {
+      throw new Error(`Anthropic API error (${response.status}): ${detail}`);
+    }
   }
 
   const data = await response.json();
