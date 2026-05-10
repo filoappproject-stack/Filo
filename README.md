@@ -544,3 +544,18 @@ Finché ricevi `429`, non è un errore Anthropic: è il rate/quota guardrail che
 ### Quando fermarsi e riprendere il giorno dopo
 
 Se vedi `Analisi rimanenti oggi: 0/5`, il comportamento corretto è fermarsi e riprovare il giorno successivo dopo il reset quota.
+
+
+### Se Anthropic risponde 404 model not found
+
+Se nei log vedi `Anthropic API error (404)` con `not_found_error` sul model, significa che quel model ID non è disponibile per la tua chiave/account in quel momento.
+
+Check consigliato: elenca i model disponibili con la tua key:
+
+```bash
+curl https://api.anthropic.com/v1/models \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -H "anthropic-version: 2023-06-01"
+```
+
+Poi imposta in Vercel `ANTHROPIC_MODEL` su uno degli ID realmente presenti nella risposta.

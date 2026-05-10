@@ -5,7 +5,11 @@ let aiAttemptCounter = 0;
 let lastAnalyzedSignature = null;
 let lastSuggestions = null;
 
-const FALLBACK_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+const FALLBACK_ANTHROPIC_MODELS = [
+  'claude-sonnet-4-20250514',
+  'claude-3-7-sonnet-latest',
+  'claude-3-5-haiku-latest'
+];
 
 
 function normalizeInputForCache(input) {
@@ -132,17 +136,22 @@ Fornisci 3-5 suggerimenti concreti.`;
   }
 
   if (!response.ok) {
-    const detail = await response.text().catch(() => '');
+    let detail = await response.text().catch(() => '');
     const invalidModel = response.status === 404 && /model/i.test(detail);
 
-    if (invalidModel && env.ANTHROPIC_MODEL !== FALLBACK_ANTHROPIC_MODEL) {
-      console.warn(`Anthropic model non trovato (${env.ANTHROPIC_MODEL}), retry con fallback ${FALLBACK_ANTHROPIC_MODEL}.`);
-      response = await requestAnthropic(FALLBACK_ANTHROPIC_MODEL);
-      if (!response.ok) {
-        const retryDetail = await response.text().catch(() => '');
-        throw new Error(`Anthropic API error (${response.status}): ${retryDetail}`);
+    if (invalidModel) {
+      const candidates = FALLBACK_ANTHROPIC_MODELS.filter((m) => m !== env.ANTHROPIC_MODEL);
+      for (const candidate of candidates) {
+        console.warn(`Anthropic model non trovato (${env.ANTHROPIC_MODEL}), retry con fallback ${candidate}.`);
+        response = await requestAnthropic(candidate);
+        if (response.ok) {
+          break;
+        }
+        detail = await response.text().catch(() => '');
       }
-    } else {
+    }
+
+    if (!response.ok) {
       throw new Error(`Anthropic API error (${response.status}): ${detail}`);
     }
   }
