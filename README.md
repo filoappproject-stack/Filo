@@ -559,3 +559,34 @@ curl https://api.anthropic.com/v1/models \
 ```
 
 Poi imposta in Vercel `ANTHROPIC_MODEL` su uno degli ID realmente presenti nella risposta.
+
+
+### Procedura completa (passi 1-4) per il fix del 404 model
+
+1. **Recupera la lista modelli disponibili**
+   - Apri un terminale locale (puoi essere in qualunque cartella, il comando non dipende dal progetto).
+   - Esporta la tua key Anthropic (oppure sostituisci direttamente nel comando):
+
+   ```bash
+   export ANTHROPIC_API_KEY='la-tua-key'
+   curl https://api.anthropic.com/v1/models \
+     -H "x-api-key: $ANTHROPIC_API_KEY" \
+     -H "anthropic-version: 2023-06-01"
+   ```
+
+2. **Scegli un model ID valido dalla risposta**
+   - Cerca un id presente nella risposta JSON (es. `claude-3-7-sonnet-latest` o altro disponibile nel tuo account).
+   - Copia esattamente l'id senza spazi extra.
+
+3. **Imposta quel model in Vercel**
+   - Vai su: `Project -> Environment Variables`.
+   - Clicca **Add Environment Variable**.
+   - Key: `ANTHROPIC_MODEL`
+   - Value: `<model_id_copiato>`
+   - Environments: almeno **Production** (e **Preview** se testi lì).
+   - Salva.
+
+4. **Redeploy e verifica**
+   - Fai redeploy dell'ultimo commit.
+   - Apri Filo e clicca **Analizza la mia giornata**.
+   - Controlla che nei log Vercel non compaia più `Anthropic API error (404) ... model not found`.
