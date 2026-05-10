@@ -50,14 +50,13 @@ function consumeInMemory(actorKey, dayKey, allowedLimit, nowMs) {
 
   if (usage.lastRequestAt && msSinceLast < COOLDOWN_MS) {
     const retryAfterMs = COOLDOWN_MS - msSinceLast;
-    const retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
     return {
       ok: false,
       error: 'CooldownExceeded',
       limit: allowedLimit,
       used: usage.count,
       remaining: Math.max(allowedLimit - usage.count, 0),
-      retryAfterSeconds,
+      retryAfterSeconds: Math.ceil(retryAfterMs / 1000),
       retryAt: new Date(nowMs + retryAfterMs).toISOString()
     };
   }
@@ -89,7 +88,6 @@ async function consumeInDatabase(actorKey, dayKey, allowedLimit, nowIso) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-
     await client.query(
       `INSERT INTO ai_usage_limits (actor_key, day_key, used_count, last_request_at)
        VALUES ($1, $2::date, 0, TO_TIMESTAMP(0))
@@ -113,7 +111,6 @@ async function consumeInDatabase(actorKey, dayKey, allowedLimit, nowIso) {
 
     if (lastRequestAtMs && msSinceLast < COOLDOWN_MS) {
       const retryAfterMs = COOLDOWN_MS - msSinceLast;
-      const retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
       await client.query('ROLLBACK');
       return {
         ok: false,
@@ -121,7 +118,7 @@ async function consumeInDatabase(actorKey, dayKey, allowedLimit, nowIso) {
         limit: allowedLimit,
         used,
         remaining: Math.max(allowedLimit - used, 0),
-        retryAfterSeconds,
+        retryAfterSeconds: Math.ceil(retryAfterMs / 1000),
         retryAt: new Date(nowMs + retryAfterMs).toISOString()
       };
     }
@@ -166,6 +163,45 @@ async function consumeInDatabase(actorKey, dayKey, allowedLimit, nowIso) {
   }
 }
 
+function getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, nowMs) {
+  const usage = ensureActorUsage(actorKey, dayKey);
+  const used = Number(usage.count || 0);
+  const msSinceLast = nowMs - Number(usage.lastRequestAt || 0);
+  const cooldownRemainingMs = usage.lastRequestAt && msSinceLast < COOLDOWN_MS ? COOLDOWN_MS - msSinceLast : 0;
+
+  return {
+    limit: allowedLimit,
+    used,
+    remaining: Math.max(allowedLimit - used, 0),
+    dayKey,
+    cooldownRemainingSeconds: cooldownRemainingMs > 0 ? Math.ceil(cooldownRemainingMs / 1000) : 0
+  };
+}
+
+async function getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, nowIso) {
+  const nowMs = Date.parse(nowIso);
+  const res = await pool.query(
+    `SELECT used_count, last_request_at
+     FROM ai_usage_limits
+     WHERE actor_key = $1 AND day_key = $2::date`,
+    [actorKey, dayKey]
+  );
+
+  const row = res.rows[0] || { used_count: 0, last_request_at: null };
+  const used = Number(row.used_count || 0);
+  const lastRequestAtMs = row.last_request_at ? Date.parse(row.last_request_at) : 0;
+  const msSinceLast = nowMs - lastRequestAtMs;
+  const cooldownRemainingMs = lastRequestAtMs && msSinceLast < COOLDOWN_MS ? COOLDOWN_MS - msSinceLast : 0;
+
+  return {
+    limit: allowedLimit,
+    used,
+    remaining: Math.max(allowedLimit - used, 0),
+    dayKey,
+    cooldownRemainingSeconds: cooldownRemainingMs > 0 ? Math.ceil(cooldownRemainingMs / 1000) : 0
+  };
+}
+
 export async function consumeAnalysisQuota(req, payload) {
   const now = new Date();
   const dayKey = getDayKey(now);
@@ -182,406 +218,6 @@ export async function consumeAnalysisQuota(req, payload) {
     console.warn('Quota DB non disponibile, fallback in-memory attivato:', error?.message || error);
     return consumeInMemory(actorKey, dayKey, allowedLimit, now.getTime());
   }
-}
-
-function getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, nowMs) {
-  const usage = ensureActorUsage(actorKey, dayKey);
-  const used = Number(usage.count || 0);
-  const msSinceLast = nowMs - Number(usage.lastRequestAt || 0);
-  const cooldownRemainingMs = usage.lastRequestAt && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-async function getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, nowIso) {
-  const nowMs = Date.parse(nowIso);
-  const res = await pool.query(
-    `SELECT used_count, last_request_at
-     FROM ai_usage_limits
-     WHERE actor_key = $1 AND day_key = $2::date`,
-    [actorKey, dayKey]
-  );
-  const row = res.rows[0] || { used_count: 0, last_request_at: null };
-  const used = Number(row.used_count || 0);
-  const lastRequestAtMs = row.last_request_at ? Date.parse(row.last_request_at) : 0;
-  const msSinceLast = nowMs - lastRequestAtMs;
-  const cooldownRemainingMs = lastRequestAtMs && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-export async function getAnalysisQuotaStatus(req, payload) {
-  const now = new Date();
-  const dayKey = getDayKey(now);
-  const actorKey = buildActorKey(req, payload);
-  const allowedLimit = allowedLimitFor(payload);
-
-  if (!pool || !env.DATABASE_URL) {
-    return getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, now.getTime());
-  }
-
-  return getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, now.toISOString());
-}
-
-function getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, nowMs) {
-  const usage = ensureActorUsage(actorKey, dayKey);
-  const used = Number(usage.count || 0);
-  const msSinceLast = nowMs - Number(usage.lastRequestAt || 0);
-  const cooldownRemainingMs = usage.lastRequestAt && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-async function getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, nowIso) {
-  const nowMs = Date.parse(nowIso);
-  const res = await pool.query(
-    `SELECT used_count, last_request_at
-     FROM ai_usage_limits
-     WHERE actor_key = $1 AND day_key = $2::date`,
-    [actorKey, dayKey]
-  );
-  const row = res.rows[0] || { used_count: 0, last_request_at: null };
-  const used = Number(row.used_count || 0);
-  const lastRequestAtMs = row.last_request_at ? Date.parse(row.last_request_at) : 0;
-  const msSinceLast = nowMs - lastRequestAtMs;
-  const cooldownRemainingMs = lastRequestAtMs && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-export async function getAnalysisQuotaStatus(req, payload) {
-  const now = new Date();
-  const dayKey = getDayKey(now);
-  const actorKey = buildActorKey(req, payload);
-  const allowedLimit = allowedLimitFor(payload);
-
-  if (!pool || !env.DATABASE_URL) {
-    return getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, now.getTime());
-  }
-
-  return getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, now.toISOString());
-}
-
-function getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, nowMs) {
-  const usage = ensureActorUsage(actorKey, dayKey);
-  const used = Number(usage.count || 0);
-  const msSinceLast = nowMs - Number(usage.lastRequestAt || 0);
-  const cooldownRemainingMs = usage.lastRequestAt && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-async function getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, nowIso) {
-  const nowMs = Date.parse(nowIso);
-  const res = await pool.query(
-    `SELECT used_count, last_request_at
-     FROM ai_usage_limits
-     WHERE actor_key = $1 AND day_key = $2::date`,
-    [actorKey, dayKey]
-  );
-  const row = res.rows[0] || { used_count: 0, last_request_at: null };
-  const used = Number(row.used_count || 0);
-  const lastRequestAtMs = row.last_request_at ? Date.parse(row.last_request_at) : 0;
-  const msSinceLast = nowMs - lastRequestAtMs;
-  const cooldownRemainingMs = lastRequestAtMs && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-export async function getAnalysisQuotaStatus(req, payload) {
-  const now = new Date();
-  const dayKey = getDayKey(now);
-  const actorKey = buildActorKey(req, payload);
-  const allowedLimit = allowedLimitFor(payload);
-
-  if (!pool || !env.DATABASE_URL) {
-    return getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, now.getTime());
-  }
-
-  return getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, now.toISOString());
-}
-
-function getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, nowMs) {
-  const usage = ensureActorUsage(actorKey, dayKey);
-  const used = Number(usage.count || 0);
-  const msSinceLast = nowMs - Number(usage.lastRequestAt || 0);
-  const cooldownRemainingMs = usage.lastRequestAt && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-async function getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, nowIso) {
-  const nowMs = Date.parse(nowIso);
-  const res = await pool.query(
-    `SELECT used_count, last_request_at
-     FROM ai_usage_limits
-     WHERE actor_key = $1 AND day_key = $2::date`,
-    [actorKey, dayKey]
-  );
-  const row = res.rows[0] || { used_count: 0, last_request_at: null };
-  const used = Number(row.used_count || 0);
-  const lastRequestAtMs = row.last_request_at ? Date.parse(row.last_request_at) : 0;
-  const msSinceLast = nowMs - lastRequestAtMs;
-  const cooldownRemainingMs = lastRequestAtMs && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-export async function getAnalysisQuotaStatus(req, payload) {
-  const now = new Date();
-  const dayKey = getDayKey(now);
-  const actorKey = buildActorKey(req, payload);
-  const allowedLimit = allowedLimitFor(payload);
-
-  if (!pool || !env.DATABASE_URL) {
-    return getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, now.getTime());
-  }
-
-  return getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, now.toISOString());
-}
-
-function getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, nowMs) {
-  const usage = ensureActorUsage(actorKey, dayKey);
-  const used = Number(usage.count || 0);
-  const msSinceLast = nowMs - Number(usage.lastRequestAt || 0);
-  const cooldownRemainingMs = usage.lastRequestAt && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-async function getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, nowIso) {
-  const nowMs = Date.parse(nowIso);
-  const res = await pool.query(
-    `SELECT used_count, last_request_at
-     FROM ai_usage_limits
-     WHERE actor_key = $1 AND day_key = $2::date`,
-    [actorKey, dayKey]
-  );
-  const row = res.rows[0] || { used_count: 0, last_request_at: null };
-  const used = Number(row.used_count || 0);
-  const lastRequestAtMs = row.last_request_at ? Date.parse(row.last_request_at) : 0;
-  const msSinceLast = nowMs - lastRequestAtMs;
-  const cooldownRemainingMs = lastRequestAtMs && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-export async function getAnalysisQuotaStatus(req, payload) {
-  const now = new Date();
-  const dayKey = getDayKey(now);
-  const actorKey = buildActorKey(req, payload);
-  const allowedLimit = allowedLimitFor(payload);
-
-  if (!pool || !env.DATABASE_URL) {
-    return getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, now.getTime());
-  }
-
-  return getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, now.toISOString());
-}
-
-function getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, nowMs) {
-  const usage = ensureActorUsage(actorKey, dayKey);
-  const used = Number(usage.count || 0);
-  const msSinceLast = nowMs - Number(usage.lastRequestAt || 0);
-  const cooldownRemainingMs = usage.lastRequestAt && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-async function getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, nowIso) {
-  const nowMs = Date.parse(nowIso);
-  const res = await pool.query(
-    `SELECT used_count, last_request_at
-     FROM ai_usage_limits
-     WHERE actor_key = $1 AND day_key = $2::date`,
-    [actorKey, dayKey]
-  );
-  const row = res.rows[0] || { used_count: 0, last_request_at: null };
-  const used = Number(row.used_count || 0);
-  const lastRequestAtMs = row.last_request_at ? Date.parse(row.last_request_at) : 0;
-  const msSinceLast = nowMs - lastRequestAtMs;
-  const cooldownRemainingMs = lastRequestAtMs && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-export async function getAnalysisQuotaStatus(req, payload) {
-  const now = new Date();
-  const dayKey = getDayKey(now);
-  const actorKey = buildActorKey(req, payload);
-  const allowedLimit = allowedLimitFor(payload);
-
-  if (!pool || !env.DATABASE_URL) {
-    return getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, now.getTime());
-  }
-
-  return getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, now.toISOString());
-}
-
-function getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, nowMs) {
-  const usage = ensureActorUsage(actorKey, dayKey);
-  const used = Number(usage.count || 0);
-  const msSinceLast = nowMs - Number(usage.lastRequestAt || 0);
-  const cooldownRemainingMs = usage.lastRequestAt && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
-}
-
-async function getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, nowIso) {
-  const nowMs = Date.parse(nowIso);
-  const res = await pool.query(
-    `SELECT used_count, last_request_at
-     FROM ai_usage_limits
-     WHERE actor_key = $1 AND day_key = $2::date`,
-    [actorKey, dayKey]
-  );
-  const row = res.rows[0] || { used_count: 0, last_request_at: null };
-  const used = Number(row.used_count || 0);
-  const lastRequestAtMs = row.last_request_at ? Date.parse(row.last_request_at) : 0;
-  const msSinceLast = nowMs - lastRequestAtMs;
-  const cooldownRemainingMs = lastRequestAtMs && msSinceLast < COOLDOWN_MS
-    ? COOLDOWN_MS - msSinceLast
-    : 0;
-
-  return {
-    limit: allowedLimit,
-    used,
-    remaining: Math.max(allowedLimit - used, 0),
-    dayKey,
-    cooldownRemainingSeconds: cooldownRemainingMs > 0
-      ? Math.ceil(cooldownRemainingMs / 1000)
-      : 0
-  };
 }
 
 export async function getAnalysisQuotaStatus(req, payload) {

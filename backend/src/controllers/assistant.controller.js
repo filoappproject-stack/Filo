@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import { z } from 'zod';
-import { HttpError } from '../utils/httpError.js';
-import { analyzeDay } from '../services/assistant.service.js';
+import { analyzeDay, buildFallbackSuggestions, getAiAttemptCounter } from '../services/assistant.service.js';
 import { consumeAnalysisQuota, getAnalysisQuotaStatus } from '../services/quota.service.js';
+import { HttpError } from '../utils/httpError.js';
 
 const AnalyzeDaySchema = z.object({
   userId: z.string().uuid().optional().nullable(),
@@ -112,66 +112,6 @@ export async function postDayAnalysis(req, res) {
   }
 }
 
-export async function postDayAnalysisQuota(req, res) {
-  const parsed = AnalyzeQuotaSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new HttpError(400, 'Payload quota analisi non valido');
-  }
-
-  const quota = await getAnalysisQuotaStatus(req, parsed.data);
-
-  res.json({
-    data: {
-      quota
-    }
-  });
-}
-
-export async function postDayAnalysisQuota(req, res) {
-  const parsed = AnalyzeQuotaSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new HttpError(400, 'Payload quota analisi non valido');
-  }
-
-  const quota = await getAnalysisQuotaStatus(req, parsed.data);
-
-  res.json({
-    data: {
-      quota
-    }
-  });
-}
-
-export async function postDayAnalysisQuota(req, res) {
-  const parsed = AnalyzeQuotaSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new HttpError(400, 'Payload quota analisi non valido');
-  }
-
-  const quota = await getAnalysisQuotaStatus(req, parsed.data);
-
-  res.json({
-    data: {
-      quota
-    }
-  });
-}
-
-export async function postDayAnalysisQuota(req, res) {
-  const parsed = AnalyzeQuotaSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new HttpError(400, 'Payload quota analisi non valido');
-  }
-
-  const quota = await getAnalysisQuotaStatus(req, parsed.data);
-
-  res.json({
-    data: {
-      quota
-    }
-  });
-}
-
 export async function postDayAnalysisQuotaStatus(req, res) {
   const parsed = AnalyzeQuotaSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -187,32 +127,31 @@ export async function postDayAnalysisQuotaStatus(req, res) {
   });
 }
 
-export async function postDayAnalysisQuotaStatus(req, res) {
-  const parsed = AnalyzeQuotaSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new HttpError(400, 'Payload quota analisi non valido');
-  }
-
-  const quota = await getAnalysisQuotaStatus(req, parsed.data);
-
-  res.json({
-    data: {
-      quota
-    }
-  });
+function buildDiagnosticId() {
+  return crypto.randomUUID?.() || `diag_${Date.now()}`;
 }
 
-export async function postDayAnalysisQuotaStatus(req, res) {
-  const parsed = AnalyzeQuotaSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new HttpError(400, 'Payload quota analisi non valido');
+function buildDegradedReason(stage, error) {
+  if (stage === 'quota') {
+    const detail = error?.message ? ` Dettaglio: ${error.message}` : '';
+    return {
+      code: 'QUOTA_SERVICE_UNAVAILABLE',
+      hint: `Impossibile verificare quota in questo momento.${detail}`
+    };
   }
 
-  const quota = await getAnalysisQuotaStatus(req, parsed.data);
+  return {
+    code: 'AI_PROVIDER_UNAVAILABLE',
+    hint: error?.message || 'Errore temporaneo del provider AI.'
+  };
+}
 
-  res.json({
-    data: {
-      quota
-    }
+function logAssistantFailure(req, diagnosticId, error, input, stage) {
+  console.warn('[assistant.degraded]', {
+    diagnosticId,
+    stage,
+    path: req.path,
+    userId: input?.userId || null,
+    message: error?.message || String(error)
   });
 }
