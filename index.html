@@ -2614,7 +2614,7 @@ async function analyzeDay(){
       body:JSON.stringify({
         userId:currentUser?.id||null,
         agenda,pending,dayEnd,availability,dayFocus,
-        memoryContext:getMemoryContext(),energy:todayEnergy,stress:todayStress
+        memoryContext:getMemoryContext(),sleep:todaySleep,energy:todayEnergy,stress:todayStress
       })
     });
     const payload=await res.json().catch(()=>null);

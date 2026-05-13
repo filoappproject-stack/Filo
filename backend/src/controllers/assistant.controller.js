@@ -12,6 +12,7 @@ const AnalyzeDaySchema = z.object({
   availability: z.string().trim().max(100).optional().default(''),
   dayFocus: z.string().trim().max(500).optional().default(''),
   memoryContext: z.string().trim().max(4000).optional().default(''),
+  sleep: z.string().trim().max(80).optional().nullable(),
   energy: z.coerce.number().min(1).max(5).optional().nullable(),
   stress: z.coerce.number().min(1).max(5).optional().nullable()
 });
