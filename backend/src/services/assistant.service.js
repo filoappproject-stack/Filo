@@ -23,6 +23,7 @@ function normalizeInputForCache(input) {
     availability: normalizeText(input?.availability),
     dayFocus: normalizeText(input?.dayFocus),
     memoryContext: normalizeText(input?.memoryContext),
+    sleep: normalizeText(input?.sleep),
     energy: normalizeNumber(input?.energy),
     stress: normalizeNumber(input?.stress)
   });
@@ -39,6 +40,44 @@ function splitItems(raw) {
     .map((v) => v.trim())
     .filter(Boolean)
     .slice(0, 8);
+}
+
+function enforceCheckinFacts(suggestions, input) {
+  if (!Array.isArray(suggestions)) return [];
+
+  const energy = Number.isFinite(input?.energy) ? Number(input.energy) : null;
+  const stress = Number.isFinite(input?.stress) ? Number(input.stress) : null;
+  const sleep = input?.sleep ? String(input.sleep).trim() : '';
+
+  if (!Number.isFinite(energy) && !Number.isFinite(stress) && !sleep) {
+    return suggestions;
+  }
+
+  const factParts = [];
+  if (Number.isFinite(energy)) factParts.push(`energia ${energy}/5`);
+  if (Number.isFinite(stress)) factParts.push(`stress ${stress}/5`);
+  if (sleep) factParts.push(`sonno "${sleep}"`);
+  const factsSentence = ` Check-in confermato: ${factParts.join(', ')}.`;
+
+  return suggestions.map((s) => {
+    const perche = String(s?.perche || '').trim();
+    if (!perche) return { ...s, perche: `Basato sul tuo stato di oggi.${factsSentence}`.trim() };
+
+    const sanitized = perche
+      .replace(/\b[Ee]nergia\s+\d\s*\/\s*5\b/g, '')
+      .replace(/\b[Ss]tress\s+\d\s*\/\s*5\b/g, '')
+      .replace(/\b[Ee]nergia\s+non\s+specificata\b/g, '')
+      .replace(/\b[Ee]nergia\s+non\s+dichiarata\b/g, '')
+      .replace(/\b[Ss]tress\s+non\s+specificato\b/g, '')
+      .replace(/\b[Ss]tress\s+non\s+dichiarato\b/g, '')
+      .replace(/\b[Ss]onno\s+non\s+specificato\b/g, '')
+      .replace(/\b[Ss]onno\s+non\s+dichiarato\b/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+    const normalized = sanitized.replace(/[,:;.\s]+$/g, '');
+    return { ...s, perche: `${normalized}.${factsSentence}`.replace(/\.\./g, '.') };
+  });
 }
 
 export function buildFallbackSuggestions(input) {
@@ -100,6 +139,7 @@ In sospeso: ${input.pending || 'nessuna'}
 Fine giornata: ${input.dayEnd || 'non specificata'}
 Tempo utile oggi: ${input.availability || 'non specificato'}
 Priorità del giorno: ${input.dayFocus || 'non specificata'}
+Sonno: ${input.sleep ? `"${String(input.sleep).trim()}"` : 'non specificato'}
 Energia: ${Number.isFinite(input.energy) ? `${input.energy}/5` : 'non specificata'}
 Stress: ${Number.isFinite(input.stress) ? `${input.stress}/5` : 'non specificato'}
 Contesto memoria: ${input.memoryContext || 'nessuno'}
@@ -186,6 +226,8 @@ export async function analyzeDay(input) {
   if (!suggestions) {
     suggestions = buildFallbackSuggestions(input);
   }
+
+  suggestions = enforceCheckinFacts(suggestions, input);
 
   lastAnalyzedSignature = inputSignature;
   lastSuggestions = suggestions;
