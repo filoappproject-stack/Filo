@@ -389,7 +389,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
               Analizza la mia giornata
             </button>
           </div>
-          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#9E9B94;">Analisi rimanenti oggi: 3/3</div>
+          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#9E9B94;">Analisi rimanenti oggi: 5/5</div>
         </div>
         <div class="error-box" id="ai-error"></div>
         <div class="loader" id="ai-loader">
@@ -2435,7 +2435,7 @@ function setAnalyzeFallbackStatus(isActive,message){
 }
 function consumeAnalyzeQuotaEstimate(){
   const quotaEl=document.getElementById('analyze-quota');
-  const fallback={limit:3,remaining:2};
+  const fallback={limit:5,remaining:4};
   if(!quotaEl)return fallback;
   const text=(quotaEl.textContent||'').trim();
   const match=text.match(/(\d+)\s*\/\s*(\d+)/);
