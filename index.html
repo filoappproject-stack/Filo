@@ -1234,6 +1234,7 @@ async function loginSuccess(user) {
   renderAll();
   analyzePatterns();
   bindAnalyzeQuotaWatchers();
+  scheduleAnalyzeQuotaBootstrapRefresh();
 }
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────
@@ -1268,6 +1269,20 @@ const ANALYZE_REMOTE_BACKOFF_MS=5*60*1000;
 let analyzeCooldownTimeoutId=null;
 let analyzeCooldownUntilMs=0;
 let analyzeRequestInFlight=false;
+let analyzeQuotaBootstrapTimeoutIds=[];
+function clearAnalyzeQuotaBootstrapRetries(){
+  analyzeQuotaBootstrapTimeoutIds.forEach(id=>clearTimeout(id));
+  analyzeQuotaBootstrapTimeoutIds=[];
+}
+function scheduleAnalyzeQuotaBootstrapRefresh(){
+  clearAnalyzeQuotaBootstrapRetries();
+  const delays=[0,1500,5000];
+  delays.forEach((delay)=>{
+    const id=setTimeout(()=>{refreshAnalyzeQuota();},delay);
+    analyzeQuotaBootstrapTimeoutIds.push(id);
+  });
+}
+
 let analyzeRequestSeq=0;
 let analyzeRemoteBackoffUntilMs=0;
 let analyzeQuotaRefreshTimeoutId=null;
@@ -2494,9 +2509,35 @@ function applyAnalyzeQuotaState(quota){
   }
 }
 async function refreshAnalyzeQuota(){
-  // Quota endpoint rimosso per evitare bootstrap failure lato backend.
-  // La quota viene aggiornata solo dalle risposte reali di /day-analysis.
-  setAnalyzeButtonAvailability(Number.NaN);
+  try{
+    const agenda=(document.getElementById('agenda-input')?.value||'').trim();
+    const pending=(document.getElementById('pending-input')?.value||'').trim();
+    const res=await fetchApi('/api/v1/assistant/day-analysis/quota',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        userId:currentUser?.id||null,
+        agenda,
+        pending
+      })
+    });
+    const payload=await safeJson(res);
+    if(!res.ok){
+      setAnalyzeRequestDebug(`Quota sync fallita (${res.status})`);
+      setAnalyzeButtonAvailability(Number.NaN);
+      return;
+    }
+    const quota=payload?.data?.quota||payload?.quota||null;
+    if(quota){
+      applyAnalyzeQuotaState(quota);
+      return;
+    }
+    setAnalyzeRequestDebug('Quota sync risposta senza quota');
+    setAnalyzeButtonAvailability(Number.NaN);
+  }catch(err){
+    setAnalyzeRequestDebug(`Quota sync errore: ${err?.message||err}`);
+    setAnalyzeButtonAvailability(Number.NaN);
+  }
 }
 function scheduleAnalyzeQuotaRefresh(){
   setAnalyzeButtonAvailability(Number.NaN);
@@ -2719,6 +2760,12 @@ async function init() {
   handleSupabaseAuthErrorInQuery();
 
   // Ascolta eventi auth
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible'&&currentUser?.id){
+      refreshAnalyzeQuota();
+    }
+  });
+
   supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log('Auth event:', event, session ? 'session ok' : 'no session');
     if (event === 'SIGNED_IN' && session) {
