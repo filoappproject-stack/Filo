@@ -80,7 +80,9 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 .hint-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
 .hint-btn{background:#F7F5F0;color:#6B6860;border:1px solid rgba(0,0,0,0.1);border-radius:999px;padding:4px 10px;font-family:inherit;font-size:11px;cursor:pointer;transition:all 0.12s;}
 .hint-btn:hover{background:#E8EEFB;border-color:rgba(26,79,191,0.25);color:#0D2E7A;}
-.small-help{font-size:11px;color:#57534A;margin-top:6px;line-height:1.45;}
+.small-help{font-size:11px;color:#6F6A61;margin-top:6px;line-height:1.45;}
+.context-note{margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid rgba(26,79,191,0.2);background:#EEF3FF;color:#0D2E7A;font-size:12px;line-height:1.45;}
+.context-note strong{font-weight:600;}
 .micro-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .form-actions{display:flex;gap:8px;margin-top:16px;}
@@ -389,7 +391,10 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
               Analizza la mia giornata
             </button>
           </div>
-          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#57534A;">Analisi rimanenti oggi: 5/5</div>
+          <div class="context-note">
+            <strong>Nota importante:</strong> i suggerimenti AI si basano sui campi compilati qui (agenda/sospesi/check-in). Gli eventi Google Calendar sincronizzati non vengono ancora inclusi automaticamente.
+          </div>
+          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#6F6A61;">Analisi rimanenti oggi: 5/5</div>
         </div>
         <div class="error-box" id="ai-error"></div>
         <div class="loader" id="ai-loader">
