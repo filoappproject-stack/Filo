@@ -384,7 +384,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
             </div>
           </div>
           <div style="display:flex;gap:10px;align-items:center;">
-            <button class="btn-primary" id="analyze-btn" onclick="analyzeDay()">
+            <button class="btn-primary" id="analyze-btn" onclick="analyzeDay()" disabled>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.1 2.2 2.4.35-1.75 1.7.42 2.4L6.5 6.6 4.33 7.65l.42-2.4L3 3.55l2.4-.35z" fill="white"/></svg>
               Analizza la mia giornata
             </button>
@@ -2520,12 +2520,11 @@ function markAnalyzeRemoteUnavailable(status){
 function isAnalyzeRemoteInBackoff(){
   return analyzeRemoteBackoffUntilMs>Date.now();
 }
-function setAnalyzeButtonAvailability(remaining,options){
+function setAnalyzeButtonAvailability(remaining){
   const btn=document.getElementById('analyze-btn');
   if(!btn)return;
   if(analyzeCooldownTimeoutId)return;
-  const enforceQuota=Boolean(options&&options.enforceQuota);
-  const canAnalyze=enforceQuota&&Number.isFinite(remaining)?remaining>0:true;
+  const canAnalyze=Number.isFinite(remaining)?remaining>0:true;
   btn.disabled=!canAnalyze;
 }
 function applyAnalyzeQuotaState(quota){
@@ -2713,10 +2712,10 @@ async function analyzeDay(){
         errBox.textContent=message;
         errBox.classList.add('active');
         updateAnalyzeQuotaLabel(Number(payload?.limit),Number(payload?.remaining));
-        setAnalyzeButtonAvailability(Number(payload?.remaining),{enforceQuota:true});
+        setAnalyzeButtonAvailability(Number(payload?.remaining));
         if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
         loader.classList.remove('active');
-        if(!analyzeCooldownTimeoutId)setAnalyzeButtonAvailability(Number(payload?.remaining),{enforceQuota:true});
+        if(!analyzeCooldownTimeoutId)setAnalyzeButtonAvailability(Number(payload?.remaining));
         analyzeRequestInFlight=false;
         return;
       }
