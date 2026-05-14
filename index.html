@@ -2567,6 +2567,7 @@ async function analyzeDay(){
   const dayEnd=document.getElementById('day-end-input')?.value||'';
   const availability=document.getElementById('day-availability-input')?.value||'';
   const dayFocus=document.getElementById('day-focus-input')?.value.trim()||'';
+  const inboxContext=buildAnalyzeInboxContext();
   if(!agenda&&!pending)return;
   const now=Date.now();
   if(analyzeCooldownUntilMs>now){
@@ -2614,7 +2615,8 @@ async function analyzeDay(){
       body:JSON.stringify({
         userId:currentUser?.id||null,
         agenda,pending,dayEnd,availability,dayFocus,
-        memoryContext:getMemoryContext(),sleep:todaySleep,energy:todayEnergy,stress:todayStress
+        memoryContext:getMemoryContext(),sleep:todaySleep,energy:todayEnergy,stress:todayStress,
+        inboxContext
       })
     });
     const payload=await res.json().catch(()=>null);
@@ -2680,6 +2682,18 @@ async function analyzeDay(){
     errBox.classList.add('active');
     analyzeRequestInFlight=false;
   }
+}
+function buildAnalyzeInboxContext(){
+  if(!mailboxConnected||!Array.isArray(INBOX)||!INBOX.length)return '';
+  const topMessages=INBOX.slice(0,8).map((item,idx)=>{
+    const status=item?.unread?'non letta':'letta';
+    const from=String(item?.from||'').trim();
+    const subject=String(item?.subj||'').trim();
+    const preview=String(item?.prev||'').trim();
+    if(!from&&!subject&&!preview)return null;
+    return `${idx+1}) [${status}] da ${from||'mittente sconosciuto'} — oggetto: ${subject||'(senza oggetto)'}${preview?` — anteprima: ${preview}`:''}`;
+  }).filter(Boolean);
+  return topMessages.join('\n');
 }
 
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
