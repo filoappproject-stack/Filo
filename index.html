@@ -2521,7 +2521,7 @@ async function refreshAnalyzeQuota(){
         pending
       })
     });
-    const payload=await safeJson(res);
+    const payload=await res.json().catch(()=>null);
     if(!res.ok){
       setAnalyzeRequestDebug(`Quota sync fallita (${res.status})`);
       setAnalyzeButtonAvailability(Number.NaN);
