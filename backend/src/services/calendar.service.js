@@ -378,7 +378,8 @@ export async function exchangeGoogleCalendarCodeAndSync({ userId, code, redirect
   const validAccessToken = await resolveAccountAccessToken({
     ...account,
     access_token: oauthPayload.access_token,
-    refresh_token: oauthPayload.refresh_token ?? null
+    // Mantiene l'eventuale refresh token già salvato su DB quando Google non ne restituisce uno nuovo.
+    refresh_token: oauthPayload.refresh_token ?? account.refresh_token ?? null
   });
   const importedCount = await syncCalendarEvents(account, validAccessToken);
   return {
