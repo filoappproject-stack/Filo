@@ -1735,17 +1735,6 @@ async function requestCalendarConnectUrl(userId,state){
   throw new Error(lastDetail||'Endpoint calendario connect non raggiungibile');
 }
 
-async function buildApiAuthHeaders(baseHeaders={}){
-  const merged={...baseHeaders};
-  try{
-    const {data:{session}}=await supabaseClient.auth.getSession();
-    const accessToken=session?.access_token;
-    if(accessToken){
-      merged.Authorization=`Bearer ${accessToken}`;
-    }
-  }catch(e){}
-  return merged;
-}
 
 async function fetchApi(path,options={}){
   const { singleAttempt=false, disableAuthRetry=false, ...fetchOptions } = options||{};
