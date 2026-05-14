@@ -2523,12 +2523,11 @@ function markAnalyzeRemoteUnavailable(status){
 function isAnalyzeRemoteInBackoff(){
   return analyzeRemoteBackoffUntilMs>Date.now();
 }
-function setAnalyzeButtonAvailability(remaining,options){
+function setAnalyzeButtonAvailability(remaining){
   const btn=document.getElementById('analyze-btn');
   if(!btn)return;
   if(analyzeCooldownTimeoutId)return;
-  const enforceQuota=Boolean(options&&options.enforceQuota);
-  const canAnalyze=enforceQuota&&Number.isFinite(remaining)?remaining>0:true;
+  const canAnalyze=Number.isFinite(remaining)?remaining>0:true;
   btn.disabled=!canAnalyze;
 }
 function applyAnalyzeQuotaState(quota){
@@ -2716,10 +2715,10 @@ async function analyzeDay(){
         errBox.textContent=message;
         errBox.classList.add('active');
         updateAnalyzeQuotaLabel(Number(payload?.limit),Number(payload?.remaining));
-        setAnalyzeButtonAvailability(Number(payload?.remaining),{enforceQuota:true});
+        setAnalyzeButtonAvailability(Number(payload?.remaining));
         if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
         loader.classList.remove('active');
-        if(!analyzeCooldownTimeoutId)setAnalyzeButtonAvailability(Number(payload?.remaining),{enforceQuota:true});
+        if(!analyzeCooldownTimeoutId)setAnalyzeButtonAvailability(Number(payload?.remaining));
         analyzeRequestInFlight=false;
         return;
       }
