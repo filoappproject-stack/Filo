@@ -2496,10 +2496,16 @@ function applyAnalyzeQuotaState(quota){
 }
 async function refreshAnalyzeQuota(){
   try{
+    const agenda=(document.getElementById('agenda-input')?.value||'').trim();
+    const pending=(document.getElementById('pending-input')?.value||'').trim();
     const res=await fetchApi('/api/v1/assistant/day-analysis/quota',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({})
+      body:JSON.stringify({
+        userId:currentUser?.id||null,
+        agenda,
+        pending
+      })
     });
     const payload=await safeJson(res);
     if(!res.ok){
