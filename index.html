@@ -1234,7 +1234,7 @@ async function loginSuccess(user) {
   renderAll();
   analyzePatterns();
   bindAnalyzeQuotaWatchers();
-  refreshAnalyzeQuota();
+  scheduleAnalyzeQuotaBootstrapRefresh();
 }
 
 // ── DATI STATICI ──────────────────────────────────────────────────────────────
@@ -1269,6 +1269,20 @@ const ANALYZE_REMOTE_BACKOFF_MS=5*60*1000;
 let analyzeCooldownTimeoutId=null;
 let analyzeCooldownUntilMs=0;
 let analyzeRequestInFlight=false;
+let analyzeQuotaBootstrapTimeoutIds=[];
+function clearAnalyzeQuotaBootstrapRetries(){
+  analyzeQuotaBootstrapTimeoutIds.forEach(id=>clearTimeout(id));
+  analyzeQuotaBootstrapTimeoutIds=[];
+}
+function scheduleAnalyzeQuotaBootstrapRefresh(){
+  clearAnalyzeQuotaBootstrapRetries();
+  const delays=[0,1500,5000];
+  delays.forEach((delay)=>{
+    const id=setTimeout(()=>{refreshAnalyzeQuota();},delay);
+    analyzeQuotaBootstrapTimeoutIds.push(id);
+  });
+}
+
 let analyzeRequestSeq=0;
 let analyzeRemoteBackoffUntilMs=0;
 let analyzeQuotaRefreshTimeoutId=null;
@@ -2746,6 +2760,12 @@ async function init() {
   handleSupabaseAuthErrorInQuery();
 
   // Ascolta eventi auth
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible'&&currentUser?.id){
+      refreshAnalyzeQuota();
+    }
+  });
+
   supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log('Auth event:', event, session ? 'session ok' : 'no session');
     if (event === 'SIGNED_IN' && session) {
