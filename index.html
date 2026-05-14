@@ -2503,7 +2503,13 @@ async function refreshAnalyzeQuota(){
       setAnalyzeButtonAvailability(Number.NaN);
       return;
     }
-    applyAnalyzeQuotaState(payload);
+    const quota=payload?.data?.quota||payload?.quota||null;
+    if(quota){
+      applyAnalyzeQuotaState(quota);
+      return;
+    }
+    setAnalyzeRequestDebug('Quota sync risposta senza quota');
+    setAnalyzeButtonAvailability(Number.NaN);
   }catch(err){
     setAnalyzeRequestDebug(`Quota sync errore: ${err?.message||err}`);
     setAnalyzeButtonAvailability(Number.NaN);
