@@ -1053,6 +1053,7 @@ async function tryHandleCalendarOauthCallback() {
     const payload = await res.json();
     const syncedAt = payload?.data?.account?.last_synced_at || new Date().toISOString();
     setCalendarConnectionState(true, syncedAt);
+    calendarOauthJustConnected=true;
     setCalendarDiagnostic('OK','account collegato');
     try{
       await loadCalendarEvents();
@@ -1230,7 +1231,20 @@ async function loginSuccess(user) {
     }
   }
   mailboxOauthJustConnected=false;
-  calendarEvents=[];
+  if(currentUser?.id&&!calendarOauthJustConnected){
+    try{
+      await loadCalendarStatus();
+      if(calendarConnected){
+        await loadCalendarEvents();
+      }
+    }catch(err){
+      console.warn('Impossibile aggiornare stato calendario da backend:',err);
+    }
+  }
+  calendarOauthJustConnected=false;
+  if(!calendarConnected){
+    calendarEvents=[];
+  }
   renderAll();
   analyzePatterns();
   bindAnalyzeQuotaWatchers();
@@ -1250,6 +1264,7 @@ let mailboxSyncInProgress=false;
 let mailboxBackgroundSyncInProgress=false;
 let mailboxConnectionError='';
 let mailboxOauthJustConnected=false;
+let calendarOauthJustConnected=false;
 let calendarConnected=false;
 let calendarLastSync=null;
 let calendarSyncInProgress=false;
