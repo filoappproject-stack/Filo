@@ -1053,6 +1053,7 @@ async function tryHandleCalendarOauthCallback() {
     const payload = await res.json();
     const syncedAt = payload?.data?.account?.last_synced_at || new Date().toISOString();
     setCalendarConnectionState(true, syncedAt);
+    calendarOauthJustConnected=true;
     setCalendarDiagnostic('OK','account collegato');
     try{
       await loadCalendarEvents();
@@ -1204,6 +1205,11 @@ async function loginSuccess(user) {
     cachedInbox.messages.forEach(m=>INBOX.push(m));
     setInboxConnectionState(cachedInbox.connected,cachedInbox.lastSync);
   }
+  const cachedCalendar = loadCalendarFromCache();
+  if (cachedCalendar) {
+    calendarEvents = Array.isArray(cachedCalendar.events)?cachedCalendar.events:[];
+    setCalendarConnectionState(cachedCalendar.connected,cachedCalendar.lastSync);
+  }
   // Evita fetch check-in da API al boot (in deploy degradati generava 500 a freddo).
   // Manteniamo solo recupero profilo/cache locale.
   if(!hasCheckinForDate(formatLocalDate()))hydrateLatestCheckinFromSupabaseProfile();
@@ -1230,7 +1236,20 @@ async function loginSuccess(user) {
     }
   }
   mailboxOauthJustConnected=false;
-  calendarEvents=[];
+  if(currentUser?.id&&!calendarOauthJustConnected){
+    try{
+      await loadCalendarStatus();
+      if(calendarConnected){
+        await loadCalendarEvents();
+      }
+    }catch(err){
+      console.warn('Impossibile aggiornare stato calendario da backend:',err);
+    }
+  }
+  calendarOauthJustConnected=false;
+  if(!calendarConnected&&!cachedCalendar){
+    calendarEvents=[];
+  }
   renderAll();
   analyzePatterns();
   bindAnalyzeQuotaWatchers();
@@ -1250,6 +1269,7 @@ let mailboxSyncInProgress=false;
 let mailboxBackgroundSyncInProgress=false;
 let mailboxConnectionError='';
 let mailboxOauthJustConnected=false;
+let calendarOauthJustConnected=false;
 let calendarConnected=false;
 let calendarLastSync=null;
 let calendarSyncInProgress=false;
@@ -1316,6 +1336,7 @@ const TASKS_CACHE_PREFIX='filo_tasks_cache_';
 const NOTES_CACHE_PREFIX='filo_notes_cache_';
 const NOTES_BACKFILL_DONE_PREFIX='filo_notes_backfill_done_';
 const INBOX_CACHE_PREFIX='filo_inbox_cache_';
+const CALENDAR_CACHE_PREFIX='filo_calendar_cache_';
 const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
 const DAY_ANALYSIS_DRAFT_PREFIX='filo_day_analysis_draft_';
 
@@ -1380,6 +1401,24 @@ function loadNotesFromCache(){const key=getNotesCacheKey();if(!key)return null;t
 function getInboxCacheKey(){return currentUser?.id?`${INBOX_CACHE_PREFIX}${currentUser.id}`:null;}
 function saveInboxToCache(){const key=getInboxCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify({connected:mailboxConnected,lastSync:mailboxLastSync,messages:INBOX}));}catch(e){}}
 function loadInboxFromCache(){const key=getInboxCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;if(!parsed||!Array.isArray(parsed.messages))return null;return parsed;}catch(e){return null;}}
+
+function getCalendarCacheKey(){return currentUser?.id?`${CALENDAR_CACHE_PREFIX}${currentUser.id}`:null;}
+function saveCalendarToCache(){
+  const key=getCalendarCacheKey();
+  if(!key)return;
+  try{localStorage.setItem(key,JSON.stringify({connected:calendarConnected,lastSync:calendarLastSync,events:calendarEvents}));}catch(e){}
+}
+function loadCalendarFromCache(){
+  const key=getCalendarCacheKey();
+  if(!key)return null;
+  try{
+    const raw=localStorage.getItem(key);
+    const parsed=raw?JSON.parse(raw):null;
+    if(!parsed||!Array.isArray(parsed.events))return null;
+    return parsed;
+  }catch(e){return null;}
+}
+
 function getCalendarDiagKey(){
   const userKey =
     currentUser?.id ||
@@ -1476,7 +1515,7 @@ function markMailboxReconnectRequired(){
 async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));saveInboxToCache();}
 async function loadInboxStatus(){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/google/status?userId=${encodeURIComponent(currentUser.id)}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/google/status fallita (${res.status}): ${txt}`);}const payload=await res.json();const data=payload?.data||{};setInboxConnectionState(!!data.connected,data.last_synced_at||null);}
 function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)mailboxConnectionError='';}
-function setCalendarConnectionState(connected,lastSyncedAt){calendarConnected=!!connected;calendarLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)calendarConnectionError='';}
+function setCalendarConnectionState(connected,lastSyncedAt){calendarConnected=!!connected;calendarLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)calendarConnectionError='';saveCalendarToCache();}
 function mapCalendarEventToUi(item){
   const startRaw=item?.starts_at||item?.start;
   const endRaw=item?.ends_at||item?.end;
@@ -1547,6 +1586,7 @@ async function loadCalendarEvents(limit=100){
   const payload=await res.json();
   const events=Array.isArray(payload?.data)?payload.data:[];
   calendarEvents=events.map(mapCalendarEventToUi);
+  saveCalendarToCache();
 }
 async function fetchCalendarApiWithFallback(paths,options={},behavior={}){
   const retryOnHttpError=behavior?.retryOnHttpError!==false;
