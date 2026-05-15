@@ -315,6 +315,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
       <div class="av-sm" id="sidebar-initials">?</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:13px;font-weight:500;color:#1A1A18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="sidebar-name">Utente</div>
+        <div style="font-size:10px;color:#8A857A;margin-top:1px;" id="build-marker">Build: dev</div>
         <button class="logout-btn" onclick="doLogout()">Esci</button>
       </div>
     </div>
@@ -1345,6 +1346,8 @@ function buildApiBaseCandidates(){
     });
 }
 const API_BASES=buildApiBaseCandidates();
+const APP_BUILD_ID='a4f99b8';
+const APP_BUILD_DATE='2026-05-15';
 const TASKS_CACHE_PREFIX='filo_tasks_cache_';
 const NOTES_CACHE_PREFIX='filo_notes_cache_';
 const NOTES_BACKFILL_DONE_PREFIX='filo_notes_backfill_done_';
@@ -2842,6 +2845,8 @@ function buildAnalyzeInboxContext(){
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
   if(window.__filoAbortInitAfterOAuthPreserve)return;
+  const bm=document.getElementById('build-marker');
+  if(bm)bm.textContent=`Build: ${APP_BUILD_ID} · ${APP_BUILD_DATE}`;
   initDayDraftAutosave();
   document.getElementById('login-password').value = '';
   clearCorruptedPasswordAutofill();
