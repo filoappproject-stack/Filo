@@ -392,6 +392,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
           <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#6F6A61;">Analisi rimanenti oggi: 5/5</div>
         </div>
         <div class="error-box" id="ai-error"></div>
+        <div id="suggestions-updated-at" style="display:none;margin:8px 0 10px;font-size:12px;color:#6F6A61;"></div>
         <div class="loader" id="ai-loader">
           <div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>
           <div style="font-size:13px;color:#6F6A61;font-style:italic;">Sto analizzando la tua giornata...</div>
@@ -1215,6 +1216,10 @@ async function loginSuccess(user) {
   if(!hasCheckinForDate(formatLocalDate()))hydrateLatestCheckinFromSupabaseProfile();
   initCheckin();
   restoreDayDraft();
+  const cachedSuggestions=loadSuggestionsFromCache();
+  if(cachedSuggestions?.suggestions?.length){
+    renderDaySuggestions(cachedSuggestions.suggestions,{persist:false,updatedAt:cachedSuggestions.savedAt,source:'cache'});
+  }
   renderAll();
   restorePostOauthPage();
   // Evita chiamate backend automatiche al boot:
@@ -1337,6 +1342,8 @@ const NOTES_CACHE_PREFIX='filo_notes_cache_';
 const NOTES_BACKFILL_DONE_PREFIX='filo_notes_backfill_done_';
 const INBOX_CACHE_PREFIX='filo_inbox_cache_';
 const CALENDAR_CACHE_PREFIX='filo_calendar_cache_';
+const SUGGESTIONS_CACHE_PREFIX='filo_suggestions_cache_';
+const SUGGESTIONS_CACHE_TTL_MS=12*60*60*1000;
 const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
 const DAY_ANALYSIS_DRAFT_PREFIX='filo_day_analysis_draft_';
 
@@ -1403,10 +1410,39 @@ function saveInboxToCache(){const key=getInboxCacheKey();if(!key)return;try{loca
 function loadInboxFromCache(){const key=getInboxCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;if(!parsed||!Array.isArray(parsed.messages))return null;return parsed;}catch(e){return null;}}
 
 function getCalendarCacheKey(){return currentUser?.id?`${CALENDAR_CACHE_PREFIX}${currentUser.id}`:null;}
+function getSuggestionsCacheKey(){return currentUser?.id?`${SUGGESTIONS_CACHE_PREFIX}${currentUser.id}`:null;}
 function saveCalendarToCache(){
   const key=getCalendarCacheKey();
   if(!key)return;
   try{localStorage.setItem(key,JSON.stringify({connected:calendarConnected,lastSync:calendarLastSync,events:calendarEvents}));}catch(e){}
+}
+function saveSuggestionsToCache(suggestions){
+  const key=getSuggestionsCacheKey();
+  if(!key)return;
+  const safeSuggestions=Array.isArray(suggestions)?suggestions:[];
+  try{localStorage.setItem(key,JSON.stringify({savedAt:new Date().toISOString(),suggestions:safeSuggestions}));}catch(e){}
+}
+function loadSuggestionsFromCache(){
+  const key=getSuggestionsCacheKey();
+  if(!key)return null;
+  try{
+    const raw=localStorage.getItem(key);
+    const parsed=raw?JSON.parse(raw):null;
+    if(!parsed)return null;
+
+    // Compatibilità: vecchi formati cache (array puro) o object senza savedAt.
+    if(Array.isArray(parsed)){
+      return {savedAt:null,suggestions:parsed};
+    }
+    if(!Array.isArray(parsed.suggestions))return null;
+    if(!parsed.savedAt){
+      return {savedAt:null,suggestions:parsed.suggestions};
+    }
+    const savedAtMs=new Date(parsed.savedAt).getTime();
+    if(!Number.isFinite(savedAtMs)||savedAtMs<=0)return {savedAt:null,suggestions:parsed.suggestions};
+    if((Date.now()-savedAtMs)>SUGGESTIONS_CACHE_TTL_MS)return null;
+    return parsed;
+  }catch(e){return null;}
 }
 function loadCalendarFromCache(){
   const key=getCalendarCacheKey();
@@ -2431,11 +2467,27 @@ function buildLocalDayFallback(input){
   out.push({titolo:'Definisci 3 obiettivi realistici per oggi',perche:'Un limite chiaro alle priorità aumenta la probabilità di chiudere le attività davvero importanti.',priorita:'normale',azioni:['Seleziona top 3','Sposta il resto']});
   return out.slice(0,5);
 }
-function renderDaySuggestions(suggestions){
+function setSuggestionsUpdatedAtLabel(updatedAt,source='live'){
+  const el=document.getElementById('suggestions-updated-at');
+  if(!el)return;
+  const dt=updatedAt?new Date(updatedAt):new Date();
+  if(Number.isNaN(dt.getTime())){
+    el.style.display='none';
+    el.textContent='';
+    return;
+  }
+  const hhmm=dt.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+  const suffix=source==='cache'?' (da cache)':'';
+  el.textContent=`Suggerimenti aggiornati alle ${hhmm}${suffix}`;
+  el.style.display='';
+}
+function renderDaySuggestions(suggestions,options={}){
   const container=document.getElementById('suggestions-container');
   if(!container)return;
   if(!Array.isArray(suggestions)||!suggestions.length){
     container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';
+    const updatedEl=document.getElementById('suggestions-updated-at');
+    if(updatedEl){updatedEl.style.display='none';updatedEl.textContent='';}
     return;
   }
   const nb=document.getElementById('nb-sugg');
@@ -2444,6 +2496,9 @@ function renderDaySuggestions(suggestions){
   const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};
   const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
   container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#6F6A61;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
+  const shouldPersist=options?.persist!==false;
+  if(shouldPersist)saveSuggestionsToCache(suggestions);
+  setSuggestionsUpdatedAtLabel(options?.updatedAt||(shouldPersist?new Date().toISOString():null),options?.source||'live');
 }
 function updateAnalyzeQuotaLabel(limit,remaining){
   const el=document.getElementById('analyze-quota');
@@ -2638,6 +2693,10 @@ async function analyzeDay(){
   const availability=document.getElementById('day-availability-input')?.value||'';
   const dayFocus=document.getElementById('day-focus-input')?.value.trim()||'';
   const inboxContext=buildAnalyzeInboxContext();
+  const userTimeZone=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
+  const localNow=new Date();
+  const calendarFrom=new Date(localNow.getFullYear(),localNow.getMonth(),localNow.getDate()).toISOString();
+  const calendarTo=new Date(new Date(calendarFrom).getTime()+24*60*60*1000).toISOString();
   if(!agenda&&!pending)return;
   const now=Date.now();
   if(analyzeCooldownUntilMs>now){
@@ -2686,7 +2745,7 @@ async function analyzeDay(){
         userId:currentUser?.id||null,
         agenda,pending,dayEnd,availability,dayFocus,
         memoryContext:getMemoryContext(),sleep:todaySleep,energy:todayEnergy,stress:todayStress,
-        inboxContext
+        inboxContext,userTimeZone,calendarFrom,calendarTo
       })
     });
     const payload=await res.json().catch(()=>null);
