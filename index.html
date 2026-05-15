@@ -81,6 +81,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 .hint-btn{background:#F7F5F0;color:#6B6860;border:1px solid rgba(0,0,0,0.1);border-radius:999px;padding:4px 10px;font-family:inherit;font-size:11px;cursor:pointer;transition:all 0.12s;}
 .hint-btn:hover{background:#E8EEFB;border-color:rgba(26,79,191,0.25);color:#0D2E7A;}
 .small-help{font-size:11px;color:#6F6A61;margin-top:6px;line-height:1.45;}
+.context-note{margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid rgba(26,79,191,0.2);background:#EEF3FF;color:#0D2E7A;font-size:12px;line-height:1.45;}
+.context-note strong{font-weight:600;}
 .micro-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .form-actions{display:flex;gap:8px;margin-top:16px;}
@@ -341,6 +343,9 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
         </div>
         <div class="card">
           <div style="font-size:13px;font-weight:500;color:#6B6860;margin-bottom:12px;">Raccontami la tua giornata e ci penso io a ordinarla</div>
+          <div class="context-note" id="suggestions-context-note" style="margin-bottom:12px;">
+            <strong>Nota importante:</strong> i suggerimenti AI si basano sui campi compilati qui (agenda/sospesi/check-in). Gli eventi Google Calendar sincronizzati non vengono ancora inclusi automaticamente.
+          </div>
           <div class="grid-2" style="margin-bottom:14px;">
             <div>
               <div class="field-label">Cosa hai in agenda oggi?</div>
@@ -1987,7 +1992,14 @@ function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classLi
 // â”€â”€ RENDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function tagBadge(tag,idx){const c=TAG_PALETTE[idx%TAG_PALETTE.length];return `<span style="font-size:10px;font-weight:500;padding:2px 7px;border-radius:8px;background:${c.bg};color:${c.tc};">${tag}</span>`;}
 function prioritaBadge(p){const m={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};const l={urgente:'Urgente',alta:'Alta',normale:'Normale',bassa:'Bassa'};return `<span class="badge ${m[p]||'b-normale'}">${l[p]||p}</span>`;}
-function renderAll(){renderInboxControls();renderInbox();renderCalendarControls();renderCalendar();renderTasks();renderNotes();updateBadges();}
+function ensureSingleSuggestionsContextNote(){
+  const page=document.getElementById('page-suggerimenti');
+  if(!page)return;
+  const notes=Array.from(page.querySelectorAll('.context-note'));
+  if(notes.length<=1)return;
+  notes.forEach((note,idx)=>{if(idx>0)note.remove();});
+}
+function renderAll(){ensureSingleSuggestionsContextNote();renderInboxControls();renderInbox();renderCalendarControls();renderCalendar();renderTasks();renderNotes();updateBadges();}
 function openInboxMessage(id){inboxSelectedId=id;const item=INBOX.find(i=>i.id===id);if(!item)return;if(item.unread){item.unread=false;saveInboxToCache();}const modal=document.getElementById('inbox-message-modal');const fromEl=document.getElementById('inbox-modal-from');const subjEl=document.getElementById('inbox-modal-subj');const timeEl=document.getElementById('inbox-modal-time');const bodyEl=document.getElementById('inbox-modal-body');if(fromEl)fromEl.textContent=`Da: ${item.from}`;if(subjEl)subjEl.textContent=item.subj||'(Senza oggetto)';if(timeEl)timeEl.textContent=`Ricevuta alle ${item.time||'--:--'}`;if(bodyEl)bodyEl.textContent=item.prev||'(Nessun contenuto disponibile)';if(modal)modal.style.display='flex';updateBadges();renderInbox();}
 function closeInboxMessage(){const modal=document.getElementById('inbox-message-modal');if(modal)modal.style.display='none';inboxSelectedId=null;renderInbox();}
 function renderInboxControls(){const state=document.getElementById('inbox-connection-state');const connectBtn=document.getElementById('inbox-connect-btn');const syncBtn=document.getElementById('inbox-sync-btn');if(!state||!connectBtn||!syncBtn)return;if(!mailboxConnected){if(mailboxBackgroundSyncInProgress){state.textContent='Sincronizzazione mailbox in corso... potrebbe richiedere alcuni minuti.';state.style.color='#0D2E7A';connectBtn.style.display='';connectBtn.textContent='Sincronizzazione...';connectBtn.disabled=true;syncBtn.style.display='none';return;}state.textContent=mailboxConnectionError||'Mailbox non collegata';state.style.color=mailboxConnectionError?'#9B2525':'#6B6860';connectBtn.style.display='';connectBtn.textContent=mailboxSyncInProgress?'Connessione...':'Collega mailbox';connectBtn.disabled=mailboxSyncInProgress;syncBtn.style.display='none';return;}state.style.color='#6B6860';const last=mailboxLastSync?new Date(mailboxLastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'mai';state.textContent=`Mailbox collegata · ultima sync ${last}`;connectBtn.style.display='none';syncBtn.style.display='';syncBtn.disabled=mailboxSyncInProgress;syncBtn.innerHTML=mailboxSyncInProgress?'<span class="spinning">↻</span> Sincronizzo...':'Sincronizza';}

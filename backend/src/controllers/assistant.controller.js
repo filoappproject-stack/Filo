@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { z } from 'zod';
 import { analyzeDay, buildFallbackSuggestions, getAiAttemptCounter } from '../services/assistant.service.js';
+import { listCalendarEvents } from '../services/calendar.service.js';
 import { consumeAnalysisQuota, getAnalysisQuotaStatus } from '../services/quota.service.js';
 import { HttpError } from '../utils/httpError.js';
 
@@ -65,7 +66,8 @@ export async function postDayAnalysis(req, res) {
     }
 
     failureStage = 'analysis';
-    const suggerimenti = await analyzeDay(data);
+    const calendarContext = await buildCalendarContextForDayAnalysis(data.userId);
+    const suggerimenti = await analyzeDay({ ...data, calendarContext });
 
     return res.json({
       data: {
@@ -111,6 +113,41 @@ export async function postDayAnalysis(req, res) {
       },
       message: 'Analisi AI temporaneamente non disponibile: mostrati suggerimenti locali.'
     });
+  }
+}
+
+async function buildCalendarContextForDayAnalysis(userId) {
+  if (!userId) return '';
+
+  try {
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const to = new Date(from.getTime() + (24 * 60 * 60 * 1000));
+    const events = await listCalendarEvents(userId, {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      limit: 8
+    });
+
+    if (!Array.isArray(events) || !events.length) return '';
+
+    const short = events
+      .filter((event) => String(event?.status || '').toLowerCase() !== 'cancelled')
+      .slice(0, 5)
+      .map((event) => {
+        const title = String(event?.title || 'Evento').trim();
+        const startsAt = event?.starts_at ? new Date(event.starts_at) : null;
+        const hhmm = startsAt && !Number.isNaN(startsAt.getTime())
+          ? startsAt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+          : 'orario da definire';
+        return `${hhmm} · ${title}`;
+      })
+      .join('\n');
+
+    return short.slice(0, 1200);
+  } catch (error) {
+    console.warn('Impossibile costruire contesto calendario per analisi:', error?.message || error);
+    return '';
   }
 }
 
