@@ -400,6 +400,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
           <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#6F6A61;">Analisi rimanenti oggi: 5/5</div>
         </div>
         <div class="error-box" id="ai-error"></div>
+        <div id="suggestions-updated-at" style="display:none;margin:8px 0 10px;font-size:12px;color:#6F6A61;"></div>
         <div class="loader" id="ai-loader">
           <div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>
           <div style="font-size:13px;color:#57534A;font-style:italic;">Sto analizzando la tua giornata...</div>
@@ -1225,7 +1226,7 @@ async function loginSuccess(user) {
   restoreDayDraft();
   const cachedSuggestions=loadSuggestionsFromCache();
   if(cachedSuggestions?.suggestions?.length){
-    renderDaySuggestions(cachedSuggestions.suggestions);
+    renderDaySuggestions(cachedSuggestions.suggestions,{persist:false,updatedAt:cachedSuggestions.savedAt,source:'cache'});
   }
   renderAll();
   restorePostOauthPage();
@@ -2481,11 +2482,27 @@ function buildLocalDayFallback(input){
   out.push({titolo:'Definisci 3 obiettivi realistici per oggi',perche:'Un limite chiaro alle priorità aumenta la probabilità di chiudere le attività davvero importanti.',priorita:'normale',azioni:['Seleziona top 3','Sposta il resto']});
   return out.slice(0,5);
 }
-function renderDaySuggestions(suggestions){
+function setSuggestionsUpdatedAtLabel(updatedAt,source='live'){
+  const el=document.getElementById('suggestions-updated-at');
+  if(!el)return;
+  const dt=updatedAt?new Date(updatedAt):new Date();
+  if(Number.isNaN(dt.getTime())){
+    el.style.display='none';
+    el.textContent='';
+    return;
+  }
+  const hhmm=dt.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+  const suffix=source==='cache'?' (da cache)':'';
+  el.textContent=`Suggerimenti aggiornati alle ${hhmm}${suffix}`;
+  el.style.display='';
+}
+function renderDaySuggestions(suggestions,options={}){
   const container=document.getElementById('suggestions-container');
   if(!container)return;
   if(!Array.isArray(suggestions)||!suggestions.length){
     container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';
+    const updatedEl=document.getElementById('suggestions-updated-at');
+    if(updatedEl){updatedEl.style.display='none';updatedEl.textContent='';}
     return;
   }
   const nb=document.getElementById('nb-sugg');
@@ -2494,7 +2511,9 @@ function renderDaySuggestions(suggestions){
   const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};
   const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
   container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#6F6A61;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
-  saveSuggestionsToCache(suggestions);
+  const shouldPersist=options?.persist!==false;
+  if(shouldPersist)saveSuggestionsToCache(suggestions);
+  setSuggestionsUpdatedAtLabel(options?.updatedAt||(shouldPersist?new Date().toISOString():null),options?.source||'live');
 }
 function updateAnalyzeQuotaLabel(limit,remaining){
   const el=document.getElementById('analyze-quota');
