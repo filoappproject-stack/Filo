@@ -22,6 +22,7 @@ function normalizeInputForCache(input) {
     dayEnd: normalizeText(input?.dayEnd),
     availability: normalizeText(input?.availability),
     dayFocus: normalizeText(input?.dayFocus),
+    calendarContext: normalizeText(input?.calendarContext),
     inboxContext: normalizeText(input?.inboxContext),
     memoryContext: normalizeText(input?.memoryContext),
     sleep: normalizeText(input?.sleep),
@@ -144,6 +145,7 @@ Sonno: ${input.sleep ? `"${String(input.sleep).trim()}"` : 'non specificato'}
 Energia: ${Number.isFinite(input.energy) ? `${input.energy}/5` : 'non specificata'}
 Stress: ${Number.isFinite(input.stress) ? `${input.stress}/5` : 'non specificato'}
 Contesto memoria: ${input.memoryContext || 'nessuno'}
+Contesto calendario (eventi di oggi): ${input.calendarContext || 'nessuno'}
 Contesto inbox (ultime email): ${input.inboxContext || 'nessuno'}
 
 Rispondi SOLO con JSON valido:

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { z } from 'zod';
 import { analyzeDay, buildFallbackSuggestions, getAiAttemptCounter } from '../services/assistant.service.js';
+import { listCalendarEvents } from '../services/calendar.service.js';
 import { consumeAnalysisQuota, getAnalysisQuotaStatus } from '../services/quota.service.js';
 import { HttpError } from '../utils/httpError.js';
 
@@ -13,6 +14,9 @@ const AnalyzeDaySchema = z.object({
   dayFocus: z.string().trim().max(500).optional().default(''),
   inboxContext: z.string().trim().max(12000).optional().default(''),
   memoryContext: z.string().trim().max(4000).optional().default(''),
+  userTimeZone: z.string().trim().max(80).optional().default('UTC'),
+  calendarFrom: z.string().datetime().optional().nullable(),
+  calendarTo: z.string().datetime().optional().nullable(),
   sleep: z.string().trim().max(80).optional().nullable(),
   energy: z.coerce.number().min(1).max(5).optional().nullable(),
   stress: z.coerce.number().min(1).max(5).optional().nullable()
@@ -65,7 +69,12 @@ export async function postDayAnalysis(req, res) {
     }
 
     failureStage = 'analysis';
-    const suggerimenti = await analyzeDay(data);
+    const calendarContext = await buildCalendarContextForDayAnalysis(data.userId, {
+      userTimeZone: data.userTimeZone,
+      calendarFrom: data.calendarFrom,
+      calendarTo: data.calendarTo
+    });
+    const suggerimenti = await analyzeDay({ ...data, calendarContext });
 
     return res.json({
       data: {
@@ -112,6 +121,51 @@ export async function postDayAnalysis(req, res) {
       message: 'Analisi AI temporaneamente non disponibile: mostrati suggerimenti locali.'
     });
   }
+}
+
+async function buildCalendarContextForDayAnalysis(userId, options = {}) {
+  if (!userId) return '';
+
+  try {
+    const userTimeZone = options.userTimeZone || 'UTC';
+    const now = new Date();
+    const defaultFrom = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const defaultTo = new Date(new Date(defaultFrom).getTime() + (24 * 60 * 60 * 1000)).toISOString();
+    const fromIso = normalizeIsoOrDefault(options.calendarFrom, defaultFrom);
+    const toIso = normalizeIsoOrDefault(options.calendarTo, defaultTo);
+    const events = await listCalendarEvents(userId, {
+      from: fromIso,
+      to: toIso,
+      limit: 8
+    });
+
+    if (!Array.isArray(events) || !events.length) return '';
+
+    const short = events
+      .filter((event) => String(event?.status || '').toLowerCase() !== 'cancelled')
+      .slice(0, 5)
+      .map((event) => {
+        const title = String(event?.title || 'Evento').trim();
+        const startsAt = event?.starts_at ? new Date(event.starts_at) : null;
+        const hhmm = startsAt && !Number.isNaN(startsAt.getTime())
+          ? startsAt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: userTimeZone })
+          : 'orario da definire';
+        return `${hhmm} · ${title}`;
+      })
+      .join('\n');
+
+    return short.slice(0, 1200);
+  } catch (error) {
+    console.warn('Impossibile costruire contesto calendario per analisi:', error?.message || error);
+    return '';
+  }
+}
+
+function normalizeIsoOrDefault(value, fallbackIso) {
+  if (!value) return fallbackIso;
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return fallbackIso;
+  return dt.toISOString();
 }
 
 export async function postDayAnalysisQuotaStatus(req, res) {
