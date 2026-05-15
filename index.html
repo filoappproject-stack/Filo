@@ -1435,9 +1435,18 @@ function loadSuggestionsFromCache(){
   try{
     const raw=localStorage.getItem(key);
     const parsed=raw?JSON.parse(raw):null;
-    if(!parsed||!Array.isArray(parsed.suggestions))return null;
-    const savedAtMs=new Date(parsed.savedAt||0).getTime();
-    if(!Number.isFinite(savedAtMs)||savedAtMs<=0)return null;
+    if(!parsed)return null;
+
+    // Compatibilità: vecchi formati cache (array puro) o object senza savedAt.
+    if(Array.isArray(parsed)){
+      return {savedAt:null,suggestions:parsed};
+    }
+    if(!Array.isArray(parsed.suggestions))return null;
+    if(!parsed.savedAt){
+      return {savedAt:null,suggestions:parsed.suggestions};
+    }
+    const savedAtMs=new Date(parsed.savedAt).getTime();
+    if(!Number.isFinite(savedAtMs)||savedAtMs<=0)return {savedAt:null,suggestions:parsed.suggestions};
     if((Date.now()-savedAtMs)>SUGGESTIONS_CACHE_TTL_MS)return null;
     return parsed;
   }catch(e){return null;}
