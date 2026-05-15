@@ -2638,6 +2638,10 @@ async function analyzeDay(){
   const availability=document.getElementById('day-availability-input')?.value||'';
   const dayFocus=document.getElementById('day-focus-input')?.value.trim()||'';
   const inboxContext=buildAnalyzeInboxContext();
+  const userTimeZone=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
+  const localNow=new Date();
+  const calendarFrom=new Date(localNow.getFullYear(),localNow.getMonth(),localNow.getDate()).toISOString();
+  const calendarTo=new Date(new Date(calendarFrom).getTime()+24*60*60*1000).toISOString();
   if(!agenda&&!pending)return;
   const now=Date.now();
   if(analyzeCooldownUntilMs>now){
@@ -2686,7 +2690,7 @@ async function analyzeDay(){
         userId:currentUser?.id||null,
         agenda,pending,dayEnd,availability,dayFocus,
         memoryContext:getMemoryContext(),sleep:todaySleep,energy:todayEnergy,stress:todayStress,
-        inboxContext
+        inboxContext,userTimeZone,calendarFrom,calendarTo
       })
     });
     const payload=await res.json().catch(()=>null);
