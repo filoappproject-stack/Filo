@@ -116,6 +116,68 @@ API disponibile su `http://localhost:4000`.
 
 ---
 
+
+## Checklist "pronto per amici e parenti" (alpha privata)
+
+Prima di invitare una cerchia ristretta, completa questi controlli minimi:
+
+- **Affidabilità**: smoke test giornaliero su `/api/v1/health` e su `/api/v1/assistant/day-analysis` con monitoraggio errori 5xx e timeout.
+- **Sicurezza**: verifica RLS/permessi dati utente, rotazione chiavi API e assenza di segreti nel frontend.
+- **Qualità UX**: onboarding iniziale chiaro (1-2 minuti), stati di errore leggibili e fallback quando l'AI non risponde.
+- **Protezione dati**: privacy notice essenziale (quali dati salvi, per quanto tempo, come cancellarli).
+- **Operatività**: canale feedback unico (es. form) e processo triage bug con priorità P0/P1/P2.
+
+**Regola pratica**: se per 7 giorni consecutivi i flussi core (check-in, suggerimenti AI, creazione task, note, calendario) funzionano senza bug bloccanti, Filo è pronto per una beta privata con 5-15 persone.
+
+### Come eseguire i test della checklist (passo-passo)
+
+> Obiettivo: avere un rituale giornaliero semplice (15-20 minuti) e sempre uguale.
+
+1. **Avvia backend locale**
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+2. **Smoke test affidabilità API**
+```bash
+curl -sS http://localhost:4000/api/v1/health
+curl -sS -X POST http://localhost:4000/api/v1/assistant/day-analysis \
+  -H "Content-Type: application/json" \
+  --data '{"agenda":"call cliente 11:00","pending":"chiudere preventivo"}'
+```
+Criterio PASS: `health` risponde `status: ok` e `day-analysis` restituisce risposta non vuota in meno di ~10s.
+
+3. **Controllo sicurezza minimo**
+- Verifica che ogni utente veda solo i propri dati (test con due account diversi).
+- Conferma che non ci siano chiavi/API token nel frontend (ispeziona sorgente e variabili esposte).
+- Se ruoti una chiave, verifica che il deploy continui a funzionare dopo redeploy.
+
+4. **Controllo UX minimo**
+- Esegui onboarding da zero (utente nuovo): deve richiedere massimo 1-2 minuti.
+- Simula errore AI (es. chiave mancante in ambiente di test): l'app deve mostrare messaggio chiaro e fallback non bloccante.
+
+5. **Controllo privacy operativo**
+- Verifica che sia documentato: quali dati salvi, retention e come chiedere cancellazione.
+- Esegui una cancellazione test e conferma che i dati non siano più accessibili.
+
+6. **Raccolta evidenze giornaliera**
+- Compila un log (Notion/Sheet) con: data, esito test, bug trovati, severità (`P0`,`P1`,`P2`), fix e stato.
+
+Template rapido:
+```text
+Data: YYYY-MM-DD
+Health API: PASS/FAIL
+AI day-analysis: PASS/FAIL
+Bug P0: n
+Bug P1: n
+Bug P2: n
+Note: ...
+```
+
+**Go/No-Go**: invita amici/parenti solo quando hai 7 giorni consecutivi con `P0 = 0` e nessun bug bloccante nei flussi core.
+
 ## Licenza
 
 Progetto privato — tutti i diritti riservati.
