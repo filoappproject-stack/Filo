@@ -141,9 +141,11 @@ async function buildCalendarContextForDayAnalysis(userId, options = {}) {
 
     if (!Array.isArray(events) || !events.length) return '';
 
-    const short = events
+    const activeEvents = events
       .filter((event) => String(event?.status || '').toLowerCase() !== 'cancelled')
-      .slice(0, 5)
+      .slice(0, 5);
+
+    const short = activeEvents
       .map((event) => {
         const title = String(event?.title || 'Evento').trim();
         const startsAt = event?.starts_at ? new Date(event.starts_at) : null;
@@ -154,11 +156,33 @@ async function buildCalendarContextForDayAnalysis(userId, options = {}) {
       })
       .join('\n');
 
-    return short.slice(0, 1200);
+    const celebrationEvents = activeEvents
+      .map((event) => {
+        const title = String(event?.title || '').trim();
+        const type = detectCelebrationType(title);
+        return type ? `- ${title} (${type})` : null;
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+
+    const celebrationHint = celebrationEvents.length
+      ? `\nEventi celebrazione rilevati (valuta auguri o messaggio dedicato):\n${celebrationEvents.join('\n')}`
+      : '';
+
+    return `${short}${celebrationHint}`.slice(0, 1200);
   } catch (error) {
     console.warn('Impossibile costruire contesto calendario per analisi:', error?.message || error);
     return '';
   }
+}
+
+function detectCelebrationType(title) {
+  const normalized = String(title || '').toLowerCase();
+  if (!normalized) return null;
+  if (/\bcompleann/i.test(normalized) || /\bbirthday\b/i.test(normalized)) return 'compleanno';
+  if (/\bonomastic/i.test(normalized) || /\bname\s*day\b/i.test(normalized)) return 'onomastico';
+  if (/\banniversar/i.test(normalized)) return 'anniversario';
+  return null;
 }
 
 function normalizeIsoOrDefault(value, fallbackIso) {

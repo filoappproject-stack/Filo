@@ -151,7 +151,8 @@ Contesto inbox (ultime email): ${input.inboxContext || 'nessuno'}
 Rispondi SOLO con JSON valido:
 {"suggerimenti":[{"titolo":"azione","perche":"perché adesso in 1-2 frasi","priorita":"urgente|alta|normale|bassa","azioni":["Inizia","Rimanda"]}]}
 Fornisci 3-5 suggerimenti concreti.
-Se nel contesto inbox trovi richieste esplicite (es. registrazione, scadenze, conferme), includi almeno 1 suggerimento su quell'email (agire o rimandare).`;
+Se nel contesto inbox trovi richieste esplicite (es. registrazione, scadenze, conferme), includi almeno 1 suggerimento su quell'email (agire o rimandare).
+Se nel contesto calendario compaiono compleanni, onomastici o anniversari, includi almeno 1 suggerimento con proposta di auguri/messaggio dedicato (tono professionale ma caldo).`;
 
   const requestAnthropic = async (model) => fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
