@@ -2524,7 +2524,7 @@ function setSuggestionsUpdatedAtLabel(updatedAt,source='live'){
     return;
   }
   const hhmm=dt.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
-  const suffix=source==='cache'?' (da cache)':'';
+  const suffix=source==='cache'?' · Ripristinato da cache':'';
   el.textContent=`Suggerimenti aggiornati alle ${hhmm}${suffix}`;
   el.style.display='';
 }
