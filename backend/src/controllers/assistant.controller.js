@@ -17,6 +17,7 @@ const AnalyzeDaySchema = z.object({
   userTimeZone: z.string().trim().max(80).optional().default('UTC'),
   calendarFrom: z.string().datetime().optional().nullable(),
   calendarTo: z.string().datetime().optional().nullable(),
+  includeCelebrationSuggestions: z.coerce.boolean().optional().default(true),
   sleep: z.string().trim().max(80).optional().nullable(),
   energy: z.coerce.number().min(1).max(5).optional().nullable(),
   stress: z.coerce.number().min(1).max(5).optional().nullable()
@@ -72,7 +73,8 @@ export async function postDayAnalysis(req, res) {
     const calendarContext = await buildCalendarContextForDayAnalysis(data.userId, {
       userTimeZone: data.userTimeZone,
       calendarFrom: data.calendarFrom,
-      calendarTo: data.calendarTo
+      calendarTo: data.calendarTo,
+      includeCelebrationSuggestions: data.includeCelebrationSuggestions
     });
     const suggerimenti = await analyzeDay({ ...data, calendarContext });
 
@@ -141,9 +143,11 @@ async function buildCalendarContextForDayAnalysis(userId, options = {}) {
 
     if (!Array.isArray(events) || !events.length) return '';
 
-    const short = events
+    const activeEvents = events
       .filter((event) => String(event?.status || '').toLowerCase() !== 'cancelled')
-      .slice(0, 5)
+      .slice(0, 5);
+
+    const short = activeEvents
       .map((event) => {
         const title = String(event?.title || 'Evento').trim();
         const startsAt = event?.starts_at ? new Date(event.starts_at) : null;
@@ -154,11 +158,35 @@ async function buildCalendarContextForDayAnalysis(userId, options = {}) {
       })
       .join('\n');
 
-    return short.slice(0, 1200);
+    const celebrationEvents = options.includeCelebrationSuggestions === false
+      ? []
+      : activeEvents
+      .map((event) => {
+        const title = String(event?.title || '').trim();
+        const type = detectCelebrationType(title);
+        return type ? `- ${title} (${type})` : null;
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+
+    const celebrationHint = celebrationEvents.length
+      ? `\nEventi celebrazione rilevati (valuta auguri o messaggio dedicato):\n${celebrationEvents.join('\n')}`
+      : '';
+
+    return `${short}${celebrationHint}`.slice(0, 1200);
   } catch (error) {
     console.warn('Impossibile costruire contesto calendario per analisi:', error?.message || error);
     return '';
   }
+}
+
+function detectCelebrationType(title) {
+  const normalized = String(title || '').toLowerCase();
+  if (!normalized) return null;
+  if (/\bcompleann/i.test(normalized) || /\bbirthday\b/i.test(normalized)) return 'compleanno';
+  if (/\bonomastic/i.test(normalized) || /\bname\s*day\b/i.test(normalized)) return 'onomastico';
+  if (/\banniversar/i.test(normalized)) return 'anniversario';
+  return null;
 }
 
 function normalizeIsoOrDefault(value, fallbackIso) {

@@ -516,6 +516,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
           <div class="pref-row"><div><div style="font-size:13px;font-weight:500;">Check-in mattutino</div><div style="font-size:12px;color:#57534A;margin-top:2px;">Mostra il check-in energia all'accesso</div></div><div class="toggle" id="toggle-checkin" style="background:#1A4FBF;" onclick="togglePref('checkin')"><div class="toggle-knob" id="knob-checkin" style="left:19px;"></div></div></div>
           <div class="pref-row"><div><div style="font-size:13px;font-weight:500;">Memoria adattiva</div><div style="font-size:12px;color:#57534A;margin-top:2px;">Registra pattern e comportamenti</div></div><div class="toggle" id="toggle-memoria" style="background:#1A4FBF;" onclick="togglePref('memoria')"><div class="toggle-knob" id="knob-memoria" style="left:19px;"></div></div></div>
           <div class="pref-row"><div><div style="font-size:13px;font-weight:500;">Suggerimenti AI</div><div style="font-size:12px;color:#57534A;margin-top:2px;">Analisi automatica della giornata</div></div><div class="toggle" id="toggle-ai" style="background:#1A4FBF;" onclick="togglePref('ai')"><div class="toggle-knob" id="knob-ai" style="left:19px;"></div></div></div>
+          <div class="pref-row"><div><div style="font-size:13px;font-weight:500;">Suggerimenti celebrazioni</div><div style="font-size:12px;color:#57534A;margin-top:2px;">Includi auguri per compleanni, onomastici e anniversari</div></div><div class="toggle" id="toggle-celebrations" style="background:#1A4FBF;" onclick="togglePref('celebrations')"><div class="toggle-knob" id="knob-celebrations" style="left:19px;"></div></div></div>
         </div>
         <div class="card">
           <div style="font-size:14px;font-weight:500;margin-bottom:14px;">Statistiche</div>
@@ -1292,7 +1293,7 @@ let notes=[];
 let nextNoteId=100;
 let currentNoteId=null;
 let inboxSelectedId=null;
-let prefs={checkin:true,memoria:true,ai:true};
+let prefs={checkin:true,memoria:true,ai:true,celebrations:true};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
 const ANALYZE_MIN_INTERVAL_MS=60000;
@@ -2284,7 +2285,28 @@ function doSearch(q){const el=document.getElementById('search-results');if(!q.tr
 // â”€â”€ IMPOSTAZIONI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function toggleEditProfile(){const v=document.getElementById('profile-view');const f=document.getElementById('profile-form');const b=document.getElementById('edit-profile-btn');const editing=f.style.display!=='none';v.style.display=editing?'':'none';f.style.display=editing?'none':'';b.textContent=editing?'Modifica':'Annulla';}
 function saveProfile(){const name=document.getElementById('pf-name').value.trim();document.getElementById('pv-name').textContent=name;document.getElementById('profile-name-disp').textContent=name;const ini=name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();document.getElementById('profile-av-big').textContent=ini;document.getElementById('sidebar-initials').textContent=ini;document.getElementById('sidebar-name').textContent=name;toggleEditProfile();}
-function togglePref(key){prefs[key]=!prefs[key];const on=prefs[key];document.getElementById('toggle-'+key).style.background=on?'#1A4FBF':'#D0CCC6';document.getElementById('knob-'+key).style.left=on?'19px':'3px';}
+function togglePref(key){prefs[key]=!prefs[key];const on=prefs[key];document.getElementById('toggle-'+key).style.background=on?'#1A4FBF':'#D0CCC6';document.getElementById('knob-'+key).style.left=on?'19px':'3px';savePrefs();}
+
+function savePrefs(){try{localStorage.setItem('filo_prefs',JSON.stringify(prefs));}catch(e){}}
+function loadPrefs(){
+  try{
+    const raw=localStorage.getItem('filo_prefs');
+    if(!raw)return;
+    const parsed=JSON.parse(raw);
+    if(parsed&&typeof parsed==='object'){
+      prefs={...prefs,...parsed};
+    }
+  }catch(e){}
+}
+function renderPrefs(){
+  Object.entries(prefs).forEach(([key,on])=>{
+    const t=document.getElementById('toggle-'+key);
+    const k=document.getElementById('knob-'+key);
+    if(!t||!k)return;
+    t.style.background=on?'#1A4FBF':'#D0CCC6';
+    k.style.left=on?'19px':'3px';
+  });
+}
 
 // â”€â”€ AI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function appendGuidedInput(targetId,label){
@@ -2759,7 +2781,8 @@ async function analyzeDay(){
         userId:currentUser?.id||null,
         agenda,pending,dayEnd,availability,dayFocus,
         memoryContext:getMemoryContext(),sleep:todaySleep,energy:todayEnergy,stress:todayStress,
-        inboxContext,userTimeZone,calendarFrom,calendarTo
+        inboxContext,userTimeZone,calendarFrom,calendarTo,
+        includeCelebrationSuggestions:prefs.celebrations!==false
       })
     });
     const payload=await res.json().catch(()=>null);
@@ -2842,6 +2865,8 @@ function buildAnalyzeInboxContext(){
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
   if(window.__filoAbortInitAfterOAuthPreserve)return;
+  loadPrefs();
+  renderPrefs();
   const bm=document.getElementById('build-marker');
   if(bm)bm.textContent=`Build: ${APP_BUILD_ID} · ${APP_BUILD_DATE}`;
   initDayDraftAutosave();
