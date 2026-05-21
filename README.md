@@ -116,6 +116,19 @@ API disponibile su `http://localhost:4000`.
 
 ---
 
+
+## Checklist "pronto per amici e parenti" (alpha privata)
+
+Prima di invitare una cerchia ristretta, completa questi controlli minimi:
+
+- **Affidabilità**: smoke test giornaliero su `/api/v1/health` e su `/api/v1/assistant/day-analysis` con monitoraggio errori 5xx e timeout.
+- **Sicurezza**: verifica RLS/permessi dati utente, rotazione chiavi API e assenza di segreti nel frontend.
+- **Qualità UX**: onboarding iniziale chiaro (1-2 minuti), stati di errore leggibili e fallback quando l'AI non risponde.
+- **Protezione dati**: privacy notice essenziale (quali dati salvi, per quanto tempo, come cancellarli).
+- **Operatività**: canale feedback unico (es. form) e processo triage bug con priorità P0/P1/P2.
+
+**Regola pratica**: se per 7 giorni consecutivi i flussi core (check-in, suggerimenti AI, creazione task, note, calendario) funzionano senza bug bloccanti, Filo è pronto per una beta privata con 5-15 persone.
+
 ## Licenza
 
 Progetto privato — tutti i diritti riservati.
