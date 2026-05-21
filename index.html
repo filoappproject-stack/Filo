@@ -1058,6 +1058,7 @@ async function tryHandleCalendarOauthCallback() {
     const payload = await res.json();
     const syncedAt = payload?.data?.account?.last_synced_at || new Date().toISOString();
     setCalendarConnectionState(true, syncedAt);
+    saveCalendarToCache(userId);
     calendarOauthJustConnected=true;
     setCalendarDiagnostic('OK','account collegato');
     try{
@@ -1418,10 +1419,10 @@ function getInboxCacheKey(){return currentUser?.id?`${INBOX_CACHE_PREFIX}${curre
 function saveInboxToCache(){const key=getInboxCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify({connected:mailboxConnected,lastSync:mailboxLastSync,messages:INBOX}));}catch(e){}}
 function loadInboxFromCache(){const key=getInboxCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;if(!parsed||!Array.isArray(parsed.messages))return null;return parsed;}catch(e){return null;}}
 
-function getCalendarCacheKey(){return currentUser?.id?`${CALENDAR_CACHE_PREFIX}${currentUser.id}`:null;}
+function getCalendarCacheKey(userIdOverride=null){const uid=userIdOverride||currentUser?.id;return uid?`${CALENDAR_CACHE_PREFIX}${uid}`:null;}
 function getSuggestionsCacheKey(){return currentUser?.id?`${SUGGESTIONS_CACHE_PREFIX}${currentUser.id}`:null;}
-function saveCalendarToCache(){
-  const key=getCalendarCacheKey();
+function saveCalendarToCache(userIdOverride=null){
+  const key=getCalendarCacheKey(userIdOverride);
   if(!key)return;
   try{localStorage.setItem(key,JSON.stringify({connected:calendarConnected,lastSync:calendarLastSync,events:calendarEvents}));}catch(e){}
 }
@@ -1466,8 +1467,8 @@ function loadSuggestionsFromCache(){
     return parsed;
   }catch(e){return null;}
 }
-function loadCalendarFromCache(){
-  const key=getCalendarCacheKey();
+function loadCalendarFromCache(userIdOverride=null){
+  const key=getCalendarCacheKey(userIdOverride);
   if(!key)return null;
   try{
     const raw=localStorage.getItem(key);
@@ -1574,10 +1575,10 @@ function markMailboxReconnectRequired(){
   // Manteniamo i messaggi già presenti in cache/UI per non azzerare badge e storico locale.
   saveInboxToCache();
 }
-function markCalendarReconnectRequired(){
+function markCalendarReconnectRequired(userIdOverride=null){
   setCalendarConnectionState(false,null);
   calendarConnectionError='Sessione Google Calendar scaduta. Ricollega il calendario.';
-  saveCalendarToCache();
+  saveCalendarToCache(userIdOverride);
 }
 async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));saveInboxToCache();}
 async function loadInboxStatus(){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/google/status?userId=${encodeURIComponent(currentUser.id)}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/google/status fallita (${res.status}): ${txt}`);}const payload=await res.json();const data=payload?.data||{};setInboxConnectionState(!!data.connected,data.last_synced_at||null);}
