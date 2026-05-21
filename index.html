@@ -1349,7 +1349,7 @@ const NOTES_BACKFILL_DONE_PREFIX='filo_notes_backfill_done_';
 const INBOX_CACHE_PREFIX='filo_inbox_cache_';
 const CALENDAR_CACHE_PREFIX='filo_calendar_cache_';
 const SUGGESTIONS_CACHE_PREFIX='filo_suggestions_cache_';
-const SUGGESTIONS_CACHE_TTL_MS=12*60*60*1000;
+const SUGGESTIONS_CACHE_TTL_MS=72*60*60*1000;
 const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
 const DAY_ANALYSIS_DRAFT_PREFIX='filo_day_analysis_draft_';
 
@@ -1422,11 +1422,22 @@ function saveCalendarToCache(){
   if(!key)return;
   try{localStorage.setItem(key,JSON.stringify({connected:calendarConnected,lastSync:calendarLastSync,events:calendarEvents}));}catch(e){}
 }
+
+function getCurrentLocalDayKey(){
+  const now=new Date();
+  const y=now.getFullYear();
+  const m=String(now.getMonth()+1).padStart(2,'0');
+  const d=String(now.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
+
 function saveSuggestionsToCache(suggestions){
   const key=getSuggestionsCacheKey();
   if(!key)return;
   const safeSuggestions=Array.isArray(suggestions)?suggestions:[];
-  try{localStorage.setItem(key,JSON.stringify({savedAt:new Date().toISOString(),suggestions:safeSuggestions}));}catch(e){}
+  try{
+    localStorage.setItem(key,JSON.stringify({savedAt:new Date().toISOString(),dayKey:getCurrentLocalDayKey(),suggestions:safeSuggestions}));
+  }catch(e){}
 }
 function loadSuggestionsFromCache(){
   const key=getSuggestionsCacheKey();
@@ -1446,6 +1457,8 @@ function loadSuggestionsFromCache(){
     }
     const savedAtMs=new Date(parsed.savedAt).getTime();
     if(!Number.isFinite(savedAtMs)||savedAtMs<=0)return {savedAt:null,suggestions:parsed.suggestions};
+    const currentDayKey=getCurrentLocalDayKey();
+    if(parsed.dayKey&&parsed.dayKey===currentDayKey)return parsed;
     if((Date.now()-savedAtMs)>SUGGESTIONS_CACHE_TTL_MS)return null;
     return parsed;
   }catch(e){return null;}
@@ -2511,7 +2524,7 @@ function setSuggestionsUpdatedAtLabel(updatedAt,source='live'){
     return;
   }
   const hhmm=dt.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
-  const suffix=source==='cache'?' (da cache)':'';
+  const suffix=source==='cache'?' · Ripristinato da cache':'';
   el.textContent=`Suggerimenti aggiornati alle ${hhmm}${suffix}`;
   el.style.display='';
 }
