@@ -283,64 +283,81 @@ async function syncCalendarEvents(account, accessToken) {
   const now = new Date();
   const timeMin = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const timeMax = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
-  const payload = await calendarRequest('/calendars/primary/events', accessToken, {
-    singleEvents: 'true',
-    orderBy: 'startTime',
-    maxResults: '250',
-    timeMin,
-    timeMax
+  const calendarListPayload = await calendarRequest('/users/me/calendarList', accessToken, {
+    maxResults: '250'
   });
+  const calendarIds = Array.from(
+    new Set(
+      (calendarListPayload.items ?? [])
+        .filter((calendar) => calendar?.id && calendar?.selected !== false)
+        .map((calendar) => String(calendar.id))
+    )
+  );
+  if (!calendarIds.length) calendarIds.push('primary');
 
-  const ids = [];
-  for (const item of payload.items ?? []) {
-    if (!item?.id) continue;
-    ids.push(String(item.id));
-    const startsAt = parseCalendarDateTime(item.start?.dateTime) ?? parseCalendarDateTime(item.start?.date);
-    const endsAt = parseCalendarDateTime(item.end?.dateTime) ?? parseCalendarDateTime(item.end?.date);
-    await query(
-      `
-        INSERT INTO calendar_events (
-          account_id, user_id, provider_event_id, calendar_id, title, description, starts_at, ends_at, all_day, status, html_link, updated_remote_at
-        )
-        VALUES ($1, $2, $3, 'primary', $4, $5, $6::timestamptz, $7::timestamptz, $8, $9, $10, $11::timestamptz)
-        ON CONFLICT (account_id, provider_event_id)
-        DO UPDATE SET
-          title = EXCLUDED.title,
-          description = EXCLUDED.description,
-          starts_at = EXCLUDED.starts_at,
-          ends_at = EXCLUDED.ends_at,
-          all_day = EXCLUDED.all_day,
-          status = EXCLUDED.status,
-          html_link = EXCLUDED.html_link,
-          updated_remote_at = EXCLUDED.updated_remote_at,
-          updated_at = NOW()
-      `,
-      [
-        account.id,
-        account.user_id,
-        item.id,
-        item.summary ?? '(Senza titolo)',
-        item.description ?? '',
-        startsAt,
-        endsAt,
-        Boolean(item.start?.date && !item.start?.dateTime),
-        item.status ?? 'confirmed',
-        item.htmlLink ?? null,
-        parseCalendarDateTime(item.updated)
-      ]
-    );
-  }
-
-  if (ids.length === 0) {
-    await query('DELETE FROM calendar_events WHERE account_id = $1', [account.id]);
-  } else {
-    await query(
-      `
-        DELETE FROM calendar_events
-        WHERE account_id = $1 AND provider_event_id != ALL($2::text[])
-      `,
-      [account.id, ids]
-    );
+  let importedCount = 0;
+  for (const calendarId of calendarIds) {
+    const payload = await calendarRequest(`/calendars/${encodeURIComponent(calendarId)}/events`, accessToken, {
+      singleEvents: 'true',
+      orderBy: 'startTime',
+      maxResults: '250',
+      timeMin,
+      timeMax
+    });
+    const ids = [];
+    for (const item of payload.items ?? []) {
+      if (!item?.id) continue;
+      ids.push(String(item.id));
+      const startsAt = parseCalendarDateTime(item.start?.dateTime) ?? parseCalendarDateTime(item.start?.date);
+      const endsAt = parseCalendarDateTime(item.end?.dateTime) ?? parseCalendarDateTime(item.end?.date);
+      await query(
+        `
+          INSERT INTO calendar_events (
+            account_id, user_id, provider_event_id, calendar_id, title, description, starts_at, ends_at, all_day, status, html_link, updated_remote_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8::timestamptz, $9, $10, $11, $12::timestamptz)
+          ON CONFLICT (account_id, provider_event_id)
+          DO UPDATE SET
+            title = EXCLUDED.title,
+            description = EXCLUDED.description,
+            starts_at = EXCLUDED.starts_at,
+            ends_at = EXCLUDED.ends_at,
+            all_day = EXCLUDED.all_day,
+            status = EXCLUDED.status,
+            html_link = EXCLUDED.html_link,
+            updated_remote_at = EXCLUDED.updated_remote_at,
+            updated_at = NOW()
+        `,
+        [
+          account.id,
+          account.user_id,
+          item.id,
+          calendarId,
+          item.summary ?? '(Senza titolo)',
+          item.description ?? '',
+          startsAt,
+          endsAt,
+          Boolean(item.start?.date && !item.start?.dateTime),
+          item.status ?? 'confirmed',
+          item.htmlLink ?? null,
+          parseCalendarDateTime(item.updated)
+        ]
+      );
+    }
+    importedCount += ids.length;
+    if (ids.length === 0) {
+      await query('DELETE FROM calendar_events WHERE account_id = $1 AND calendar_id = $2', [account.id, calendarId]);
+    } else {
+      await query(
+        `
+          DELETE FROM calendar_events
+          WHERE account_id = $1
+            AND calendar_id = $2
+            AND provider_event_id != ALL($3::text[])
+        `,
+        [account.id, calendarId, ids]
+      );
+    }
   }
 
   await query(
@@ -352,7 +369,7 @@ async function syncCalendarEvents(account, accessToken) {
     [account.id]
   );
 
-  return ids.length;
+  return importedCount;
 }
 
 export async function exchangeGoogleCalendarCodeAndSync({ userId, code, redirectUri }) {
