@@ -2838,6 +2838,17 @@ async function analyzeDay(){
         errBox.classList.add('active');
         updateAnalyzeQuotaLabel(Number(payload?.limit),Number(payload?.remaining));
         setAnalyzeButtonAvailability(Number(payload?.remaining));
+        const cachedSuggestions=loadSuggestionsFromCache();
+        if(cachedSuggestions?.suggestions?.length){
+          renderDaySuggestions(cachedSuggestions.suggestions,{
+            persist:false,
+            updatedAt:cachedSuggestions.savedAt,
+            source:'cache'
+          });
+        }else{
+          const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
+          renderDaySuggestions(fallbackSuggestions,{persist:false});
+        }
         if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
         loader.classList.remove('active');
         if(!analyzeCooldownTimeoutId)setAnalyzeButtonAvailability(Number(payload?.remaining));
