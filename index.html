@@ -2621,14 +2621,16 @@ function shouldUseLocalAnalyzeFallbackFromErrorMessage(message){
     msg.includes('HTTP 504')
   );
 }
-function applyLocalAnalyzeFallbackState(input,requestId,message){
+function applyLocalAnalyzeFallbackState(input,requestId,message,options={}){
   const errBox=document.getElementById('ai-error');
   if(!errBox)return;
   errBox.textContent=message||'Analisi AI temporaneamente non disponibile. Ti mostro suggerimenti locali.';
   errBox.classList.add('active');
   const fallbackSuggestions=buildLocalDayFallback(input);
-  const estimated=consumeAnalyzeQuotaEstimate();
-  updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
+  if(options.consumeQuota===true){
+    const estimated=consumeAnalyzeQuotaEstimate();
+    updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
+  }
   setAnalyzeFallbackStatus(true,errBox.textContent);
   setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
   renderDaySuggestions(fallbackSuggestions);
