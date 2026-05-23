@@ -2659,12 +2659,12 @@ function shouldUseLocalAnalyzeFallbackFromErrorMessage(message){
     msg.includes('HTTP 504')
   );
 }
-function applyLocalAnalyzeFallbackState(input,requestId,message){
+function applyLocalAnalyzeFallbackState(input,requestId,message,options={}){
   const errBox=document.getElementById('ai-error');
   if(!errBox)return;
   errBox.textContent=message||'Analisi AI temporaneamente non disponibile. Ti mostro suggerimenti locali.';
   errBox.classList.add('active');
-  const fallbackSuggestions=buildLocalDayFallback(input);
+  const fallbackSuggestions=ensureCelebrationSuggestion(buildLocalDayFallback(input));
   const estimated=consumeAnalyzeQuotaEstimate();
   updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
   setAnalyzeFallbackStatus(true,errBox.textContent);
@@ -2876,6 +2876,17 @@ async function analyzeDay(){
         errBox.classList.add('active');
         updateAnalyzeQuotaLabel(Number(payload?.limit),Number(payload?.remaining));
         setAnalyzeButtonAvailability(Number(payload?.remaining));
+        const cachedSuggestions=loadSuggestionsFromCache();
+        if(cachedSuggestions?.suggestions?.length){
+          renderDaySuggestions(cachedSuggestions.suggestions,{
+            persist:false,
+            updatedAt:cachedSuggestions.savedAt,
+            source:'cache'
+          });
+        }else{
+          const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
+          renderDaySuggestions(fallbackSuggestions,{persist:false});
+        }
         if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
         loader.classList.remove('active');
         if(!analyzeCooldownTimeoutId)setAnalyzeButtonAvailability(Number(payload?.remaining));
@@ -2890,7 +2901,7 @@ async function analyzeDay(){
     if(quota)applyAnalyzeQuotaState(quota);
     loader.classList.remove('active');
     if(!quota)setAnalyzeButtonAvailability(Number.NaN);
-    renderDaySuggestions(suggestions);
+    renderDaySuggestions(ensureCelebrationSuggestion(suggestions));
     analyzeRequestInFlight=false;
   }catch(e){
     loader.classList.remove('active');
