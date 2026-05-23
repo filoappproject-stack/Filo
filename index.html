@@ -2556,6 +2556,19 @@ function buildLocalDayFallback(input){
   out.push({titolo:'Definisci 3 obiettivi realistici per oggi',perche:'Un limite chiaro alle priorità aumenta la probabilità di chiudere le attività davvero importanti.',priorita:'normale',azioni:['Seleziona top 3','Sposta il resto']});
   return out.slice(0,5);
 }
+
+function ensureCelebrationSuggestion(suggestions){
+  const list=Array.isArray(suggestions)?suggestions.slice():[];
+  if(prefs?.celebrations===false)return list;
+  const hasCelebrationAlready=list.some((s)=>/compleann|birthday|onomastic|anniversar|augur/i.test(String(s?.titolo||'')+' '+String(s?.perche||'')));
+  if(hasCelebrationAlready)return list;
+  const celebrationEvent=(Array.isArray(calendarEvents)?calendarEvents:[])
+    .find((ev)=>/compleann|birthday|onomastic|anniversar/i.test(String(ev?.title||'')));
+  if(!celebrationEvent)return list;
+  const suggestion={titolo:`Celebrazione in agenda: ${celebrationEvent.title||'evento speciale'}`,perche:'Hai una ricorrenza oggi: inviare un messaggio di auguri adesso evita dimenticanze e rafforza la relazione.',priorita:'alta',azioni:['Invia auguri ora','Aggiungi reminder']};
+  return [suggestion,...list].slice(0,5);
+}
+
 function setSuggestionsUpdatedAtLabel(updatedAt,source='live'){
   const el=document.getElementById('suggestions-updated-at');
   if(!el)return;
@@ -2650,11 +2663,9 @@ function applyLocalAnalyzeFallbackState(input,requestId,message,options={}){
   if(!errBox)return;
   errBox.textContent=message||'Analisi AI temporaneamente non disponibile. Ti mostro suggerimenti locali.';
   errBox.classList.add('active');
-  const fallbackSuggestions=buildLocalDayFallback(input);
-  if(options.consumeQuota===true){
-    const estimated=consumeAnalyzeQuotaEstimate();
-    updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
-  }
+  const fallbackSuggestions=ensureCelebrationSuggestion(buildLocalDayFallback(input));
+  const estimated=consumeAnalyzeQuotaEstimate();
+  updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
   setAnalyzeFallbackStatus(true,errBox.textContent);
   setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
   renderDaySuggestions(fallbackSuggestions);
@@ -2889,7 +2900,7 @@ async function analyzeDay(){
     if(quota)applyAnalyzeQuotaState(quota);
     loader.classList.remove('active');
     if(!quota)setAnalyzeButtonAvailability(Number.NaN);
-    renderDaySuggestions(suggestions);
+    renderDaySuggestions(ensureCelebrationSuggestion(suggestions));
     analyzeRequestInFlight=false;
   }catch(e){
     loader.classList.remove('active');
