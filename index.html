@@ -1223,7 +1223,7 @@ async function loginSuccess(user) {
   restoreDayDraft();
   const cachedSuggestions=loadSuggestionsFromCache();
   if(cachedSuggestions?.suggestions?.length){
-    renderDaySuggestions(cachedSuggestions.suggestions,{persist:false,updatedAt:cachedSuggestions.savedAt,source:'cache'});
+    renderDaySuggestions(ensureCelebrationSuggestion(cachedSuggestions.suggestions),{persist:false,updatedAt:cachedSuggestions.savedAt,source:'cache'});
   }
   renderAll();
   restorePostOauthPage();
@@ -2563,7 +2563,7 @@ function ensureCelebrationSuggestion(suggestions){
   const hasCelebrationAlready=list.some((s)=>/compleann|birthday|onomastic|anniversar|augur/i.test(String(s?.titolo||'')+' '+String(s?.perche||'')));
   if(hasCelebrationAlready)return list;
   const celebrationEvent=(Array.isArray(calendarEvents)?calendarEvents:[])
-    .find((ev)=>/compleann|birthday|onomastic|anniversar/i.test(String(ev?.title||'')));
+    .find((ev)=>/compleann|birthday|onomastic|anniversar/i.test(String(ev?.title||'')));
   if(!celebrationEvent)return list;
   const suggestion={titolo:`Celebrazione in agenda: ${celebrationEvent.title||'evento speciale'}`,perche:'Hai una ricorrenza oggi: inviare un messaggio di auguri adesso evita dimenticanze e rafforza la relazione.',priorita:'alta',azioni:['Invia auguri ora','Aggiungi reminder']};
   return [suggestion,...list].slice(0,5);
@@ -2584,20 +2584,21 @@ function setSuggestionsUpdatedAtLabel(updatedAt,source='live'){
   el.style.display='';
 }
 function renderDaySuggestions(suggestions,options={}){
+  const enrichedSuggestions=ensureCelebrationSuggestion(suggestions);
   const container=document.getElementById('suggestions-container');
   if(!container)return;
-  if(!Array.isArray(suggestions)||!suggestions.length){
+  if(!Array.isArray(enrichedSuggestions)||!enrichedSuggestions.length){
     container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';
     const updatedEl=document.getElementById('suggestions-updated-at');
     if(updatedEl){updatedEl.style.display='none';updatedEl.textContent='';}
     return;
   }
   const nb=document.getElementById('nb-sugg');
-  nb.textContent=suggestions.length;
+  nb.textContent=enrichedSuggestions.length;
   nb.style.display='';
   const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};
   const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
-  container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#6F6A61;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
+  container.innerHTML=enrichedSuggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#6F6A61;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
   const shouldPersist=options?.persist!==false;
   if(shouldPersist)saveSuggestionsToCache(suggestions);
   setSuggestionsUpdatedAtLabel(options?.updatedAt||(shouldPersist?new Date().toISOString():null),options?.source||'live');
