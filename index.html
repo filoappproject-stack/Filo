@@ -1058,6 +1058,7 @@ async function tryHandleCalendarOauthCallback() {
     const payload = await res.json();
     const syncedAt = payload?.data?.account?.last_synced_at || new Date().toISOString();
     setCalendarConnectionState(true, syncedAt);
+    saveCalendarToCache(userId);
     calendarOauthJustConnected=true;
     setCalendarDiagnostic('OK','account collegato');
     try{
@@ -1222,7 +1223,7 @@ async function loginSuccess(user) {
   restoreDayDraft();
   const cachedSuggestions=loadSuggestionsFromCache();
   if(cachedSuggestions?.suggestions?.length){
-    renderDaySuggestions(cachedSuggestions.suggestions,{persist:false,updatedAt:cachedSuggestions.savedAt,source:'cache'});
+    renderDaySuggestions(ensureCelebrationSuggestion(cachedSuggestions.suggestions),{persist:false,updatedAt:cachedSuggestions.savedAt,source:'cache'});
   }
   renderAll();
   restorePostOauthPage();
@@ -1253,6 +1254,9 @@ async function loginSuccess(user) {
       }
     }catch(err){
       console.warn('Impossibile aggiornare stato calendario da backend:',err);
+      if(isCalendarAuthExpiredError(err)){
+        markCalendarReconnectRequired();
+      }
     }
   }
   calendarOauthJustConnected=false;
@@ -1415,10 +1419,10 @@ function getInboxCacheKey(){return currentUser?.id?`${INBOX_CACHE_PREFIX}${curre
 function saveInboxToCache(){const key=getInboxCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify({connected:mailboxConnected,lastSync:mailboxLastSync,messages:INBOX}));}catch(e){}}
 function loadInboxFromCache(){const key=getInboxCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;if(!parsed||!Array.isArray(parsed.messages))return null;return parsed;}catch(e){return null;}}
 
-function getCalendarCacheKey(){return currentUser?.id?`${CALENDAR_CACHE_PREFIX}${currentUser.id}`:null;}
+function getCalendarCacheKey(userIdOverride=null){const uid=userIdOverride||currentUser?.id;return uid?`${CALENDAR_CACHE_PREFIX}${uid}`:null;}
 function getSuggestionsCacheKey(){return currentUser?.id?`${SUGGESTIONS_CACHE_PREFIX}${currentUser.id}`:null;}
-function saveCalendarToCache(){
-  const key=getCalendarCacheKey();
+function saveCalendarToCache(userIdOverride=null){
+  const key=getCalendarCacheKey(userIdOverride);
   if(!key)return;
   try{localStorage.setItem(key,JSON.stringify({connected:calendarConnected,lastSync:calendarLastSync,events:calendarEvents}));}catch(e){}
 }
@@ -1463,8 +1467,8 @@ function loadSuggestionsFromCache(){
     return parsed;
   }catch(e){return null;}
 }
-function loadCalendarFromCache(){
-  const key=getCalendarCacheKey();
+function loadCalendarFromCache(userIdOverride=null){
+  const key=getCalendarCacheKey(userIdOverride);
   if(!key)return null;
   try{
     const raw=localStorage.getItem(key);
@@ -1561,11 +1565,20 @@ function isMailboxAuthExpiredError(err){
   const message=(err?.message?String(err.message):'').toLowerCase();
   return message.includes('(401)')&&(message.includes('invalid_grant')||message.includes('token has been expired or revoked')||message.includes('refresh token google fallito'));
 }
+function isCalendarAuthExpiredError(err){
+  const message=(err?.message?String(err.message):'').toLowerCase();
+  return message.includes('(401)')&&(message.includes('invalid_grant')||message.includes('token has been expired or revoked')||message.includes('refresh token google calendario fallito'));
+}
 function markMailboxReconnectRequired(){
   setInboxConnectionState(false,null);
   mailboxConnectionError='Sessione Google Mail scaduta. Ricollega la mailbox.';
   // Manteniamo i messaggi già presenti in cache/UI per non azzerare badge e storico locale.
   saveInboxToCache();
+}
+function markCalendarReconnectRequired(userIdOverride=null){
+  setCalendarConnectionState(false,null);
+  calendarConnectionError='Sessione Google Calendar scaduta. Ricollega il calendario.';
+  saveCalendarToCache(userIdOverride);
 }
 async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));saveInboxToCache();}
 async function loadInboxStatus(){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/google/status?userId=${encodeURIComponent(currentUser.id)}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/google/status fallita (${res.status}): ${txt}`);}const payload=await res.json();const data=payload?.data||{};setInboxConnectionState(!!data.connected,data.last_synced_at||null);}
@@ -2190,8 +2203,13 @@ async function syncCalendar(){
   }catch(err){
     const reason=err?.message?String(err.message):'errore sconosciuto';
     console.warn('Errore sync calendario:',reason,err);
-    calendarConnectionError=`Sincronizzazione calendario non riuscita: ${reason}`;
-    setCalendarDiagnostic('KO',reason);
+    if(isCalendarAuthExpiredError(err)){
+      markCalendarReconnectRequired();
+      setCalendarDiagnostic('KO','sessione Google Calendar scaduta');
+    }else{
+      calendarConnectionError=`Sincronizzazione calendario non riuscita: ${reason}`;
+      setCalendarDiagnostic('KO',reason);
+    }
   }finally{
     calendarSyncInProgress=false;
     renderAll();
@@ -2501,6 +2519,16 @@ function buildLocalDayFallback(input){
   const agendaItems=splitLocalItems(input?.agenda);
   const pendingItems=splitLocalItems(input?.pending);
   const focus=(input?.dayFocus||'').trim();
+  const nowMs=Date.now();
+  const upcomingCalendarEvents=(Array.isArray(calendarEvents)?calendarEvents:[])
+    .map((ev)=>{
+      const startsAtMs=ev?.startsAt?new Date(ev.startsAt).getTime():NaN;
+      return {ev,startsAtMs};
+    })
+    .filter(({ev,startsAtMs})=>ev&&Number.isFinite(startsAtMs)&&startsAtMs>=nowMs-15*60*1000)
+    .sort((a,b)=>a.startsAtMs-b.startsAtMs)
+    .slice(0,2)
+    .map(({ev})=>ev);
   const out=[];
   if(pendingItems.length){
     out.push({titolo:`Sblocca subito: ${pendingItems[0]}`,perche:'Chiudere il principale punto aperto riduce il carico mentale e libera attenzione per il resto della giornata.',priorita:'urgente',azioni:['Inizia ora (15 min)','Rimanda al pomeriggio']});
@@ -2508,12 +2536,39 @@ function buildLocalDayFallback(input){
   if(agendaItems.length){
     out.push({titolo:`Prepara il prossimo impegno: ${agendaItems[0]}`,perche:'Una preparazione rapida evita frizioni e rende più efficace il prossimo blocco in agenda.',priorita:'alta',azioni:['Prepara checklist','Aggiungi reminder']});
   }
+  if(upcomingCalendarEvents.length){
+    const nextEvent=upcomingCalendarEvents[0];
+    if(prefs?.celebrations!==false){
+      const celebrationEvent=upcomingCalendarEvents.find((ev)=>/\bcompleann|\bbirthday|\bonomastic|\banniversar/i.test(String(ev?.title||'')));
+      if(celebrationEvent){
+        out.push({titolo:`Celebrazione in agenda: ${celebrationEvent.title||'evento speciale'}`,perche:'Un messaggio di auguri breve ma personale rafforza la relazione e previene dimenticanze importanti nella giornata.',priorita:'alta',azioni:['Invia auguri ora','Aggiungi reminder']});
+      }
+    }
+    out.push({titolo:`Calendario: preparati a ${nextEvent.title||'prossimo evento'}`,perche:'Hai un evento in agenda oggi: anticipare i materiali o il contesto riduce ritardi e stress prima dell\'inizio.',priorita:'alta',azioni:['Prepara checklist','Aggiungi reminder']});
+    if(upcomingCalendarEvents.length>1){
+      const laterEvent=upcomingCalendarEvents[1];
+      out.push({titolo:`Pianifica transizione: ${laterEvent.title||'evento successivo'}`,perche:'Proteggi 10-15 minuti di buffer tra gli impegni per evitare sovrapposizioni e arrivare puntuale.',priorita:'normale',azioni:['Blocca 45 minuti','Rivedi a fine giornata']});
+    }
+  }
   if(focus){
     out.push({titolo:`Proteggi la priorità del giorno: ${focus}`,perche:'Dedica un blocco concentrato alla priorità principale prima che venga frammentata da urgenze minori.',priorita:'alta',azioni:['Blocca 45 minuti','Rivedi a fine giornata']});
   }
   out.push({titolo:'Definisci 3 obiettivi realistici per oggi',perche:'Un limite chiaro alle priorità aumenta la probabilità di chiudere le attività davvero importanti.',priorita:'normale',azioni:['Seleziona top 3','Sposta il resto']});
   return out.slice(0,5);
 }
+
+function ensureCelebrationSuggestion(suggestions){
+  const list=Array.isArray(suggestions)?suggestions.slice():[];
+  if(prefs?.celebrations===false)return list;
+  const hasCelebrationAlready=list.some((s)=>/compleann|birthday|onomastic|anniversar|augur/i.test(String(s?.titolo||'')+' '+String(s?.perche||'')));
+  if(hasCelebrationAlready)return list;
+  const celebrationEvent=(Array.isArray(calendarEvents)?calendarEvents:[])
+    .find((ev)=>/compleann|birthday|onomastic|anniversar/i.test(String(ev?.title||'')));
+  if(!celebrationEvent)return list;
+  const suggestion={titolo:`Celebrazione in agenda: ${celebrationEvent.title||'evento speciale'}`,perche:'Hai una ricorrenza oggi: inviare un messaggio di auguri adesso evita dimenticanze e rafforza la relazione.',priorita:'alta',azioni:['Invia auguri ora','Aggiungi reminder']};
+  return [suggestion,...list].slice(0,5);
+}
+
 function setSuggestionsUpdatedAtLabel(updatedAt,source='live'){
   const el=document.getElementById('suggestions-updated-at');
   if(!el)return;
@@ -2529,20 +2584,21 @@ function setSuggestionsUpdatedAtLabel(updatedAt,source='live'){
   el.style.display='';
 }
 function renderDaySuggestions(suggestions,options={}){
+  const enrichedSuggestions=ensureCelebrationSuggestion(suggestions);
   const container=document.getElementById('suggestions-container');
   if(!container)return;
-  if(!Array.isArray(suggestions)||!suggestions.length){
+  if(!Array.isArray(enrichedSuggestions)||!enrichedSuggestions.length){
     container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';
     const updatedEl=document.getElementById('suggestions-updated-at');
     if(updatedEl){updatedEl.style.display='none';updatedEl.textContent='';}
     return;
   }
   const nb=document.getElementById('nb-sugg');
-  nb.textContent=suggestions.length;
+  nb.textContent=enrichedSuggestions.length;
   nb.style.display='';
   const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};
   const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
-  container.innerHTML=suggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#6F6A61;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
+  container.innerHTML=enrichedSuggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#6F6A61;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
   const shouldPersist=options?.persist!==false;
   if(shouldPersist)saveSuggestionsToCache(suggestions);
   setSuggestionsUpdatedAtLabel(options?.updatedAt||(shouldPersist?new Date().toISOString():null),options?.source||'live');
