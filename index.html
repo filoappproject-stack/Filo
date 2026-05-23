@@ -2519,12 +2519,36 @@ function buildLocalDayFallback(input){
   const agendaItems=splitLocalItems(input?.agenda);
   const pendingItems=splitLocalItems(input?.pending);
   const focus=(input?.dayFocus||'').trim();
+  const nowMs=Date.now();
+  const upcomingCalendarEvents=(Array.isArray(calendarEvents)?calendarEvents:[])
+    .map((ev)=>{
+      const startsAtMs=ev?.startsAt?new Date(ev.startsAt).getTime():NaN;
+      return {ev,startsAtMs};
+    })
+    .filter(({ev,startsAtMs})=>ev&&Number.isFinite(startsAtMs)&&startsAtMs>=nowMs-15*60*1000)
+    .sort((a,b)=>a.startsAtMs-b.startsAtMs)
+    .slice(0,2)
+    .map(({ev})=>ev);
   const out=[];
   if(pendingItems.length){
     out.push({titolo:`Sblocca subito: ${pendingItems[0]}`,perche:'Chiudere il principale punto aperto riduce il carico mentale e libera attenzione per il resto della giornata.',priorita:'urgente',azioni:['Inizia ora (15 min)','Rimanda al pomeriggio']});
   }
   if(agendaItems.length){
     out.push({titolo:`Prepara il prossimo impegno: ${agendaItems[0]}`,perche:'Una preparazione rapida evita frizioni e rende più efficace il prossimo blocco in agenda.',priorita:'alta',azioni:['Prepara checklist','Aggiungi reminder']});
+  }
+  if(upcomingCalendarEvents.length){
+    const nextEvent=upcomingCalendarEvents[0];
+    if(prefs?.celebrations!==false){
+      const celebrationEvent=upcomingCalendarEvents.find((ev)=>/\bcompleann|\bbirthday|\bonomastic|\banniversar/i.test(String(ev?.title||'')));
+      if(celebrationEvent){
+        out.push({titolo:`Celebrazione in agenda: ${celebrationEvent.title||'evento speciale'}`,perche:'Un messaggio di auguri breve ma personale rafforza la relazione e previene dimenticanze importanti nella giornata.',priorita:'alta',azioni:['Invia auguri ora','Aggiungi reminder']});
+      }
+    }
+    out.push({titolo:`Calendario: preparati a ${nextEvent.title||'prossimo evento'}`,perche:'Hai un evento in agenda oggi: anticipare i materiali o il contesto riduce ritardi e stress prima dell\'inizio.',priorita:'alta',azioni:['Prepara checklist','Aggiungi reminder']});
+    if(upcomingCalendarEvents.length>1){
+      const laterEvent=upcomingCalendarEvents[1];
+      out.push({titolo:`Pianifica transizione: ${laterEvent.title||'evento successivo'}`,perche:'Proteggi 10-15 minuti di buffer tra gli impegni per evitare sovrapposizioni e arrivare puntuale.',priorita:'normale',azioni:['Blocca 45 minuti','Rivedi a fine giornata']});
+    }
   }
   if(focus){
     out.push({titolo:`Proteggi la priorità del giorno: ${focus}`,perche:'Dedica un blocco concentrato alla priorità principale prima che venga frammentata da urgenze minori.',priorita:'alta',azioni:['Blocca 45 minuti','Rivedi a fine giornata']});
