@@ -1734,8 +1734,9 @@ async function buildApiAuthHeaders(baseHeaders={}){
 }
 
 async function requestMailboxConnectUrl(userId,state){
-  const payload={userId,redirectUri:getInboxConnectRedirectUri(),state};
+  const payload={userId,userEmail:currentUser?.email||'',redirectUri:getInboxConnectRedirectUri(),state};
   let lastDetail='';
+  let fatalDetail='';
   for(const base of API_BASES){
     const root=base.replace(/\/$/,'');
     const endpoint=`${root}/api/v1/inbox/google/connect`;
@@ -1749,7 +1750,13 @@ async function requestMailboxConnectUrl(userId,state){
       }
       if(!res.ok){
         const txt=await res.text().catch(()=> '');
-        lastDetail=`${res.status} ${txt}`.trim();
+        let message=txt;
+        try{
+          const parsed=JSON.parse(txt);
+          message=parsed?.message||parsed?.error||txt;
+        }catch(e){}
+        lastDetail=`${res.status} ${message}`.trim();
+        if(res.status===403){fatalDetail=message||lastDetail;break;}
         continue;
       }
       const ct=(res.headers.get('content-type')||'').toLowerCase();
@@ -1770,8 +1777,9 @@ async function requestMailboxConnectUrl(userId,state){
       const msg = err?.message ? String(err.message) : 'Errore rete';
       lastDetail = `${endpoint}: ${msg}`;
     }
+    if(fatalDetail)break;
   }
-  throw new Error(lastDetail||'Endpoint mailbox connect non raggiungibile');
+  throw new Error(fatalDetail||lastDetail||'Endpoint mailbox connect non raggiungibile');
 }
 
 async function requestCalendarConnectUrl(userId,state){
@@ -2111,6 +2119,7 @@ function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filt
 function renderNotes(){const el=document.getElementById('notes-container');if(!el)return;if(!notes.length){el.innerHTML='<div class="empty-state"><div class="empty-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#57534A" stroke-width="1.4"><rect x="3" y="2" width="14" height="16" rx="2"/><line x1="7" y1="7" x2="13" y2="7"/><line x1="7" y1="10" x2="13" y2="10"/><line x1="7" y1="13" x2="10" y2="13"/></svg></div><div class="empty-title">Nessuna nota ancora</div></div>';return;}el.innerHTML=notes.map(n=>`<div class="note-card" onclick="openNoteEditor('${String(n.id).replace(/'/g,"\\'")}')"><div style="font-size:14px;font-weight:500;margin-bottom:4px;">${n.title}</div><div style="font-size:12px;color:#6B6860;line-height:1.5;margin-bottom:8px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${n.body}</div><div style="display:flex;gap:5px;">${n.tags.map((t,j)=>tagBadge(t,j)).join('')}</div></div>`).join('');}
 function updateBadges(){
   const open=tasks.filter(t=>!t.done).length;
+  const inboxCount=INBOX.length;
   const unread=INBOX.filter(i=>i.unread).length;
   const noteCount=notes.length;
   const calendarCount=calendarConnected?calendarEvents.length:0;
@@ -2120,7 +2129,7 @@ function updateBadges(){
   if(noteBadge){noteBadge.textContent=noteCount;noteBadge.style.display='';}
   const calendarBadge=document.getElementById('nb-calendar');
   if(calendarBadge){calendarBadge.textContent=calendarCount;calendarBadge.style.display='';}
-  document.getElementById('nb-inbox').textContent=unread;
+  document.getElementById('nb-inbox').textContent=inboxCount;
   document.getElementById('stat-inbox').textContent=unread;
   document.getElementById('stat-tasks').textContent=open;
   updateInboxSubtitle();
@@ -2128,7 +2137,7 @@ function updateBadges(){
 function updateInboxSubtitle(){const total=INBOX.length;const unread=INBOX.filter(i=>i.unread).length;PAGE_META.inbox[1]=mailboxConnected?`${total} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
-async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
+async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError(mailboxConnectionError);mailboxSyncInProgress=false;renderInboxControls();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){if(isMailboxAuthExpiredError(err)){markMailboxReconnectRequired();}else{mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}}finally{mailboxSyncInProgress=false;renderAll();}}
 async function connectCalendar(){
   if(!currentUser?.id||calendarSyncInProgress)return;
