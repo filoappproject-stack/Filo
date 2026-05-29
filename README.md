@@ -186,6 +186,21 @@ Progetto privato — tutti i diritti riservati.
 
 *Filo è in sviluppo attivo. Versione corrente: 0.8.0*
 
+
+### Accesso bloccato Google OAuth in modalità Testing
+
+Se durante **Collega mailbox** Google mostra `Accesso bloccato` con `Errore 403: access_denied`, non è un errore della sessione incognito: significa che il client OAuth Google associato a `filo-new.vercel.app` è ancora in modalità **Testing** e l'account Google usato non è tra i tester autorizzati.
+
+Per risolvere in ambiente di test:
+
+1. Apri Google Cloud Console del progetto che contiene `GOOGLE_CLIENT_ID`.
+2. Vai in **APIs & Services → OAuth consent screen → Test users**.
+3. Aggiungi l'email Google che deve collegare Gmail, ad esempio l'account B usato per il test.
+4. Attendi qualche minuto e riprova da una nuova finestra incognito.
+5. In Vercel imposta anche `GOOGLE_OAUTH_TEST_USERS` con la stessa lista di email separate da virgola: Filo mostrerà un errore interno chiaro prima del redirect a Google se l'utente non è autorizzato.
+
+Per aprire l'integrazione a utenti non elencati, bisogna pubblicare/verificare l'app OAuth in Google Cloud, soprattutto perché lo scope Gmail `gmail.readonly` richiede la procedura di verifica Google.
+
 ## Verifica integrazione Anthropic su Vercel
 
 Dopo aver aggiunto la variabile ambiente (es. `ANTHROPIC_API_KEY`) in Vercel, verifica in questo ordine:
