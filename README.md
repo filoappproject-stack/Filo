@@ -191,15 +191,22 @@ Progetto privato — tutti i diritti riservati.
 
 Se durante **Collega mailbox** Google mostra `Accesso bloccato` con `Errore 403: access_denied`, non è un errore della sessione incognito: significa che il client OAuth Google associato a `filo-new.vercel.app` è ancora in modalità **Testing** e l'account Google usato non è tra i tester autorizzati.
 
-Per risolvere in ambiente di test:
+Nella nuova Console Google Cloud la voce non sempre si chiama più **OAuth consent screen**. Dalla schermata Home del progetto:
 
-1. Apri Google Cloud Console del progetto che contiene `GOOGLE_CLIENT_ID`.
-2. Vai in **APIs & Services → OAuth consent screen → Test users**.
-3. Aggiungi l'email Google che deve collegare Gmail, ad esempio l'account B usato per il test.
-4. Attendi qualche minuto e riprova da una nuova finestra incognito.
-5. In Vercel imposta anche `GOOGLE_OAUTH_TEST_USERS` con la stessa lista di email separate da virgola: Filo mostrerà un errore interno chiaro prima del redirect a Google se l'utente non è autorizzato.
+1. Controlla in alto che il progetto selezionato sia quello corretto, ad esempio **Filo App**.
+2. Clicca la barra di ricerca in alto e cerca **Google Auth Platform**. In alternativa apri **API e servizi** dal menu laterale e poi cerca la sezione **Google Auth Platform**.
+3. Entra in **Google Auth Platform → Audience**.
+4. Se la pagina mostra **Publishing status: Testing**, apri la sezione **Test users**.
+5. Clicca **Add users** / **Aggiungi utenti** e inserisci l'email Google che deve collegare Gmail, ad esempio l'account B usato per il test.
+6. Salva, attendi qualche minuto e riprova da una nuova finestra incognito.
+7. In Vercel imposta anche `GOOGLE_OAUTH_TEST_USERS` con la stessa lista di email separate da virgola: Filo mostrerà un errore interno chiaro prima del redirect a Google se l'utente non è autorizzato.
 
-Per aprire l'integrazione a utenti non elencati, bisogna pubblicare/verificare l'app OAuth in Google Cloud, soprattutto perché lo scope Gmail `gmail.readonly` richiede la procedura di verifica Google.
+Se non trovi **Audience**, apri direttamente questi percorsi nella Console con il progetto corretto selezionato:
+
+- `https://console.cloud.google.com/auth/audience`
+- `https://console.cloud.google.com/apis/credentials/consent`
+
+Per aprire l'integrazione a utenti non elencati, bisogna pubblicare/verificare l'app OAuth in Google Cloud, soprattutto perché lo scope Gmail `gmail.readonly` richiede la procedura di verifica Google. Le altre sezioni utili della nuova **Google Auth Platform** sono **Branding** per nome/logo/app domain e **Data Access** per gli scope richiesti.
 
 ## Verifica integrazione Anthropic su Vercel
 

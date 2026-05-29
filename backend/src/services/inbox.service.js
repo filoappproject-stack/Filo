@@ -34,7 +34,7 @@ function assertGoogleOauthTester(userEmail) {
 
   throw new HttpError(
     403,
-    `Questo account Google (${userEmail}) non è abilitato come tester OAuth. Aggiungilo in Google Cloud Console > OAuth consent screen > Test users oppure pubblica/verifica l'app Google.`
+    `Questo account Google (${userEmail}) non è abilitato come tester OAuth. Aggiungilo in Google Cloud Console > Google Auth Platform > Audience > Test users oppure pubblica/verifica l'app Google.`
   );
 }
 
