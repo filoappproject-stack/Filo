@@ -14,6 +14,30 @@ function requireGoogleOauthEnv() {
   }
 }
 
+
+function getGoogleOauthTestUsers() {
+  return env.GOOGLE_OAUTH_TEST_USERS.split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function assertGoogleOauthTester(userEmail) {
+  const testUsers = getGoogleOauthTestUsers();
+  if (!testUsers.length || !userEmail) {
+    return;
+  }
+
+  const normalizedEmail = userEmail.trim().toLowerCase();
+  if (testUsers.includes(normalizedEmail)) {
+    return;
+  }
+
+  throw new HttpError(
+    403,
+    `Questo account Google (${userEmail}) non è abilitato come tester OAuth. Aggiungilo in Google Cloud Console > OAuth consent screen > Test users oppure pubblica/verifica l'app Google.`
+  );
+}
+
 function resolveRedirectUri(redirectUri) {
   if (env.GOOGLE_REDIRECT_URI) {
     return env.GOOGLE_REDIRECT_URI;
@@ -26,8 +50,9 @@ function resolveRedirectUri(redirectUri) {
   return redirectUri;
 }
 
-export function buildGoogleAuthUrl({ userId, redirectUri, state }) {
+export function buildGoogleAuthUrl({ userId, userEmail, redirectUri, state }) {
   requireGoogleOauthEnv();
+  assertGoogleOauthTester(userEmail);
   const effectiveRedirectUri = resolveRedirectUri(redirectUri);
 
   const params = new URLSearchParams({
