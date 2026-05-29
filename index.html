@@ -700,8 +700,7 @@ function getQueryParamPreservePlus(url,key){
     }
     ['code','error','state','scope','authuser','prompt','iss'].forEach((k)=>url.searchParams.delete(k));
     const cleanUrl = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash;
-    window.__filoAbortInitAfterOAuthPreserve = true;
-    window.location.replace(cleanUrl);
+    window.history.replaceState({}, document.title, cleanUrl);
   }catch(e){}
 })();
 
@@ -1227,11 +1226,15 @@ async function loginSuccess(user) {
   }
   renderAll();
   restorePostOauthPage();
+  await tryHandleMailboxOauthCallback();
+  await tryHandleCalendarOauthCallback();
+  markCalendarPendingAsFailedIfNoCallbackDetected();
+  renderAll();
   // Evita chiamate backend automatiche al boot:
   // in caso di deploy backend degradato causavano una cascata di 500 in console.
   // I sync restano disponibili via azioni esplicite dell'utente (Collega/Sincronizza/Salva/Analizza).
   mailboxBackgroundSyncInProgress=false;
-  if(!cachedInbox){
+  if(!cachedInbox&&!mailboxOauthJustConnected){
     setInboxConnectionState(false,null);
     INBOX.length=0;
   }
@@ -1260,7 +1263,7 @@ async function loginSuccess(user) {
     }
   }
   calendarOauthJustConnected=false;
-  if(!calendarConnected&&!cachedCalendar){
+  if(!calendarConnected&&!cachedCalendar&&!calendarOauthJustConnected){
     calendarEvents=[];
   }
   renderAll();
@@ -2941,7 +2944,6 @@ function buildAnalyzeInboxContext(){
 
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
-  if(window.__filoAbortInitAfterOAuthPreserve)return;
   loadPrefs();
   renderPrefs();
   const bm=document.getElementById('build-marker');
@@ -2958,9 +2960,6 @@ async function init() {
   }
   window.addEventListener('pageshow',handleCalendarOAuthPageShow);
 
-  await tryHandleMailboxOauthCallback();
-  await tryHandleCalendarOauthCallback();
-  markCalendarPendingAsFailedIfNoCallbackDetected();
   await tryExchangeSupabaseCodeSession();
   await trySetSupabaseSessionFromHash();
   handleSupabaseAuthErrorInQuery();
@@ -2992,8 +2991,6 @@ async function init() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   console.log('Existing session:', session ? 'yes' : 'no');
   if (session) {
-    await tryHandleCalendarOauthCallback();
-    markCalendarPendingAsFailedIfNoCallbackDetected();
     loginSuccess(session.user);
   } else {
     clearCalendarOAuthFlowState();
