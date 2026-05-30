@@ -306,16 +306,17 @@ async function ensureInboxAccountMatchesAuthenticatedUser(account, authEmail) {
   return null;
 }
 
-async function updateAccountTokens(accountId, accessToken, tokenExpiresAt) {
+async function updateAccountTokens(accountId, accessToken, tokenExpiresAt, refreshToken = null) {
   const sql = `
     UPDATE inbox_accounts
     SET access_token = $2,
         token_expires_at = $3,
+        refresh_token = COALESCE($4, refresh_token),
         updated_at = NOW()
     WHERE id = $1
   `;
 
-  await query(sql, [accountId, accessToken, tokenExpiresAt]);
+  await query(sql, [accountId, accessToken, tokenExpiresAt, refreshToken]);
 }
 
 async function markLastSynced(accountId) {
@@ -446,8 +447,52 @@ async function resolveAccountAccessToken(account) {
   }
   const expiresAt = new Date(Date.now() + (refreshed.expires_in ?? 3600) * 1000).toISOString();
 
-  await updateAccountTokens(account.id, refreshed.access_token, expiresAt);
+  await updateAccountTokens(account.id, refreshed.access_token, expiresAt, refreshed.refresh_token ?? null);
   return refreshed.access_token;
+}
+
+async function ensureAccountTokenMatchesAuthenticatedUser(account, authEmail) {
+  if (!account) {
+    return null;
+  }
+
+  const accessToken = await resolveAccountAccessToken(account);
+  const profile = await gmailRequest('/users/me/profile', accessToken);
+
+  if (!isProviderEmailAllowedForUser(profile.emailAddress, authEmail)) {
+    await deleteInboxAccount(account.id);
+    return null;
+  }
+
+  if (!isProviderEmailAllowedForUser(account.provider_email, profile.emailAddress)) {
+    await query(
+      `
+        UPDATE inbox_accounts
+        SET provider_email = $2, updated_at = NOW()
+        WHERE id = $1
+      `,
+      [account.id, profile.emailAddress]
+    );
+  }
+
+  return {
+    ...account,
+    provider_email: profile.emailAddress,
+    access_token: accessToken
+  };
+}
+
+async function getVerifiedGoogleAccountForUser(userId, authEmail) {
+  const account = await ensureInboxAccountMatchesAuthenticatedUser(
+    await findGoogleAccountByUserId(userId),
+    authEmail
+  );
+
+  if (!account) {
+    return null;
+  }
+
+  return ensureAccountTokenMatchesAuthenticatedUser(account, authEmail);
 }
 
 async function findGoogleAccountByUserId(userId) {
@@ -479,10 +524,7 @@ function shouldSyncAccount(account) {
 async function maybeSyncInboxForUser(userId, options = {}) {
   const forceSync = options.force === true;
   const authEmail = options.authEmail ?? null;
-  const account = await ensureInboxAccountMatchesAuthenticatedUser(
-    await findGoogleAccountByUserId(userId),
-    authEmail
-  );
+  const account = await getVerifiedGoogleAccountForUser(userId, authEmail);
   if (!account) {
     return { connected: false, importedCount: 0, synced: false };
   }
@@ -491,8 +533,7 @@ async function maybeSyncInboxForUser(userId, options = {}) {
     return { connected: true, importedCount: 0, synced: false };
   }
 
-  const accessToken = await resolveAccountAccessToken(account);
-  const importedCount = await syncInboxMessages(account, accessToken);
+  const importedCount = await syncInboxMessages(account, account.access_token);
   return { connected: true, importedCount, synced: true };
 }
 
@@ -513,18 +554,24 @@ export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri, aut
     userId,
     providerEmail: profile.emailAddress,
     accessToken: oauthPayload.access_token,
-    refreshToken: oauthPayload.refresh_token ?? null,
+    refreshToken: oauthPayload.refresh_token ?? oauthPayload.refreshToken ?? null,
     tokenExpiresAt: expiresAt,
     scope: oauthPayload.scope ?? GOOGLE_SCOPE
   });
 
-  const validAccessToken = await resolveAccountAccessToken({
-    ...account,
-    access_token: oauthPayload.access_token,
-    refresh_token: oauthPayload.refresh_token ?? null
-  });
+  const validAccount = await ensureAccountTokenMatchesAuthenticatedUser(
+    {
+      ...account,
+      access_token: oauthPayload.access_token,
+      refresh_token: oauthPayload.refresh_token ?? oauthPayload.refreshToken ?? null
+    },
+    authEmail
+  );
+  if (!validAccount) {
+    throw new HttpError(403, 'La mailbox Google selezionata non coincide con l\'utente Filo autenticato. Ricollega la mailbox con lo stesso account Google usato per accedere a Filo.');
+  }
 
-  const importedCount = await syncInboxMessages(account, validAccessToken);
+  const importedCount = await syncInboxMessages(validAccount, validAccount.access_token);
 
   return {
     account,
@@ -575,13 +622,15 @@ export async function syncGoogleInbox(userId, authEmail) {
     [userId]
   );
 
-  const account = await ensureInboxAccountMatchesAuthenticatedUser(rows[0], authEmail);
+  const account = await ensureAccountTokenMatchesAuthenticatedUser(
+    await ensureInboxAccountMatchesAuthenticatedUser(rows[0], authEmail),
+    authEmail
+  );
   if (!account) {
     throw new HttpError(404, 'Nessun account Google collegato');
   }
 
-  const accessToken = await resolveAccountAccessToken(account);
-  const importedCount = await syncInboxMessages(account, accessToken);
+  const importedCount = await syncInboxMessages(account, account.access_token);
 
   const { rows: refreshedRows } = await query(
     `
@@ -616,7 +665,7 @@ export async function getGoogleInboxStatus(userId, authEmail) {
     [userId]
   );
 
-  const account = await ensureInboxAccountMatchesAuthenticatedUser(rows[0], authEmail);
+  let account = await ensureInboxAccountMatchesAuthenticatedUser(rows[0], authEmail);
   if (!account) {
     return {
       connected: false,
@@ -625,10 +674,17 @@ export async function getGoogleInboxStatus(userId, authEmail) {
     };
   }
 
-  // Verifica credenziali: se il refresh token è revocato/scaduto, l'account viene rimosso
-  // e lo stato torna "non collegato" per evitare UI incoerente ("collegata" ma sync impossibile).
+  // Verifica credenziali e proprietà reale del token: se il token Google appartiene
+  // a un account diverso dall'utente Filo autenticato, il collegamento viene rimosso.
   try {
-    await resolveAccountAccessToken(account);
+    account = await ensureAccountTokenMatchesAuthenticatedUser(account, authEmail);
+    if (!account) {
+      return {
+        connected: false,
+        provider_email: null,
+        last_synced_at: null
+      };
+    }
   } catch (error) {
     if (error instanceof HttpError && error.statusCode === 401) {
       return {
