@@ -35,7 +35,7 @@ export async function getGoogleConnectUrl(req, res) {
     throw new HttpError(400, 'Payload connect inbox non valido');
   }
 
-  const auth = buildGoogleAuthUrl(parsed.data);
+  const auth = buildGoogleAuthUrl({ ...parsed.data, authEmail: req.auth?.email });
   res.json({ data: auth });
 }
 
@@ -45,7 +45,7 @@ export async function postGoogleCodeExchange(req, res) {
     throw new HttpError(400, 'Payload exchange code non valido');
   }
 
-  const result = await exchangeGoogleCodeAndSync(parsed.data);
+  const result = await exchangeGoogleCodeAndSync({ ...parsed.data, authEmail: req.auth?.email });
   res.status(201).json({ data: result });
 }
 
@@ -59,7 +59,7 @@ export async function postGoogleSync(req, res) {
     throw new HttpError(400, 'Payload sync inbox non valido');
   }
 
-  const result = await syncGoogleInbox(parsed.data.userId);
+  const result = await syncGoogleInbox(parsed.data.userId, req.auth?.email);
   res.json({ data: result });
 }
 
@@ -69,7 +69,7 @@ export async function getInboxMessages(req, res) {
     throw new HttpError(400, 'Query inbox non valida');
   }
 
-  const messages = await listInboxMessages(parsed.data.userId, parsed.data.limit);
+  const messages = await listInboxMessages(parsed.data.userId, parsed.data.limit, req.auth?.email);
   res.set('Cache-Control', 'no-store');
   res.json({ data: messages });
 }
@@ -84,7 +84,7 @@ export async function getGoogleInboxConnectionStatus(req, res) {
     throw new HttpError(400, 'Query stato inbox non valida');
   }
 
-  const status = await getGoogleInboxStatus(parsed.data.userId);
+  const status = await getGoogleInboxStatus(parsed.data.userId, req.auth?.email);
   res.set('Cache-Control', 'no-store');
   res.json({ data: status });
 }
