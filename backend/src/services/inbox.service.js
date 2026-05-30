@@ -54,6 +54,7 @@ export function buildGoogleAuthUrl({ userId, redirectUri, state, authEmail }) {
   requireGoogleOauthEnv();
   assertGoogleOauthTester(userEmail);
   const effectiveRedirectUri = resolveRedirectUri(redirectUri);
+  const userEmail = normalizeEmail(authEmail);
 
   const params = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
@@ -66,9 +67,8 @@ export function buildGoogleAuthUrl({ userId, redirectUri, state, authEmail }) {
     state: state ?? userId
   });
 
-  const normalizedAuthEmail = normalizeEmail(authEmail);
-  if (normalizedAuthEmail) {
-    params.set('login_hint', normalizedAuthEmail);
+  if (userEmail) {
+    params.set('login_hint', userEmail);
   }
 
   return {

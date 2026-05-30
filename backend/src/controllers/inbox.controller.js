@@ -29,6 +29,11 @@ const SyncSchema = z.object({
   userId: z.string().uuid()
 });
 
+function getAuthenticatedEmail(req) {
+  const email = req.auth?.email;
+  return typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null;
+}
+
 export async function getGoogleConnectUrl(req, res) {
   const source = req.method === 'GET' ? req.query : req.body;
   const parsed = ConnectSchema.safeParse(source);
@@ -36,7 +41,7 @@ export async function getGoogleConnectUrl(req, res) {
     throw new HttpError(400, 'Payload connect inbox non valido');
   }
 
-  const auth = buildGoogleAuthUrl({ ...parsed.data, authEmail: req.auth?.email });
+  const auth = buildGoogleAuthUrl({ ...parsed.data, authEmail: getAuthenticatedEmail(req) });
   res.json({ data: auth });
 }
 
@@ -46,7 +51,7 @@ export async function postGoogleCodeExchange(req, res) {
     throw new HttpError(400, 'Payload exchange code non valido');
   }
 
-  const result = await exchangeGoogleCodeAndSync({ ...parsed.data, authEmail: req.auth?.email });
+  const result = await exchangeGoogleCodeAndSync({ ...parsed.data, authEmail: getAuthenticatedEmail(req) });
   res.status(201).json({ data: result });
 }
 
@@ -60,7 +65,7 @@ export async function postGoogleSync(req, res) {
     throw new HttpError(400, 'Payload sync inbox non valido');
   }
 
-  const result = await syncGoogleInbox(parsed.data.userId, req.auth?.email);
+  const result = await syncGoogleInbox(parsed.data.userId, getAuthenticatedEmail(req));
   res.json({ data: result });
 }
 
@@ -70,7 +75,7 @@ export async function getInboxMessages(req, res) {
     throw new HttpError(400, 'Query inbox non valida');
   }
 
-  const messages = await listInboxMessages(parsed.data.userId, parsed.data.limit, req.auth?.email);
+  const messages = await listInboxMessages(parsed.data.userId, parsed.data.limit, getAuthenticatedEmail(req));
   res.set('Cache-Control', 'no-store');
   res.json({ data: messages });
 }
@@ -85,7 +90,7 @@ export async function getGoogleInboxConnectionStatus(req, res) {
     throw new HttpError(400, 'Query stato inbox non valida');
   }
 
-  const status = await getGoogleInboxStatus(parsed.data.userId, req.auth?.email);
+  const status = await getGoogleInboxStatus(parsed.data.userId, getAuthenticatedEmail(req));
   res.set('Cache-Control', 'no-store');
   res.json({ data: status });
 }
