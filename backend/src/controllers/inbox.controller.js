@@ -10,6 +10,7 @@ import {
 
 const ConnectSchema = z.object({
   userId: z.string().uuid(),
+  userEmail: z.string().email().optional(),
   redirectUri: z.string().url().optional(),
   state: z.string().min(8).max(500).optional()
 });

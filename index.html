@@ -392,7 +392,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
               Analizza la mia giornata
             </button>
           </div>
-          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#6F6A61;">Analisi rimanenti oggi: 5/5</div>
+          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#6F6A61;">Analisi rimanenti oggi: 3/3</div>
+          <div id="analyze-quota-hint" class="small-help">Aggiungi dettagli in agenda e sospesi: Filo potrà darti riscontri più articolati e fino a 5 analisi oggi.</div>
         </div>
         <div class="error-box" id="ai-error"></div>
         <div id="suggestions-updated-at" style="display:none;margin:8px 0 10px;font-size:12px;color:#6F6A61;"></div>
@@ -1737,8 +1738,9 @@ async function buildApiAuthHeaders(baseHeaders={}){
 }
 
 async function requestMailboxConnectUrl(userId,state){
-  const payload={userId,redirectUri:getInboxConnectRedirectUri(),state};
+  const payload={userId,userEmail:currentUser?.email||'',redirectUri:getInboxConnectRedirectUri(),state};
   let lastDetail='';
+  let fatalDetail='';
   for(const base of API_BASES){
     const root=base.replace(/\/$/,'');
     const endpoint=`${root}/api/v1/inbox/google/connect`;
@@ -1752,7 +1754,13 @@ async function requestMailboxConnectUrl(userId,state){
       }
       if(!res.ok){
         const txt=await res.text().catch(()=> '');
-        lastDetail=`${res.status} ${txt}`.trim();
+        let message=txt;
+        try{
+          const parsed=JSON.parse(txt);
+          message=parsed?.message||parsed?.error||txt;
+        }catch(e){}
+        lastDetail=`${res.status} ${message}`.trim();
+        if(res.status===403){fatalDetail=message||lastDetail;break;}
         continue;
       }
       const ct=(res.headers.get('content-type')||'').toLowerCase();
@@ -1773,8 +1781,9 @@ async function requestMailboxConnectUrl(userId,state){
       const msg = err?.message ? String(err.message) : 'Errore rete';
       lastDetail = `${endpoint}: ${msg}`;
     }
+    if(fatalDetail)break;
   }
-  throw new Error(lastDetail||'Endpoint mailbox connect non raggiungibile');
+  throw new Error(fatalDetail||lastDetail||'Endpoint mailbox connect non raggiungibile');
 }
 
 async function requestCalendarConnectUrl(userId,state){
@@ -2123,7 +2132,7 @@ function updateBadges(){
   if(noteBadge){noteBadge.textContent=noteCount;noteBadge.style.display='';}
   const calendarBadge=document.getElementById('nb-calendar');
   if(calendarBadge){calendarBadge.textContent=calendarCount;calendarBadge.style.display='';}
-  document.getElementById('nb-inbox').textContent=unread;
+  document.getElementById('nb-inbox').textContent=inboxCount;
   document.getElementById('stat-inbox').textContent=unread;
   document.getElementById('stat-tasks').textContent=open;
   updateInboxSubtitle();
@@ -2131,7 +2140,7 @@ function updateBadges(){
 function updateInboxSubtitle(){const total=mailboxConnected?INBOX.length:0;const unread=mailboxConnected?INBOX.filter(i=>i.unread).length:0;PAGE_META.inbox[1]=mailboxConnected?`${total} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
-async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError('Impossibile collegare la mailbox.');mailboxSyncInProgress=false;renderInboxControls();}}
+async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError(mailboxConnectionError);mailboxSyncInProgress=false;renderInboxControls();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){if(isMailboxAuthExpiredError(err)){markMailboxReconnectRequired();}else{mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}}finally{mailboxSyncInProgress=false;renderAll();}}
 async function connectCalendar(){
   if(!currentUser?.id||calendarSyncInProgress)return;
@@ -2611,8 +2620,20 @@ function renderDaySuggestions(suggestions,options={}){
   if(shouldPersist)saveSuggestionsToCache(suggestions);
   setSuggestionsUpdatedAtLabel(options?.updatedAt||(shouldPersist?new Date().toISOString():null),options?.source||'live');
 }
+function updateAnalyzeQuotaHint(limit){
+  const hint=document.getElementById('analyze-quota-hint');
+  if(!hint)return;
+  if(Number.isFinite(limit)&&limit>=5){
+    hint.textContent='Ottimo: hai dato abbastanza contesto per ricevere analisi più articolate.';
+    hint.style.color='#0E6B4A';
+    return;
+  }
+  hint.textContent='Aggiungi dettagli in agenda e sospesi: Filo potrà darti riscontri più articolati e fino a 5 analisi oggi.';
+  hint.style.color='#6F6A61';
+}
 function updateAnalyzeQuotaLabel(limit,remaining){
   const el=document.getElementById('analyze-quota');
+  updateAnalyzeQuotaHint(limit);
   if(!el)return;
   if(Number.isFinite(limit)&&Number.isFinite(remaining)){
     el.textContent=`Analisi rimanenti oggi: ${remaining}/${limit}`;
