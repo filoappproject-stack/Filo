@@ -332,11 +332,13 @@ async function markLastSynced(accountId) {
 async function syncInboxMessages(account, accessToken) {
   const collectedIds = [];
   const collectedIdSet = new Set();
+  const syncedInboxIds = [];
 
   let pageToken;
   for (let i = 0; i < 10; i += 1) {
     const listPayload = await gmailRequest('/users/me/messages', accessToken, {
       maxResults: '100',
+      labelIds: ['INBOX'],
       pageToken
     });
 
@@ -359,6 +361,11 @@ async function syncInboxMessages(account, accessToken) {
       format: 'metadata',
       metadataHeaders: ['From', 'Subject', 'Date']
     });
+
+    const labelIds = Array.isArray(message.labelIds) ? message.labelIds : [];
+    if (!labelIds.includes('INBOX')) {
+      continue;
+    }
 
     const headers = message.payload?.headers ?? [];
     const sql = `
@@ -390,6 +397,8 @@ async function syncInboxMessages(account, accessToken) {
     const receivedAtIso =
       receivedAt && !Number.isNaN(receivedAt.getTime()) ? receivedAt.toISOString() : null;
 
+    syncedInboxIds.push(providerMessageId);
+
     await query(sql, [
       account.id,
       account.user_id,
@@ -399,11 +408,11 @@ async function syncInboxMessages(account, accessToken) {
       headerValue(headers, 'Subject'),
       headerValue(headers, 'From'),
       receivedAtIso,
-      message.labelIds ?? []
+      labelIds
     ]);
   }
 
-  if (collectedIds.length === 0) {
+  if (syncedInboxIds.length === 0) {
     await query(
       `
         DELETE FROM inbox_messages
@@ -418,12 +427,12 @@ async function syncInboxMessages(account, accessToken) {
         WHERE account_id = $1
           AND provider_message_id != ALL($2::text[])
       `,
-      [account.id, collectedIds]
+      [account.id, syncedInboxIds]
     );
   }
 
   await markLastSynced(account.id);
-  return collectedIds.length;
+  return syncedInboxIds.length;
 }
 
 async function resolveAccountAccessToken(account) {
@@ -601,6 +610,7 @@ export async function listInboxMessages(userId, limit, authEmail) {
     JOIN inbox_accounts a ON a.id = m.account_id
     WHERE m.user_id = $1
       AND LOWER(a.provider_email) = LOWER($3)
+      AND 'INBOX' = ANY(m.labels)
     ORDER BY m.received_at DESC NULLS LAST, m.created_at DESC
     LIMIT $2
   `;
