@@ -1215,6 +1215,8 @@ async function loginSuccess(user) {
     calendarEvents = Array.isArray(cachedCalendar.events)?cachedCalendar.events:[];
     setCalendarConnectionState(cachedCalendar.connected,cachedCalendar.lastSync);
   }
+  await loadTasksFromApi();
+  await loadNotesFromApi();
   // Evita fetch check-in da API al boot (in deploy degradati generava 500 a freddo).
   // Manteniamo solo recupero profilo/cache locale.
   if(!hasCheckinForDate(formatLocalDate()))hydrateLatestCheckinFromSupabaseProfile();
