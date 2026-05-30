@@ -392,7 +392,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
               Analizza la mia giornata
             </button>
           </div>
-          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#6F6A61;">Analisi rimanenti oggi: 5/5</div>
+          <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#6F6A61;">Analisi rimanenti oggi: 3/3</div>
+          <div id="analyze-quota-hint" class="small-help">Aggiungi dettagli in agenda e sospesi: Filo potrà darti riscontri più articolati e fino a 5 analisi oggi.</div>
         </div>
         <div class="error-box" id="ai-error"></div>
         <div id="suggestions-updated-at" style="display:none;margin:8px 0 10px;font-size:12px;color:#6F6A61;"></div>
@@ -2617,8 +2618,20 @@ function renderDaySuggestions(suggestions,options={}){
   if(shouldPersist)saveSuggestionsToCache(suggestions);
   setSuggestionsUpdatedAtLabel(options?.updatedAt||(shouldPersist?new Date().toISOString():null),options?.source||'live');
 }
+function updateAnalyzeQuotaHint(limit){
+  const hint=document.getElementById('analyze-quota-hint');
+  if(!hint)return;
+  if(Number.isFinite(limit)&&limit>=5){
+    hint.textContent='Ottimo: hai dato abbastanza contesto per ricevere analisi più articolate.';
+    hint.style.color='#0E6B4A';
+    return;
+  }
+  hint.textContent='Aggiungi dettagli in agenda e sospesi: Filo potrà darti riscontri più articolati e fino a 5 analisi oggi.';
+  hint.style.color='#6F6A61';
+}
 function updateAnalyzeQuotaLabel(limit,remaining){
   const el=document.getElementById('analyze-quota');
+  updateAnalyzeQuotaHint(limit);
   if(!el)return;
   if(Number.isFinite(limit)&&Number.isFinite(remaining)){
     el.textContent=`Analisi rimanenti oggi: ${remaining}/${limit}`;
