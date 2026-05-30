@@ -50,7 +50,7 @@ function resolveRedirectUri(redirectUri) {
   return redirectUri;
 }
 
-export function buildGoogleAuthUrl({ userId, userEmail, redirectUri, state }) {
+export function buildGoogleAuthUrl({ userId, redirectUri, state, authEmail }) {
   requireGoogleOauthEnv();
   assertGoogleOauthTester(userEmail);
   const effectiveRedirectUri = resolveRedirectUri(redirectUri);
@@ -65,6 +65,11 @@ export function buildGoogleAuthUrl({ userId, userEmail, redirectUri, state }) {
     prompt: 'consent',
     state: state ?? userId
   });
+
+  const normalizedAuthEmail = normalizeEmail(authEmail);
+  if (normalizedAuthEmail) {
+    params.set('login_hint', normalizedAuthEmail);
+  }
 
   return {
     authUrl: `${GOOGLE_AUTH_BASE}?${params.toString()}`,
@@ -269,6 +274,38 @@ function resolveInternalUserEmail(userId) {
   return `user-${userId}@filo.local`;
 }
 
+function normalizeEmail(email) {
+  return typeof email === 'string' ? email.trim().toLowerCase() : '';
+}
+
+function isProviderEmailAllowedForUser(providerEmail, authEmail) {
+  const normalizedProviderEmail = normalizeEmail(providerEmail);
+  const normalizedAuthEmail = normalizeEmail(authEmail);
+  return !!normalizedProviderEmail && !!normalizedAuthEmail && normalizedProviderEmail === normalizedAuthEmail;
+}
+
+async function deleteInboxAccount(accountId) {
+  await query('DELETE FROM inbox_accounts WHERE id = $1', [accountId]);
+}
+
+async function ensureInboxAccountMatchesAuthenticatedUser(account, authEmail) {
+  if (!account) {
+    return null;
+  }
+
+  const normalizedAuthEmail = normalizeEmail(authEmail);
+  if (!normalizedAuthEmail) {
+    return null;
+  }
+
+  if (isProviderEmailAllowedForUser(account.provider_email, normalizedAuthEmail)) {
+    return account;
+  }
+
+  await deleteInboxAccount(account.id);
+  return null;
+}
+
 async function updateAccountTokens(accountId, accessToken, tokenExpiresAt) {
   const sql = `
     UPDATE inbox_accounts
@@ -402,7 +439,7 @@ async function resolveAccountAccessToken(account) {
     refreshed = await refreshAccessToken(account.refresh_token);
   } catch (error) {
     if (error instanceof HttpError && error.statusCode === 401 && isInvalidGrantError(error)) {
-      await query('DELETE FROM inbox_accounts WHERE id = $1', [account.id]);
+      await deleteInboxAccount(account.id);
       throw new HttpError(401, 'Token Google scaduto o revocato. Ricollega la mailbox.');
     }
     throw error;
@@ -415,7 +452,7 @@ async function resolveAccountAccessToken(account) {
 
 async function findGoogleAccountByUserId(userId) {
   const sql = `
-    SELECT id, user_id, access_token, refresh_token, token_expires_at, last_synced_at
+    SELECT id, user_id, provider_email, access_token, refresh_token, token_expires_at, last_synced_at
     FROM inbox_accounts
     WHERE user_id = $1 AND provider = 'google'
     LIMIT 1
@@ -441,7 +478,11 @@ function shouldSyncAccount(account) {
 
 async function maybeSyncInboxForUser(userId, options = {}) {
   const forceSync = options.force === true;
-  const account = await findGoogleAccountByUserId(userId);
+  const authEmail = options.authEmail ?? null;
+  const account = await ensureInboxAccountMatchesAuthenticatedUser(
+    await findGoogleAccountByUserId(userId),
+    authEmail
+  );
   if (!account) {
     return { connected: false, importedCount: 0, synced: false };
   }
@@ -455,13 +496,16 @@ async function maybeSyncInboxForUser(userId, options = {}) {
   return { connected: true, importedCount, synced: true };
 }
 
-export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
+export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri, authEmail }) {
   await ensureInboxSchema();
 
   const oauthPayload = await exchangeGoogleCode({ code, redirectUri });
   const expiresAt = new Date(Date.now() + (oauthPayload.expires_in ?? 3600) * 1000).toISOString();
 
   const profile = await gmailRequest('/users/me/profile', oauthPayload.access_token);
+  if (!isProviderEmailAllowedForUser(profile.emailAddress, authEmail)) {
+    throw new HttpError(403, 'La mailbox Google selezionata non coincide con l\'utente Filo autenticato. Esci da Google o scegli lo stesso account usato per accedere a Filo.');
+  }
 
   await ensureUserExists(userId, resolveInternalUserEmail(userId));
 
@@ -491,9 +535,9 @@ export async function exchangeGoogleCodeAndSync({ userId, code, redirectUri }) {
   };
 }
 
-export async function listInboxMessages(userId, limit) {
+export async function listInboxMessages(userId, limit, authEmail) {
   await ensureInboxSchema();
-  await maybeSyncInboxForUser(userId);
+  await maybeSyncInboxForUser(userId, { authEmail });
 
   const sql = `
     SELECT
@@ -507,16 +551,18 @@ export async function listInboxMessages(userId, limit) {
       m.labels,
       m.created_at
     FROM inbox_messages m
+    JOIN inbox_accounts a ON a.id = m.account_id
     WHERE m.user_id = $1
+      AND LOWER(a.provider_email) = LOWER($3)
     ORDER BY m.received_at DESC NULLS LAST, m.created_at DESC
     LIMIT $2
   `;
 
-  const { rows } = await query(sql, [userId, limit]);
+  const { rows } = await query(sql, [userId, limit, authEmail]);
   return rows;
 }
 
-export async function syncGoogleInbox(userId) {
+export async function syncGoogleInbox(userId, authEmail) {
   await ensureInboxSchema();
 
   const { rows } = await query(
@@ -529,7 +575,7 @@ export async function syncGoogleInbox(userId) {
     [userId]
   );
 
-  const account = rows[0];
+  const account = await ensureInboxAccountMatchesAuthenticatedUser(rows[0], authEmail);
   if (!account) {
     throw new HttpError(404, 'Nessun account Google collegato');
   }
@@ -557,7 +603,7 @@ export async function syncGoogleInbox(userId) {
   };
 }
 
-export async function getGoogleInboxStatus(userId) {
+export async function getGoogleInboxStatus(userId, authEmail) {
   await ensureInboxSchema();
 
   const { rows } = await query(
@@ -570,7 +616,7 @@ export async function getGoogleInboxStatus(userId) {
     [userId]
   );
 
-  const account = rows[0];
+  const account = await ensureInboxAccountMatchesAuthenticatedUser(rows[0], authEmail);
   if (!account) {
     return {
       connected: false,

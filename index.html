@@ -1205,12 +1205,10 @@ async function loginSuccess(user) {
     const numericTaskIds = tasks.map(t=>parseInt(t.id,10)).filter(n=>Number.isFinite(n));
     nextTaskId = numericTaskIds.length ? Math.max(...numericTaskIds)+1 : 100;
   }
-  const cachedInbox = loadInboxFromCache();
-  if (cachedInbox) {
-    INBOX.length=0;
-    cachedInbox.messages.forEach(m=>INBOX.push(m));
-    setInboxConnectionState(cachedInbox.connected,cachedInbox.lastSync);
-  }
+  // Privacy: non ripristinare messaggi inbox da cache prima della verifica backend.
+  // Dopo il login ricarichiamo sempre stato e messaggi della mailbox dell'utente autenticato.
+  const cachedInbox = null;
+  setInboxConnectionState(false,null);
   const cachedCalendar = loadCalendarFromCache();
   if (cachedCalendar) {
     calendarEvents = Array.isArray(cachedCalendar.events)?cachedCalendar.events:[];
@@ -1244,6 +1242,9 @@ async function loginSuccess(user) {
   if(currentUser?.id&&!mailboxOauthJustConnected){
     try{
       await loadInboxStatus();
+      if(mailboxConnected){
+        await loadInboxMessages();
+      }
     }catch(err){
       console.warn('Impossibile aggiornare stato inbox da backend:',err);
       if(isMailboxAuthExpiredError(err)){
@@ -1421,9 +1422,11 @@ function getNotesCacheKey(){return currentUser?.id?`${NOTES_CACHE_PREFIX}${curre
 function getNotesBackfillDoneKey(){return currentUser?.id?`${NOTES_BACKFILL_DONE_PREFIX}${currentUser.id}`:null;}
 function saveNotesToCache(){const key=getNotesCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(notes));}catch(e){}}
 function loadNotesFromCache(){const key=getNotesCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
-function getInboxCacheKey(){return currentUser?.id?`${INBOX_CACHE_PREFIX}${currentUser.id}`:null;}
+function getInboxCacheKey(userIdOverride=null){const uid=userIdOverride||currentUser?.id;return uid?`${INBOX_CACHE_PREFIX}${uid}`:null;}
 function saveInboxToCache(){const key=getInboxCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify({connected:mailboxConnected,lastSync:mailboxLastSync,messages:INBOX}));}catch(e){}}
 function loadInboxFromCache(){const key=getInboxCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;if(!parsed||!Array.isArray(parsed.messages))return null;return parsed;}catch(e){return null;}}
+function removeInboxFromCache(userIdOverride=null){const key=getInboxCacheKey(userIdOverride);if(!key)return;try{localStorage.removeItem(key);}catch(e){}}
+function clearInboxMessages(){INBOX.length=0;inboxSelectedId=null;}
 
 function getCalendarCacheKey(userIdOverride=null){const uid=userIdOverride||currentUser?.id;return uid?`${CALENDAR_CACHE_PREFIX}${uid}`:null;}
 function getSuggestionsCacheKey(){return currentUser?.id?`${SUGGESTIONS_CACHE_PREFIX}${currentUser.id}`:null;}
@@ -1578,7 +1581,7 @@ function isCalendarAuthExpiredError(err){
 function markMailboxReconnectRequired(){
   setInboxConnectionState(false,null);
   mailboxConnectionError='Sessione Google Mail scaduta. Ricollega la mailbox.';
-  // Manteniamo i messaggi già presenti in cache/UI per non azzerare badge e storico locale.
+  // Privacy: svuotiamo messaggi e cache, così non restano email di una sessione precedente.
   saveInboxToCache();
 }
 function markCalendarReconnectRequired(userIdOverride=null){
@@ -1588,7 +1591,7 @@ function markCalendarReconnectRequired(userIdOverride=null){
 }
 async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));saveInboxToCache();}
 async function loadInboxStatus(){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/google/status?userId=${encodeURIComponent(currentUser.id)}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/google/status fallita (${res.status}): ${txt}`);}const payload=await res.json();const data=payload?.data||{};setInboxConnectionState(!!data.connected,data.last_synced_at||null);}
-function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)mailboxConnectionError='';}
+function setInboxConnectionState(connected,lastSyncedAt){mailboxConnected=!!connected;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected){mailboxConnectionError='';return;}clearInboxMessages();removeInboxFromCache();}
 function setCalendarConnectionState(connected,lastSyncedAt){calendarConnected=!!connected;calendarLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)calendarConnectionError='';saveCalendarToCache();}
 function mapCalendarEventToUi(item){
   const startRaw=item?.starts_at||item?.start;
@@ -2120,8 +2123,7 @@ function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filt
 function renderNotes(){const el=document.getElementById('notes-container');if(!el)return;if(!notes.length){el.innerHTML='<div class="empty-state"><div class="empty-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#57534A" stroke-width="1.4"><rect x="3" y="2" width="14" height="16" rx="2"/><line x1="7" y1="7" x2="13" y2="7"/><line x1="7" y1="10" x2="13" y2="10"/><line x1="7" y1="13" x2="10" y2="13"/></svg></div><div class="empty-title">Nessuna nota ancora</div></div>';return;}el.innerHTML=notes.map(n=>`<div class="note-card" onclick="openNoteEditor('${String(n.id).replace(/'/g,"\\'")}')"><div style="font-size:14px;font-weight:500;margin-bottom:4px;">${n.title}</div><div style="font-size:12px;color:#6B6860;line-height:1.5;margin-bottom:8px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${n.body}</div><div style="display:flex;gap:5px;">${n.tags.map((t,j)=>tagBadge(t,j)).join('')}</div></div>`).join('');}
 function updateBadges(){
   const open=tasks.filter(t=>!t.done).length;
-  const inboxCount=INBOX.length;
-  const unread=INBOX.filter(i=>i.unread).length;
+  const unread=mailboxConnected?INBOX.filter(i=>i.unread).length:0;
   const noteCount=notes.length;
   const calendarCount=calendarConnected?calendarEvents.length:0;
   const nb=document.getElementById('nb-task');
@@ -2135,7 +2137,7 @@ function updateBadges(){
   document.getElementById('stat-tasks').textContent=open;
   updateInboxSubtitle();
 }
-function updateInboxSubtitle(){const total=INBOX.length;const unread=INBOX.filter(i=>i.unread).length;PAGE_META.inbox[1]=mailboxConnected?`${total} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
+function updateInboxSubtitle(){const total=mailboxConnected?INBOX.length:0;const unread=mailboxConnected?INBOX.filter(i=>i.unread).length:0;PAGE_META.inbox[1]=mailboxConnected?`${total} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
 function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError(mailboxConnectionError);mailboxSyncInProgress=false;renderInboxControls();}}
