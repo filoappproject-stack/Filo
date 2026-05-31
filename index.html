@@ -273,7 +273,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
     <div class="nav-sec">Oggi</div>
     <div class="nav-item active" onclick="showPage('suggerimenti',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M7.5 1.5l1.4 2.8 3.1.45-2.25 2.2.53 3.1L7.5 8.5l-2.78 1.55.53-3.1L3 4.75l3.1-.45z"/></svg>
-      Suggerimenti AI
+      Prossime azioni
       <span class="nav-badge nb-green" id="nb-sugg" style="display:none">0</span>
     </div>
     <div class="nav-item" onclick="showPage('calendario',this)">
@@ -343,7 +343,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
           <div class="stat-card"><div class="stat-label">Energia oggi</div><div class="stat-value" id="stat-energy">-</div><div class="stat-delta" id="stat-energy-sub">non rilevata</div></div>
         </div>
         <div class="card">
-          <div style="font-size:13px;font-weight:500;color:#6B6860;margin-bottom:12px;">Raccontami la tua giornata e ci penso io a ordinarla</div>
+          <div style="font-size:13px;font-weight:500;color:#6B6860;margin-bottom:12px;">Filo analizza agenda, sospesi ed energia per costruire il tuo piano d'azione.</div>
           <div class="grid-2" style="margin-bottom:14px;">
             <div>
               <div class="field-label">Cosa hai in agenda oggi?</div>
@@ -389,7 +389,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
           <div style="display:flex;gap:10px;align-items:center;">
             <button class="btn-primary" id="analyze-btn" onclick="analyzeDay()" disabled>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.1 2.2 2.4.35-1.75 1.7.42 2.4L6.5 6.6 4.33 7.65l.42-2.4L3 3.55l2.4-.35z" fill="white"/></svg>
-              Analizza la mia giornata
+              Ordina la mia giornata
             </button>
           </div>
           <div id="analyze-quota" style="margin-top:8px;font-size:12px;color:#6F6A61;">Analisi rimanenti oggi: 3/3</div>
@@ -405,7 +405,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
           <div class="empty-state">
             <div class="empty-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#57534A" stroke-width="1.4"><circle cx="10" cy="10" r="8"/><path d="M10 7v3l2.5 1.5"/></svg></div>
             <div class="empty-title">Nessun suggerimento ancora</div>
-            <div class="empty-sub">Descrivi la tua agenda e le cose in sospeso, poi premi "Analizza".</div>
+            <div class="empty-sub">Scrivi cosa hai oggi: Filo ti restituisce 3-5 azioni prioritarie con il perché.</div>
           </div>
         </div>
       </div>
