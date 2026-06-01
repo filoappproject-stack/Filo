@@ -381,7 +381,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
         <div class="memory-banner" id="memory-banner" style="background:#E4F4EE;border-color:rgba(14,107,74,0.15);color:#0E6B4A;"></div>
         <div class="stats-grid">
           <div class="stat-card"><div class="stat-label">Email non lette</div><div class="stat-value" id="stat-inbox">0</div><div class="stat-delta">0 da ieri</div></div>
-          <div class="stat-card"><div class="stat-label">Task aperti</div><div class="stat-value" id="stat-tasks">0</div><div class="stat-delta">2 in scadenza oggi</div></div>
+          <div class="stat-card"><div class="stat-label">Task aperti</div><div class="stat-value" id="stat-tasks">0</div><div class="stat-delta" id="stat-tasks-due-today">0 in scadenza oggi</div></div>
           <div class="stat-card"><div class="stat-label">Energia oggi</div><div class="stat-value" id="stat-energy">-</div><div class="stat-delta" id="stat-energy-sub">non rilevata</div></div>
         </div>
         <div class="card">
@@ -1557,6 +1557,25 @@ const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
 const DAY_ANALYSIS_DRAFT_PREFIX='filo_day_analysis_draft_';
 
 function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
+function isTodayDate(date){
+  if(!(date instanceof Date)||Number.isNaN(date.getTime()))return false;
+  const today=new Date();
+  return date.getFullYear()===today.getFullYear()&&date.getMonth()===today.getMonth()&&date.getDate()===today.getDate();
+}
+function parseTaskDueDate(scadenza){
+  const value=String(scadenza||'').trim();
+  if(!value)return null;
+  const lower=value.toLowerCase();
+  if(lower==='oggi')return new Date();
+  const isoDate=value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(isoDate)return new Date(Number(isoDate[1]),Number(isoDate[2])-1,Number(isoDate[3]));
+  const italianDate=value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(italianDate)return new Date(Number(italianDate[3]),Number(italianDate[2])-1,Number(italianDate[1]));
+  const parsed=new Date(value);
+  return Number.isNaN(parsed.getTime())?null:parsed;
+}
+function isTaskDueToday(task){return !task.done&&isTodayDate(parseTaskDueDate(task.scadenza));}
+function dueTodayLabel(count){return `${count} in scadenza oggi`;}
 function isPersistedTaskId(id){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id||''));}
 
 function getDayDraftStorageKey(){
@@ -2330,6 +2349,8 @@ function updateBadges(){
   if(inboxBadge){inboxBadge.textContent=unread;inboxBadge.dataset.count=String(inboxCount);}
   document.getElementById('stat-inbox').textContent=unread;
   document.getElementById('stat-tasks').textContent=open;
+  const dueToday=document.getElementById('stat-tasks-due-today');
+  if(dueToday)dueToday.textContent=dueTodayLabel(tasks.filter(isTaskDueToday).length);
   updateInboxSubtitle();
 }
 function updateInboxSubtitle(){const inboxCount=mailboxConnected?INBOX.length:0;const unread=mailboxConnected?INBOX.filter(i=>i.unread).length:0;PAGE_META.inbox[1]=mailboxConnected?`${inboxCount} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
