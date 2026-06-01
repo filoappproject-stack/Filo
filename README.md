@@ -79,7 +79,10 @@ Il percorso principale ora è:
 
 1. Filo chiede al backend un URL OAuth Google con callback sul dominio dell'app, ad esempio `https://filo-new.vercel.app/api/v1/auth/google/callback`.
 2. Google mostra il dominio dell'app nel selettore account, non il dominio tecnico Supabase.
-3. Il backend riceve il `code`, lo scambia con Google e rimanda il browser alla pagina Filo con l'`id_token` nel frammento URL (`#...`); il frontend crea subito la sessione Supabase con `signInWithIdToken`.
+3. Google richiama la callback backend con il `code`.
+4. Il backend mostra una piccola pagina di transizione brandizzata “Accesso a Filo...” invece di lasciare una schermata bianca.
+5. La pagina di transizione chiama `/api/v1/auth/google/exchange`, riceve l'`id_token` Google e rimanda il browser alla pagina Filo con il token nel frammento URL (`#...`).
+6. Il frontend crea subito la sessione Supabase con `signInWithIdToken`.
 
 Configurazione richiesta in Google Cloud:
 
