@@ -79,17 +79,11 @@ Per mostrare un'esperienza più gradevole e brandizzata:
 
 1. Crea/configura in Google Cloud un **OAuth Client ID Web** con nome applicazione/consent screen `Filo`.
 2. Aggiungi il dominio di produzione Filo tra le origini JavaScript autorizzate del client.
-3. Prima dello script applicativo, esponi il client ID nel frontend:
+3. Imposta `GOOGLE_CLIENT_ID` nel backend con quel Client ID: l'endpoint pubblico `/api/v1/health` lo espone al frontend come configurazione pubblica per Google Identity Services.
 
-```html
-<script>
-  window.FILO_CONFIG = {
-    googleSignInClientId: 'CLIENT_ID_GOOGLE_BRANDIZZATO.apps.googleusercontent.com'
-  };
-</script>
-```
+Quando `GOOGLE_CLIENT_ID` è presente, Filo prova prima Google Identity Services e completa la sessione con Supabase tramite ID token, evitando il passaggio visibile dal dominio tecnico Supabase. Se Google Identity Services non è disponibile o viene saltato dal browser, il codice mantiene il fallback Supabase OAuth per non bloccare l'accesso.
 
-Quando `googleSignInClientId` è presente, Filo prova prima Google Identity Services e completa la sessione con Supabase tramite ID token, evitando il passaggio visibile dal dominio tecnico Supabase. Se Google Identity Services non è disponibile o viene saltato dal browser, il codice mantiene il fallback Supabase OAuth per non bloccare l'accesso.
+In alternativa, se il frontend viene servito senza backend sullo stesso dominio, puoi ancora valorizzare manualmente `window.FILO_CONFIG.googleSignInClientId` prima dello script applicativo.
 
 ---
 
