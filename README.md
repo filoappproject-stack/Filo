@@ -71,6 +71,44 @@ Dettagli architetturali: [`docs/ARCHITETTURA.md`](docs/ARCHITETTURA.md).
 
 ---
 
+## Branding login Google
+
+Il login Google non usa più il redirect OAuth diretto di Supabase come percorso principale, perché la schermata account Google mostra il dominio del redirect; con il dominio tecnico Supabase compariva quindi `xkdniukhksfiuromnmtv.supabase.co`. Il codice non può modificare quel testo dentro la pagina Google: bisogna evitare quel dominio nel flusso OAuth.
+
+Il percorso principale ora è:
+
+1. Filo chiede al backend un URL OAuth Google con callback sul dominio dell'app, ad esempio `https://filo-new.vercel.app/api/v1/auth/google/callback`.
+2. Google mostra il dominio dell'app nel selettore account, non il dominio tecnico Supabase.
+3. Google richiama la callback backend con il `code`.
+4. Il backend mostra una piccola pagina di transizione brandizzata “Accesso a Filo...” invece di lasciare una schermata bianca.
+5. La pagina di transizione chiama `/api/v1/auth/google/exchange`, riceve l'`id_token` Google e rimanda il browser alla pagina Filo con il token nel frammento URL (`#...`).
+6. Il frontend crea subito la sessione Supabase con `signInWithIdToken`.
+
+Configurazione richiesta in Google Cloud:
+
+1. Usa il client OAuth web configurato in `GOOGLE_LOGIN_CLIENT_ID` / `GOOGLE_LOGIN_CLIENT_SECRET` per il login Google. Se queste variabili non sono valorizzate, il backend usa `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
+2. Il client usato per il login deve coincidere con il client Google configurato in Supabase Auth: l'`id_token` Google deve avere un audience accettato da Supabase, altrimenti `signInWithIdToken` rifiuta la sessione.
+3. Aggiungi tra gli **Authorized redirect URIs** la callback backend esatta, ad esempio `https://filo-new.vercel.app/api/v1/auth/google/callback`.
+4. Lascia configurati i redirect già usati per Gmail/Calendar, se presenti.
+
+Percorso facoltativo per il fallback Supabase:
+
+1. Configura un Custom Domain o Vanity Subdomain Supabase per il progetto, ad esempio `https://auth.filo.example`.
+2. Aggiungi in Google Cloud anche la callback OAuth del dominio brandizzato, ad esempio `https://auth.filo.example/auth/v1/callback`.
+3. Prima dello script applicativo, imposta l'URL Supabase brandizzato nel frontend:
+
+```html
+<script>
+  window.FILO_CONFIG = {
+    supabaseUrl: 'https://auth.filo.example'
+  };
+</script>
+```
+
+Così anche eventuali flussi Supabase Auth futuri non usano `xkdniukhksfiuromnmtv.supabase.co`.
+
+---
+
 ## Sviluppo locale frontend
 
 Il frontend attuale è ancora un singolo file HTML.
