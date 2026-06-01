@@ -778,6 +778,28 @@ function getRememberedGoogleLoginState(){
 function forgetGoogleLoginState(){
   removeCalendarTransient(GOOGLE_LOGIN_OAUTH_STATE_KEY);
 }
+function getUrlParamFromSearchOrHash(url,key){
+  const fromSearch = key === 'code' ? getQueryParamPreservePlus(url,key) : url.searchParams.get(key);
+  if (fromSearch) return fromSearch;
+  const hash = typeof url.hash === 'string' ? url.hash.replace(/^#/,'') : '';
+  if (!hash) return null;
+  const hashParams = new URLSearchParams(hash);
+  return hashParams.get(key);
+}
+function cleanGoogleLoginParams(url){
+  ['code','state','scope','authuser','prompt','iss','id_token','credential'].forEach((k) => url.searchParams.delete(k));
+  url.hash = '';
+  window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''));
+}
+async function signInToSupabaseWithGoogleIdToken(idToken){
+  const { data, error } = await supabaseClient.auth.signInWithIdToken({
+    provider: 'google',
+    token: idToken
+  });
+  if (error) throw error;
+  if (data?.user) loginSuccess(data.user);
+  return data;
+}
 
 function switchTab(tab) {
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
@@ -930,23 +952,31 @@ async function tryExchangeGoogleLoginCode() {
     return false;
   }
 
-  const code = getQueryParamPreservePlus(url,'code');
-  const state = url.searchParams.get('state');
-  const expectedState = getRememberedGoogleLoginState();
-  if (!code || !isGoogleLoginOauthState(state)) return false;
+  const state = getUrlParamFromSearchOrHash(url,'state');
+  if (!isGoogleLoginOauthState(state)) return false;
 
-  const cleanLoginParams = () => {
-    ['code','state','scope','authuser','prompt','iss'].forEach((k) => url.searchParams.delete(k));
-    window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash);
-  };
+  const code = getUrlParamFromSearchOrHash(url,'code');
+  const directIdToken = getUrlParamFromSearchOrHash(url,'id_token') || getUrlParamFromSearchOrHash(url,'credential');
+  const expectedState = getRememberedGoogleLoginState();
 
   if (!expectedState || expectedState !== state) {
-    cleanLoginParams();
+    cleanGoogleLoginParams(url);
     showError('Login Google non completato: stato OAuth non valido. Riprova.');
     return false;
   }
 
   try {
+    if (directIdToken) {
+      await signInToSupabaseWithGoogleIdToken(directIdToken);
+      forgetGoogleLoginState();
+      cleanGoogleLoginParams(url);
+      return true;
+    }
+
+    if (!code) {
+      throw new Error('Google non ha restituito il codice OAuth.');
+    }
+
     const res = await fetch('/api/v1/auth/google/exchange', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -960,20 +990,17 @@ async function tryExchangeGoogleLoginCode() {
     const idToken = payload?.data?.idToken;
     if (!idToken) throw new Error('ID token Google mancante');
 
-    const { error } = await supabaseClient.auth.signInWithIdToken({
-      provider: 'google',
-      token: idToken
-    });
-    if (error) throw error;
+    await signInToSupabaseWithGoogleIdToken(idToken);
 
     forgetGoogleLoginState();
-    cleanLoginParams();
+    cleanGoogleLoginParams(url);
     return true;
   } catch (err) {
+    const message = String(err?.message || err || '');
     console.warn('Exchange login Google fallito:', err);
     forgetGoogleLoginState();
-    cleanLoginParams();
-    showError('Login Google non completato. Riprova o accedi con email e password.');
+    cleanGoogleLoginParams(url);
+    showError(message ? `Login Google non completato: ${message}` : 'Login Google non completato. Riprova o accedi con email e password.');
     return false;
   }
 }

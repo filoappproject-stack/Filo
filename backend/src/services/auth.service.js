@@ -5,18 +5,21 @@ const GOOGLE_AUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_LOGIN_SCOPE = 'openid email profile';
 
-function requireGoogleLoginEnv() {
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+function getGoogleLoginClientConfig() {
+  const clientId = env.GOOGLE_LOGIN_CLIENT_ID || env.GOOGLE_CLIENT_ID;
+  const clientSecret = env.GOOGLE_LOGIN_CLIENT_SECRET || env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
     throw new HttpError(500, 'Config Google login mancante');
   }
+  return { clientId, clientSecret };
 }
 
 export function buildGoogleLoginAuthUrl({ redirectUri, state }) {
-  requireGoogleLoginEnv();
+  const { clientId } = getGoogleLoginClientConfig();
   if (!redirectUri) throw new HttpError(400, 'Redirect URI Google mancante');
 
   const params = new URLSearchParams({
-    client_id: env.GOOGLE_CLIENT_ID,
+    client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
     scope: GOOGLE_LOGIN_SCOPE,
@@ -32,7 +35,7 @@ export function buildGoogleLoginAuthUrl({ redirectUri, state }) {
 }
 
 export async function exchangeGoogleLoginCode({ code, redirectUri }) {
-  requireGoogleLoginEnv();
+  const { clientId, clientSecret } = getGoogleLoginClientConfig();
   if (!redirectUri) throw new HttpError(400, 'Redirect URI Google mancante');
 
   const response = await fetch(GOOGLE_TOKEN_URL, {
@@ -40,8 +43,8 @@ export async function exchangeGoogleLoginCode({ code, redirectUri }) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       code,
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
+      client_id: clientId,
+      client_secret: clientSecret,
       redirect_uri: redirectUri,
       grant_type: 'authorization_code'
     })
