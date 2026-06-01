@@ -46,6 +46,9 @@ export async function healthCheck(req, res) {
       hasAnthropicKey: Boolean(env.ANTHROPIC_API_KEY),
       model: env.ANTHROPIC_MODEL
     },
+    auth: {
+      googleSignInClientId: env.GOOGLE_CLIENT_ID || null
+    },
     quota
   });
 }

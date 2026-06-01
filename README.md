@@ -71,6 +71,22 @@ Dettagli architetturali: [`docs/ARCHITETTURA.md`](docs/ARCHITETTURA.md).
 
 ---
 
+## Branding login Google
+
+Il login Google principale usa Supabase Auth come fallback. Se il flusso OAuth passa direttamente da Supabase, Google può mostrare nel selettore account il dominio tecnico del progetto (`xkdniukhksfiuromnmtv.supabase.co`) perché è quello usato come redirect OAuth.
+
+Per mostrare un'esperienza più gradevole e brandizzata:
+
+1. Crea/configura in Google Cloud un **OAuth Client ID Web** con nome applicazione/consent screen `Filo`.
+2. Aggiungi il dominio di produzione Filo tra le origini JavaScript autorizzate del client.
+3. Imposta `GOOGLE_CLIENT_ID` nel backend con quel Client ID: l'endpoint pubblico `/api/v1/health` lo espone al frontend come configurazione pubblica per Google Identity Services.
+
+Quando `GOOGLE_CLIENT_ID` è presente, Filo prova prima Google Identity Services e completa la sessione con Supabase tramite ID token, evitando il passaggio visibile dal dominio tecnico Supabase. Se Google Identity Services non è disponibile o viene saltato dal browser, il codice mantiene il fallback Supabase OAuth per non bloccare l'accesso.
+
+In alternativa, se il frontend viene servito senza backend sullo stesso dominio, puoi ancora valorizzare manualmente `window.FILO_CONFIG.googleSignInClientId` prima dello script applicativo.
+
+---
+
 ## Sviluppo locale frontend
 
 Il frontend attuale è ancora un singolo file HTML.
