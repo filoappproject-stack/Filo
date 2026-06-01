@@ -1552,6 +1552,7 @@ const NOTES_BACKFILL_DONE_PREFIX='filo_notes_backfill_done_';
 const INBOX_CACHE_PREFIX='filo_inbox_cache_';
 const CALENDAR_CACHE_PREFIX='filo_calendar_cache_';
 const SUGGESTIONS_CACHE_PREFIX='filo_suggestions_cache_';
+const SUGGESTION_DISMISSALS_PREFIX='filo_suggestion_dismissals_';
 const SUGGESTIONS_CACHE_TTL_MS=72*60*60*1000;
 const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
 const DAY_ANALYSIS_DRAFT_PREFIX='filo_day_analysis_draft_';
@@ -1579,6 +1580,32 @@ function dueTodayLabel(count){return `${count} in scadenza oggi`;}
 function isPersistedTaskId(id){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id||''));}
 function normalizeSuggestionTaskTitle(title){return String(title||'').trim().replace(/\s+/g,' ').toLowerCase();}
 function isSuggestionTaskOpen(title){const normalized=normalizeSuggestionTaskTitle(title);return !!normalized&&tasks.some(t=>!t.done&&normalizeSuggestionTaskTitle(t.label)===normalized);}
+function loadDismissedSuggestionTitles(){
+  const key=getSuggestionDismissalsCacheKey();
+  if(!key)return [];
+  try{
+    const parsed=JSON.parse(localStorage.getItem(key)||'[]');
+    return Array.isArray(parsed)?parsed.map(normalizeSuggestionTaskTitle).filter(Boolean):[];
+  }catch(e){return [];}
+}
+function saveDismissedSuggestionTitles(titles){
+  const key=getSuggestionDismissalsCacheKey();
+  if(!key)return;
+  const unique=[...new Set((Array.isArray(titles)?titles:[]).map(normalizeSuggestionTaskTitle).filter(Boolean))];
+  try{localStorage.setItem(key,JSON.stringify(unique));}catch(e){}
+}
+function isSuggestionDismissed(title){const normalized=normalizeSuggestionTaskTitle(title);return !!normalized&&loadDismissedSuggestionTitles().includes(normalized);}
+function dismissSuggestionTitle(title){
+  const normalized=normalizeSuggestionTaskTitle(title);
+  if(!normalized)return;
+  const dismissed=loadDismissedSuggestionTitles();
+  if(!dismissed.includes(normalized))saveDismissedSuggestionTitles([...dismissed,normalized]);
+}
+function restoreSuggestionTitle(title){
+  const normalized=normalizeSuggestionTaskTitle(title);
+  if(!normalized)return;
+  saveDismissedSuggestionTitles(loadDismissedSuggestionTitles().filter(t=>t!==normalized));
+}
 function setSuggestionTaskButtonState(button,added){
   if(!button)return;
   button.textContent=added?'✓ Aggiunto':'+ Aggiungi ai task';
@@ -1588,8 +1615,19 @@ function setSuggestionTaskButtonState(button,added){
 function refreshSuggestionTaskButtons(){
   document.querySelectorAll('[data-suggestion-task-title]').forEach((button)=>{
     const title=button.getAttribute('data-suggestion-task-title')||'';
+    if(isSuggestionDismissed(title)){
+      button.closest('.sugg-card')?.remove();
+      return;
+    }
     setSuggestionTaskButtonState(button,isSuggestionTaskOpen(title));
   });
+  const container=document.getElementById('suggestions-container');
+  const nb=document.getElementById('nb-sugg');
+  if(container&&nb){
+    const visible=container.querySelectorAll('.sugg-card').length;
+    nb.textContent=String(visible);
+    if(visible===0)container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';
+  }
 }
 
 function getDayDraftStorageKey(){
@@ -1656,6 +1694,7 @@ function clearInboxMessages(){INBOX.length=0;inboxSelectedId=null;}
 
 function getCalendarCacheKey(userIdOverride=null){const uid=userIdOverride||currentUser?.id;return uid?`${CALENDAR_CACHE_PREFIX}${uid}`:null;}
 function getSuggestionsCacheKey(){return currentUser?.id?`${SUGGESTIONS_CACHE_PREFIX}${currentUser.id}`:null;}
+function getSuggestionDismissalsCacheKey(){return currentUser?.id?`${SUGGESTION_DISMISSALS_PREFIX}${currentUser.id}_${getCurrentLocalDayKey()}`:null;}
 function saveCalendarToCache(userIdOverride=null){
   const key=getCalendarCacheKey(userIdOverride);
   if(!key)return;
@@ -2518,6 +2557,7 @@ async function addTask() {
 }
 function addTaskFromSuggestion(titolo,button=null){
   const label=String(titolo||'Azione').trim()||'Azione';
+  restoreSuggestionTitle(label);
   if(!isSuggestionTaskOpen(label)){
     tasks.push({id:nextTaskId++,label,done:false,priorita:'urgente',scadenza:'Oggi'});
     saveTasksToCache();
@@ -2526,10 +2566,13 @@ function addTaskFromSuggestion(titolo,button=null){
   if(button)setSuggestionTaskButtonState(button,true);
   showPage('task',document.querySelectorAll('.nav-item')[3]);
 }
-function toggleTask(id){const idKey=String(id);const t=tasks.find(t=>String(t.id)===idKey);if(t){if(!t.done)recordTaskPostponed(t);else{t.done=false;saveTasksToCache();renderTasks();return;}t.done=true;recordTaskCompleted(t);}saveTasksToCache();renderTasks();}
+function toggleTask(id){const idKey=String(id);const t=tasks.find(t=>String(t.id)===idKey);if(t){if(!t.done)recordTaskPostponed(t);else{t.done=false;restoreSuggestionTitle(t.label);saveTasksToCache();renderTasks();return;}t.done=true;dismissSuggestionTitle(t.label);recordTaskCompleted(t);}saveTasksToCache();renderTasks();}
 async function deleteTask(id){
   const idKey=String(id);
   const previous=tasks.slice();
+  const removed=tasks.find(t=>String(t.id)===idKey);
+  const wasSuggestionDismissed=removed?isSuggestionDismissed(removed.label):false;
+  if(removed)dismissSuggestionTitle(removed.label);
   tasks=tasks.filter(t=>String(t.id)!==idKey);
   saveTasksToCache();
   renderTasks();
@@ -2547,11 +2590,13 @@ async function deleteTask(id){
     const txt=await res.text().catch(()=> '');
     console.warn(`DELETE /tasks/${idKey} fallita (${res.status}):`,txt);
     tasks=previous;
+    if(removed&&!wasSuggestionDismissed)restoreSuggestionTitle(removed.label);
     saveTasksToCache();
     renderTasks();
   }catch(err){
     console.warn('Errore delete task su backend:',err);
     tasks=previous;
+    if(removed&&!wasSuggestionDismissed)restoreSuggestionTitle(removed.label);
     saveTasksToCache();
     renderTasks();
   }
@@ -2840,11 +2885,13 @@ function setSuggestionsUpdatedAtLabel(updatedAt,source='live'){
   el.style.display='';
 }
 function renderDaySuggestions(suggestions,options={}){
-  const enrichedSuggestions=ensureCelebrationSuggestion(suggestions);
+  const enrichedSuggestions=ensureCelebrationSuggestion(suggestions).filter(s=>!isSuggestionDismissed(s?.titolo));
   const container=document.getElementById('suggestions-container');
   if(!container)return;
   if(!Array.isArray(enrichedSuggestions)||!enrichedSuggestions.length){
     container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';
+    const nb=document.getElementById('nb-sugg');
+    if(nb){nb.textContent='0';nb.style.display='';}
     const updatedEl=document.getElementById('suggestions-updated-at');
     if(updatedEl){updatedEl.style.display='none';updatedEl.textContent='';}
     return;
