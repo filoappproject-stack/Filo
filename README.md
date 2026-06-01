@@ -73,11 +73,21 @@ Dettagli architetturali: [`docs/ARCHITETTURA.md`](docs/ARCHITETTURA.md).
 
 ## Branding login Google
 
-Il login Google principale usa Supabase Auth come fallback. Se il flusso OAuth passa direttamente da Supabase, Google può mostrare nel selettore account il dominio tecnico del progetto (`xkdniukhksfiuromnmtv.supabase.co`) perché è quello usato come redirect OAuth. Il codice non può modificare quel testo dentro la pagina Google: per renderlo leggibile bisogna evitare il dominio tecnico nel flusso OAuth.
+Il login Google non usa più il redirect OAuth diretto di Supabase come percorso principale, perché la schermata account Google mostra il dominio del redirect; con il dominio tecnico Supabase compariva quindi `xkdniukhksfiuromnmtv.supabase.co`. Il codice non può modificare quel testo dentro la pagina Google: bisogna evitare quel dominio nel flusso OAuth.
 
-Ci sono due percorsi supportati:
+Il percorso principale ora è:
 
-### Percorso consigliato: dominio Supabase brandizzato
+1. Filo chiede al backend un URL OAuth Google con `redirect_uri` sul dominio dell'app, ad esempio `https://filo-new.vercel.app/`.
+2. Google mostra il dominio dell'app nel selettore account, non il dominio tecnico Supabase.
+3. Al ritorno, il backend scambia il `code` con Google, restituisce l'`id_token` al frontend e il frontend crea la sessione Supabase con `signInWithIdToken`.
+
+Configurazione richiesta in Google Cloud:
+
+1. Usa il client OAuth web configurato in `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
+2. Aggiungi tra gli **Authorized redirect URIs** l'URL pubblico esatto dell'app usato dal frontend, ad esempio `https://filo-new.vercel.app/`.
+3. Lascia configurati i redirect già usati per Gmail/Calendar, se presenti.
+
+Percorso facoltativo per il fallback Supabase:
 
 1. Configura un Custom Domain o Vanity Subdomain Supabase per il progetto, ad esempio `https://auth.filo.example`.
 2. Aggiungi in Google Cloud anche la callback OAuth del dominio brandizzato, ad esempio `https://auth.filo.example/auth/v1/callback`.
@@ -91,19 +101,7 @@ Ci sono due percorsi supportati:
 </script>
 ```
 
-Così anche l'eventuale fallback Supabase non usa più `xkdniukhksfiuromnmtv.supabase.co`.
-
-### Percorso alternativo: Google Identity Services
-
-1. Crea in Google Cloud un **OAuth Client ID Web dedicato al login frontend** con nome applicazione/consent screen `Filo`.
-2. Aggiungi l'origine pubblica esatta dell'app tra le **Authorized JavaScript origins** del client, ad esempio `https://filo-new.vercel.app`. Senza questa origine Google mostra `Errore 401: invalid_client · no registered origin`.
-3. Imposta `GOOGLE_SIGN_IN_CLIENT_ID` nel backend con quel Client ID dedicato: l'endpoint pubblico `/api/v1/health` lo espone al frontend come configurazione pubblica per Google Identity Services.
-
-`GOOGLE_CLIENT_ID` resta riservato ai flussi backend per Gmail/Calendar e non viene più riutilizzato per il login frontend, perché può non avere l'origine JavaScript autorizzata.
-
-Quando `GOOGLE_SIGN_IN_CLIENT_ID` è presente e valido per il dominio corrente, Filo prova prima Google Identity Services e completa la sessione con Supabase tramite ID token, evitando il passaggio visibile dal dominio tecnico Supabase. Se Google Identity Services è configurato ma non disponibile, Filo mostra un errore interno invece di aprire automaticamente il fallback Supabase con il dominio tecnico poco leggibile.
-
-In alternativa, se il frontend viene servito senza backend sullo stesso dominio, puoi ancora valorizzare manualmente `window.FILO_CONFIG.googleSignInClientId` prima dello script applicativo.
+Così anche eventuali flussi Supabase Auth futuri non usano `xkdniukhksfiuromnmtv.supabase.co`.
 
 ---
 
