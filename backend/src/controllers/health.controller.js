@@ -47,7 +47,7 @@ export async function healthCheck(req, res) {
       model: env.ANTHROPIC_MODEL
     },
     auth: {
-      googleSignInClientId: env.GOOGLE_CLIENT_ID || null
+      googleSignInClientId: env.GOOGLE_SIGN_IN_CLIENT_ID || null
     },
     quota
   });

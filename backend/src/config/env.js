@@ -12,6 +12,7 @@ const EnvSchema = z.object({
   SUPABASE_ANON_KEY: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_SIGN_IN_CLIENT_ID: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().url().optional(),
   GOOGLE_OAUTH_TEST_USERS: z.string().optional().default(''),
   AI_ENABLED: z.preprocess((value) => {
