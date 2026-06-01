@@ -77,17 +77,16 @@ Il login Google non usa più il redirect OAuth diretto di Supabase come percorso
 
 Il percorso principale ora è:
 
-1. Filo chiede al backend un URL OpenID Connect Google con `redirect_uri` sul dominio dell'app, ad esempio `https://filo-new.vercel.app/`.
+1. Filo chiede al backend un URL OAuth Google con callback sul dominio dell'app, ad esempio `https://filo-new.vercel.app/api/v1/auth/google/callback`.
 2. Google mostra il dominio dell'app nel selettore account, non il dominio tecnico Supabase.
-3. Al ritorno, Google restituisce un `id_token` nel frammento URL (`#...`) e il frontend crea subito la sessione Supabase con `signInWithIdToken`. L'endpoint backend di exchange rimane come fallback diagnostico se Google restituisce un `code`.
+3. Il backend riceve il `code`, lo scambia con Google e rimanda il browser alla pagina Filo con l'`id_token` nel frammento URL (`#...`); il frontend crea subito la sessione Supabase con `signInWithIdToken`.
 
 Configurazione richiesta in Google Cloud:
 
 1. Usa il client OAuth web configurato in `GOOGLE_LOGIN_CLIENT_ID` / `GOOGLE_LOGIN_CLIENT_SECRET` per il login Google. Se queste variabili non sono valorizzate, il backend usa `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 2. Il client usato per il login deve coincidere con il client Google configurato in Supabase Auth: l'`id_token` Google deve avere un audience accettato da Supabase, altrimenti `signInWithIdToken` rifiuta la sessione.
-3. Aggiungi tra gli **Authorized redirect URIs** l'URL pubblico esatto dell'app usato dal frontend, ad esempio `https://filo-new.vercel.app/`.
-4. Aggiungi anche l'origine pubblica, ad esempio `https://filo-new.vercel.app`, tra le **Authorized JavaScript origins** dello stesso client.
-5. Lascia configurati i redirect già usati per Gmail/Calendar, se presenti.
+3. Aggiungi tra gli **Authorized redirect URIs** la callback backend esatta, ad esempio `https://filo-new.vercel.app/api/v1/auth/google/callback`.
+4. Lascia configurati i redirect già usati per Gmail/Calendar, se presenti.
 
 Percorso facoltativo per il fallback Supabase:
 

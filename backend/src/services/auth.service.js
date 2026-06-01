@@ -14,24 +14,45 @@ function getGoogleLoginClientConfig() {
   return { clientId, clientSecret };
 }
 
+function encodeStatePayload(payload) {
+  return Buffer.from(JSON.stringify(payload)).toString('base64url');
+}
+
+export function decodeStatePayload(state) {
+  try {
+    const decoded = JSON.parse(Buffer.from(String(state || ''), 'base64url').toString('utf8'));
+    if (!decoded || typeof decoded !== 'object') return null;
+    return decoded;
+  } catch (_) {
+    return null;
+  }
+}
+
+export function getGoogleLoginCallbackRedirectUri(appRedirectUri) {
+  if (!appRedirectUri) throw new HttpError(400, 'Redirect URI app mancante');
+  return new URL('/api/v1/auth/google/callback', appRedirectUri).toString();
+}
+
 export function buildGoogleLoginAuthUrl({ redirectUri, state }) {
   const { clientId } = getGoogleLoginClientConfig();
   if (!redirectUri) throw new HttpError(400, 'Redirect URI Google mancante');
 
+  const callbackRedirectUri = getGoogleLoginCallbackRedirectUri(redirectUri);
+  const callbackState = encodeStatePayload({ appRedirectUri: redirectUri, appState: state });
+
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: 'id_token',
-    response_mode: 'fragment',
+    redirect_uri: callbackRedirectUri,
+    response_type: 'code',
     scope: GOOGLE_LOGIN_SCOPE,
+    include_granted_scopes: 'true',
     prompt: 'select_account',
-    nonce: state,
-    state
+    state: callbackState
   });
 
   return {
     authUrl: `${GOOGLE_AUTH_BASE}?${params.toString()}`,
-    redirectUri
+    redirectUri: callbackRedirectUri
   };
 }
 

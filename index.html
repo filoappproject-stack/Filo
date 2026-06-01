@@ -971,8 +971,10 @@ async function tryExchangeGoogleLoginCode() {
 
   const code = getUrlParamFromSearchOrHash(url,'code');
   const directIdToken = getUrlParamFromSearchOrHash(url,'id_token') || getUrlParamFromSearchOrHash(url,'credential');
+  const callbackError = getUrlParamFromSearchOrHash(url,'error');
+  const callbackErrorDescription = getUrlParamFromSearchOrHash(url,'error_description');
   const expectedState = getRememberedGoogleLoginState();
-  setGoogleLoginDiagnostic('callback_received',{hasCode:!!code,hasDirectIdToken:!!directIdToken,state,expectedStateFound:!!expectedState,search:window.location.search,hash:window.location.hash});
+  setGoogleLoginDiagnostic('callback_received',{hasCode:!!code,hasDirectIdToken:!!directIdToken,hasError:!!callbackError,state,expectedStateFound:!!expectedState,search:window.location.search,hash:window.location.hash});
 
   if (!expectedState || expectedState !== state) {
     cleanGoogleLoginParams(url);
@@ -981,6 +983,10 @@ async function tryExchangeGoogleLoginCode() {
   }
 
   try {
+    if (callbackError) {
+      throw new Error(callbackErrorDescription || callbackError);
+    }
+
     if (directIdToken) {
       await signInToSupabaseWithGoogleIdToken(directIdToken);
       setGoogleLoginDiagnostic('signin_success',{mode:'direct_id_token'});
@@ -1017,7 +1023,7 @@ async function tryExchangeGoogleLoginCode() {
     console.warn('Exchange login Google fallito:', err);
     forgetGoogleLoginState();
     cleanGoogleLoginParams(url);
-    setGoogleLoginDiagnostic('exchange_failed',{message,hasCode:!!code,hasDirectIdToken:!!directIdToken,state});
+    setGoogleLoginDiagnostic('exchange_failed',{message,hasCode:!!code,hasDirectIdToken:!!directIdToken,hasError:!!callbackError,state});
     setPendingLoginError(message ? `Login Google non completato: ${message}` : 'Login Google non completato. Riprova o accedi con email e password.');
     return false;
   }
