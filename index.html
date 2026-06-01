@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="UTF-8">
@@ -619,8 +619,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 
 <script>
 // â”€â”€ SUPABASE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const SUPABASE_URL = 'https://xkdniukhksfiuromnmtv.supabase.co';
+const SUPABASE_URL = window.FILO_CONFIG?.supabaseUrl || 'https://xkdniukhksfiuromnmtv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_UdRD3JHIa14slQ_0ltkNTA_0Xkdkfn4';
+// Il login Google usa un OAuth diretto verso il dominio dell'app e poi crea la sessione Supabase
+// con l'ID token Google, evitando il selettore account sul dominio tecnico Supabase.
+const GOOGLE_LOGIN_OAUTH_STATE_KEY = 'filo_google_login_oauth_state';
+const GOOGLE_LOGIN_BUTTON_HTML = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/><path d="M3.964 10.706A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>Continua con Google';
 const INBOX_OAUTH_QUERY_STORAGE_KEY = 'filo_inbox_oauth_query_payload';
 const MAILBOX_REDIRECT_URI_KEY = 'filo_inbox_redirect_uri';
 const CALENDAR_OAUTH_QUERY_STORAGE_KEY = 'filo_calendar_oauth_query_payload';
@@ -761,7 +765,9 @@ let lastAuthenticatedUserId = null;
 const handledInboxOAuthCodes = new Set();
 const handledCalendarOAuthCodes = new Set();
 
-
+function getGoogleLoginStatePrefix(){return 'login:';}
+function isGoogleLoginOauthState(state){return typeof state==='string'&&state.startsWith(getGoogleLoginStatePrefix());}
+function getGoogleLoginRedirectUri(){return `${window.location.origin}${window.location.pathname}`;}
 
 function switchTab(tab) {
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
@@ -813,21 +819,40 @@ async function doRegister() {
   else showSuccess('Account creato! Controlla la tua email per confermare la registrazione.');
 }
 
+function resetGoogleLoginButton() {
+  const btn = document.getElementById('btn-google');
+  if (!btn) return;
+  btn.innerHTML = GOOGLE_LOGIN_BUTTON_HTML;
+  btn.disabled = false;
+}
+
 async function doGoogleLogin() {
   const btn = document.getElementById('btn-google');
   btn.innerHTML = '<span class="spinning">↻</span> Connessione a Google...';
   btn.disabled = true;
-  const { error } = await supabaseClient.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: window.location.origin,
-      scopes: 'openid email profile'
+
+  try {
+    const state = `${getGoogleLoginStatePrefix()}${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    const redirectUri = getGoogleLoginRedirectUri();
+    sessionStorage.setItem(GOOGLE_LOGIN_OAUTH_STATE_KEY, state);
+
+    const res = await fetch('/api/v1/auth/google/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ redirectUri, state })
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(txt || `HTTP ${res.status}`);
     }
-  });
-  if (error) {
-    showError('Errore durante il login con Google.');
-    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/><path d="M3.964 10.706A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>Continua con Google';
-    btn.disabled = false;
+    const payload = await res.json();
+    const authUrl = payload?.data?.authUrl;
+    if (!authUrl) throw new Error('URL login Google mancante');
+    window.location.assign(authUrl);
+  } catch (err) {
+    console.warn('Errore avvio login Google:', err);
+    showError('Login Google temporaneamente non disponibile. Puoi accedere con email e password.');
+    resetGoogleLoginButton();
   }
 }
 
@@ -855,6 +880,11 @@ function handleSupabaseAuthErrorInQuery() {
   const authError = url.searchParams.get('error');
   if (!authError) return false;
 
+  const state = url.searchParams.get('state');
+  if (isGoogleLoginOauthState(state)) {
+    sessionStorage.removeItem(GOOGLE_LOGIN_OAUTH_STATE_KEY);
+  }
+
   const rawDescription = url.searchParams.get('error_description') || '';
   let authDescription = rawDescription;
   try {
@@ -868,7 +898,7 @@ function handleSupabaseAuthErrorInQuery() {
     showError(authDescription ? `Login Google non completato: ${authDescription}` : 'Login Google non completato. Riprova.');
   }
 
-  ['error', 'error_code', 'error_description', 'code', 'state'].forEach((key) => {
+  ['error', 'error_code', 'error_description', 'code', 'state', 'scope', 'authuser', 'prompt', 'iss'].forEach((key) => {
     url.searchParams.delete(key);
   });
 
@@ -878,6 +908,62 @@ function handleSupabaseAuthErrorInQuery() {
     url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '')
   );
   return true;
+}
+
+async function tryExchangeGoogleLoginCode() {
+  let url;
+  try {
+    url = new URL(window.location.href);
+  } catch (e) {
+    return false;
+  }
+
+  const code = getQueryParamPreservePlus(url,'code');
+  const state = url.searchParams.get('state');
+  const expectedState = sessionStorage.getItem(GOOGLE_LOGIN_OAUTH_STATE_KEY);
+  if (!code || !isGoogleLoginOauthState(state)) return false;
+
+  const cleanLoginParams = () => {
+    ['code','state','scope','authuser','prompt','iss'].forEach((k) => url.searchParams.delete(k));
+    window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash);
+  };
+
+  if (!expectedState || expectedState !== state) {
+    cleanLoginParams();
+    showError('Login Google non completato: stato OAuth non valido. Riprova.');
+    return false;
+  }
+
+  try {
+    const res = await fetch('/api/v1/auth/google/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, redirectUri: getGoogleLoginRedirectUri() })
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(txt || `HTTP ${res.status}`);
+    }
+    const payload = await res.json();
+    const idToken = payload?.data?.idToken;
+    if (!idToken) throw new Error('ID token Google mancante');
+
+    const { error } = await supabaseClient.auth.signInWithIdToken({
+      provider: 'google',
+      token: idToken
+    });
+    if (error) throw error;
+
+    sessionStorage.removeItem(GOOGLE_LOGIN_OAUTH_STATE_KEY);
+    cleanLoginParams();
+    return true;
+  } catch (err) {
+    console.warn('Exchange login Google fallito:', err);
+    sessionStorage.removeItem(GOOGLE_LOGIN_OAUTH_STATE_KEY);
+    cleanLoginParams();
+    showError('Login Google non completato. Riprova o accedi con email e password.');
+    return false;
+  }
 }
 
 async function tryExchangeSupabaseCodeSession() {
@@ -3029,6 +3115,7 @@ async function init() {
   }
   window.addEventListener('pageshow',handleCalendarOAuthPageShow);
 
+  await tryExchangeGoogleLoginCode();
   await tryExchangeSupabaseCodeSession();
   await trySetSupabaseSessionFromHash();
   handleSupabaseAuthErrorInQuery();
