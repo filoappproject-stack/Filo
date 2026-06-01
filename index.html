@@ -1577,6 +1577,20 @@ function parseTaskDueDate(scadenza){
 function isTaskDueToday(task){return !task.done&&isTodayDate(parseTaskDueDate(task.scadenza));}
 function dueTodayLabel(count){return `${count} in scadenza oggi`;}
 function isPersistedTaskId(id){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id||''));}
+function normalizeSuggestionTaskTitle(title){return String(title||'').trim().replace(/\s+/g,' ').toLowerCase();}
+function isSuggestionTaskOpen(title){const normalized=normalizeSuggestionTaskTitle(title);return !!normalized&&tasks.some(t=>!t.done&&normalizeSuggestionTaskTitle(t.label)===normalized);}
+function setSuggestionTaskButtonState(button,added){
+  if(!button)return;
+  button.textContent=added?'✓ Aggiunto':'+ Aggiungi ai task';
+  button.style.color=added?'#0E6B4A':'#6F6A61';
+  button.setAttribute('aria-pressed',added?'true':'false');
+}
+function refreshSuggestionTaskButtons(){
+  document.querySelectorAll('[data-suggestion-task-title]').forEach((button)=>{
+    const title=button.getAttribute('data-suggestion-task-title')||'';
+    setSuggestionTaskButtonState(button,isSuggestionTaskOpen(title));
+  });
+}
 
 function getDayDraftStorageKey(){
   if(!currentUser?.id)return null;
@@ -2331,7 +2345,7 @@ function renderCalendar(){
     document.getElementById('page-sub').textContent=PAGE_META.calendario[1];
   }
 }
-function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filter(t=>t.done);const ol=document.getElementById('open-tasks-list');const dl=document.getElementById('done-tasks-list');const dc=document.getElementById('done-tasks-card');if(!ol)return;document.getElementById('open-tasks-label').textContent=`Aperti (${open.length})`;ol.innerHTML=open.length===0?'<div style="font-size:13px;color:#57534A;padding:8px 0;font-style:italic;">Nessun task aperto!</div>':open.map(t=>`<div class="task-row"><div class="checkbox" onclick="toggleTask('${String(t.id).replace(/'/g,"\\'")}')"></div><span style="font-size:13px;flex:1;">${t.label}</span>${t.scadenza?`<span style="font-size:11px;color:#57534A;">${t.scadenza}</span>`:''} ${prioritaBadge(t.priorita)}<button class="btn-icon" onclick="deleteTask('${String(t.id).replace(/'/g,"\\'")}')">✕</button></div>`).join('');if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>`<div class="task-row"><div class="checkbox done" onclick="toggleTask('${String(t.id).replace(/'/g,"\\'")}')"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div><span style="font-size:13px;flex:1;color:#57534A;text-decoration:line-through;">${t.label}</span><button class="btn-icon" onclick="deleteTask('${String(t.id).replace(/'/g,"\\'")}')">✕</button></div>`).join('');}else dc.style.display='none';updateTaskSubtitle();updateBadges();}
+function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filter(t=>t.done);const ol=document.getElementById('open-tasks-list');const dl=document.getElementById('done-tasks-list');const dc=document.getElementById('done-tasks-card');if(!ol)return;document.getElementById('open-tasks-label').textContent=`Aperti (${open.length})`;ol.innerHTML=open.length===0?'<div style="font-size:13px;color:#57534A;padding:8px 0;font-style:italic;">Nessun task aperto!</div>':open.map(t=>`<div class="task-row"><div class="checkbox" onclick="toggleTask('${String(t.id).replace(/'/g,"\\'")}')"></div><span style="font-size:13px;flex:1;">${t.label}</span>${t.scadenza?`<span style="font-size:11px;color:#57534A;">${t.scadenza}</span>`:''} ${prioritaBadge(t.priorita)}<button class="btn-icon" onclick="deleteTask('${String(t.id).replace(/'/g,"\\'")}')">✕</button></div>`).join('');if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>`<div class="task-row"><div class="checkbox done" onclick="toggleTask('${String(t.id).replace(/'/g,"\\'")}')"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div><span style="font-size:13px;flex:1;color:#57534A;text-decoration:line-through;">${t.label}</span><button class="btn-icon" onclick="deleteTask('${String(t.id).replace(/'/g,"\\'")}')">✕</button></div>`).join('');}else dc.style.display='none';updateTaskSubtitle();updateBadges();refreshSuggestionTaskButtons();}
 function renderNotes(){const el=document.getElementById('notes-container');if(!el)return;if(!notes.length){el.innerHTML='<div class="empty-state"><div class="empty-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#57534A" stroke-width="1.4"><rect x="3" y="2" width="14" height="16" rx="2"/><line x1="7" y1="7" x2="13" y2="7"/><line x1="7" y1="10" x2="13" y2="10"/><line x1="7" y1="13" x2="10" y2="13"/></svg></div><div class="empty-title">Nessuna nota ancora</div></div>';return;}el.innerHTML=notes.map(n=>`<div class="note-card" onclick="openNoteEditor('${String(n.id).replace(/'/g,"\\'")}')"><div style="font-size:14px;font-weight:500;margin-bottom:4px;">${n.title}</div><div style="font-size:12px;color:#6B6860;line-height:1.5;margin-bottom:8px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${n.body}</div><div style="display:flex;gap:5px;">${n.tags.map((t,j)=>tagBadge(t,j)).join('')}</div></div>`).join('');}
 function updateBadges(){
   const open=tasks.filter(t=>!t.done).length;
@@ -2502,7 +2516,16 @@ async function addTask() {
   document.getElementById('new-task-scad').value = '';
   toggleTaskForm();
 }
-function addTaskFromSuggestion(titolo){tasks.push({id:nextTaskId++,label:titolo,done:false,priorita:'urgente',scadenza:'Oggi'});saveTasksToCache();renderTasks();showPage('task',document.querySelectorAll('.nav-item')[3]);}
+function addTaskFromSuggestion(titolo,button=null){
+  const label=String(titolo||'Azione').trim()||'Azione';
+  if(!isSuggestionTaskOpen(label)){
+    tasks.push({id:nextTaskId++,label,done:false,priorita:'urgente',scadenza:'Oggi'});
+    saveTasksToCache();
+  }
+  renderTasks();
+  if(button)setSuggestionTaskButtonState(button,true);
+  showPage('task',document.querySelectorAll('.nav-item')[3]);
+}
 function toggleTask(id){const idKey=String(id);const t=tasks.find(t=>String(t.id)===idKey);if(t){if(!t.done)recordTaskPostponed(t);else{t.done=false;saveTasksToCache();renderTasks();return;}t.done=true;recordTaskCompleted(t);}saveTasksToCache();renderTasks();}
 async function deleteTask(id){
   const idKey=String(id);
@@ -2831,7 +2854,12 @@ function renderDaySuggestions(suggestions,options={}){
   nb.style.display='';
   const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};
   const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
-  container.innerHTML=enrichedSuggestions.map((s,i)=>`<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(s.titolo||'Azione')}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${String(s.titolo||'Azione').replace(/'/g,"\\'")}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button onclick="addTaskFromSuggestion('${String(s.titolo||'Azione').replace(/'/g,"\\'")}');this.textContent='✓ Aggiunto';this.style.color='#0E6B4A';" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#6F6A61;cursor:pointer;">+ Aggiungi ai task</button></div></div>`).join('');
+  container.innerHTML=enrichedSuggestions.map((s,i)=>{
+    const title=String(s.titolo||'Azione');
+    const titleForHandler=title.replace(/'/g,"\\'");
+    const added=isSuggestionTaskOpen(title);
+    return `<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(title)}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${titleForHandler}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'#1A4FBF':'transparent'};color:${j===0?'#fff':'#6B6860'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button data-suggestion-task-title="${escapeHtml(title)}" aria-pressed="${added?'true':'false'}" onclick="addTaskFromSuggestion('${titleForHandler}',this)" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:${added?'#0E6B4A':'#6F6A61'};cursor:pointer;">${added?'✓ Aggiunto':'+ Aggiungi ai task'}</button></div></div>`;
+  }).join('');
   const shouldPersist=options?.persist!==false;
   if(shouldPersist)saveSuggestionsToCache(suggestions);
   setSuggestionsUpdatedAtLabel(options?.updatedAt||(shouldPersist?new Date().toISOString():null),options?.source||'live');
