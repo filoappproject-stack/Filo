@@ -77,16 +77,17 @@ Il login Google non usa più il redirect OAuth diretto di Supabase come percorso
 
 Il percorso principale ora è:
 
-1. Filo chiede al backend un URL OAuth Google con `redirect_uri` sul dominio dell'app, ad esempio `https://filo-new.vercel.app/`.
+1. Filo chiede al backend un URL OpenID Connect Google con `redirect_uri` sul dominio dell'app, ad esempio `https://filo-new.vercel.app/`.
 2. Google mostra il dominio dell'app nel selettore account, non il dominio tecnico Supabase.
-3. Al ritorno, il backend scambia il `code` con Google, restituisce l'`id_token` al frontend e il frontend crea la sessione Supabase con `signInWithIdToken`.
+3. Al ritorno, Google restituisce un `id_token` nel frammento URL (`#...`) e il frontend crea subito la sessione Supabase con `signInWithIdToken`. L'endpoint backend di exchange rimane come fallback diagnostico se Google restituisce un `code`.
 
 Configurazione richiesta in Google Cloud:
 
 1. Usa il client OAuth web configurato in `GOOGLE_LOGIN_CLIENT_ID` / `GOOGLE_LOGIN_CLIENT_SECRET` per il login Google. Se queste variabili non sono valorizzate, il backend usa `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 2. Il client usato per il login deve coincidere con il client Google configurato in Supabase Auth: l'`id_token` Google deve avere un audience accettato da Supabase, altrimenti `signInWithIdToken` rifiuta la sessione.
 3. Aggiungi tra gli **Authorized redirect URIs** l'URL pubblico esatto dell'app usato dal frontend, ad esempio `https://filo-new.vercel.app/`.
-4. Lascia configurati i redirect già usati per Gmail/Calendar, se presenti.
+4. Aggiungi anche l'origine pubblica, ad esempio `https://filo-new.vercel.app`, tra le **Authorized JavaScript origins** dello stesso client.
+5. Lascia configurati i redirect già usati per Gmail/Calendar, se presenti.
 
 Percorso facoltativo per il fallback Supabase:
 

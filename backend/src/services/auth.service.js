@@ -21,10 +21,11 @@ export function buildGoogleLoginAuthUrl({ redirectUri, state }) {
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
-    response_type: 'code',
+    response_type: 'id_token',
+    response_mode: 'fragment',
     scope: GOOGLE_LOGIN_SCOPE,
-    include_granted_scopes: 'true',
     prompt: 'select_account',
+    nonce: state,
     state
   });
 
