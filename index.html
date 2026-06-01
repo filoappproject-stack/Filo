@@ -769,6 +769,15 @@ const handledCalendarOAuthCodes = new Set();
 function getGoogleLoginStatePrefix(){return 'login:';}
 function isGoogleLoginOauthState(state){return typeof state==='string'&&state.startsWith(getGoogleLoginStatePrefix());}
 function getGoogleLoginRedirectUri(){return `${window.location.origin}${window.location.pathname}`;}
+function rememberGoogleLoginState(state){
+  setCalendarTransient(GOOGLE_LOGIN_OAUTH_STATE_KEY,state);
+}
+function getRememberedGoogleLoginState(){
+  return getCalendarTransient(GOOGLE_LOGIN_OAUTH_STATE_KEY);
+}
+function forgetGoogleLoginState(){
+  removeCalendarTransient(GOOGLE_LOGIN_OAUTH_STATE_KEY);
+}
 
 function switchTab(tab) {
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
@@ -835,7 +844,7 @@ async function doGoogleLogin() {
   try {
     const state = `${getGoogleLoginStatePrefix()}${Date.now()}:${Math.random().toString(36).slice(2)}`;
     const redirectUri = getGoogleLoginRedirectUri();
-    sessionStorage.setItem(GOOGLE_LOGIN_OAUTH_STATE_KEY, state);
+    rememberGoogleLoginState(state);
 
     const res = await fetch('/api/v1/auth/google/connect', {
       method: 'POST',
@@ -885,7 +894,7 @@ function handleSupabaseAuthErrorInQuery() {
 
   const state = url.searchParams.get('state');
   if (isGoogleLoginOauthState(state)) {
-    sessionStorage.removeItem(GOOGLE_LOGIN_OAUTH_STATE_KEY);
+    forgetGoogleLoginState();
   }
 
   const rawDescription = url.searchParams.get('error_description') || '';
@@ -923,7 +932,7 @@ async function tryExchangeGoogleLoginCode() {
 
   const code = getQueryParamPreservePlus(url,'code');
   const state = url.searchParams.get('state');
-  const expectedState = sessionStorage.getItem(GOOGLE_LOGIN_OAUTH_STATE_KEY);
+  const expectedState = getRememberedGoogleLoginState();
   if (!code || !isGoogleLoginOauthState(state)) return false;
 
   const cleanLoginParams = () => {
@@ -957,12 +966,12 @@ async function tryExchangeGoogleLoginCode() {
     });
     if (error) throw error;
 
-    sessionStorage.removeItem(GOOGLE_LOGIN_OAUTH_STATE_KEY);
+    forgetGoogleLoginState();
     cleanLoginParams();
     return true;
   } catch (err) {
     console.warn('Exchange login Google fallito:', err);
-    sessionStorage.removeItem(GOOGLE_LOGIN_OAUTH_STATE_KEY);
+    forgetGoogleLoginState();
     cleanLoginParams();
     showError('Login Google non completato. Riprova o accedi con email e password.');
     return false;
