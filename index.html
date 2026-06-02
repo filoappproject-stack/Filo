@@ -133,6 +133,9 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 .task-card{background:#F7F5F0;border:1px solid rgba(0,0,0,0.06);border-radius:12px;padding:11px 12px;margin-bottom:9px;}
 .task-card-title{font-size:13px;font-weight:500;color:#1A1A18;line-height:1.4;margin-bottom:6px;}
 .task-card-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;}
+.task-list-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.task-list-section{font-size:11px;font-weight:600;color:#6B6860;text-transform:uppercase;letter-spacing:.06em;padding:10px 0 4px;}
+.task-list-section:first-child{padding-top:0;}
 .reminder-toast{position:fixed;right:22px;bottom:22px;width:min(360px,calc(100vw - 44px));background:#fff;border:1px solid rgba(138,90,0,0.22);border-left:4px solid #D99600;border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,0.16);padding:14px;z-index:220;display:none;}
 .reminder-toast.active{display:block;}
 .reminder-toast-title{font-size:13px;font-weight:600;color:#1A1A18;margin-bottom:4px;}
@@ -2500,9 +2503,25 @@ function taskActionButtons(t){
   buttons.push(`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`);
   return buttons.join('');
 }
+function taskStatusBadge(t){
+  const status=getTaskStatus(t);
+  const map={todo:['Da fare','b-bassa'],in_progress:['In corso','b-blue'],done:['Completato','b-green']};
+  const [label,cls]=map[status]||map.todo;
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+function taskListActions(t){
+  const id=String(t.id).replace(/'/g,"\\'");
+  const status=getTaskStatus(t);
+  const actions=[];
+  if(status==='todo')actions.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','in_progress')">In corso</button>`);
+  if(status==='in_progress')actions.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','todo')">Da fare</button>`);
+  if(status!=='done')actions.push(`<button class="btn-primary" onclick="moveTaskStatus('${id}','done')">Completa</button>`);
+  actions.push(`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`);
+  return `<div class="task-list-actions">${actions.join('')}</div>`;
+}
 function taskListRow(t,done=false){
   const id=String(t.id).replace(/'/g,"\\'");
-  return `<div class="task-row" data-task-id="${id}"><div class="checkbox ${done?'done':''}" onclick="toggleTask('${id}')">${done?'<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>':''}</div><div style="flex:1;min-width:0;"><div style="font-size:13px;color:${done?'#57534A':'#1A1A18'};text-decoration:${done?'line-through':'none'};">${escapeHtml(t.label)}</div>${renderTaskMeta(t)}</div>${prioritaBadge(t.priorita)}<button class="btn-icon" onclick="deleteTask('${id}')">✕</button></div>`;
+  return `<div class="task-row" data-task-id="${id}"><div class="checkbox ${done?'done':''}" onclick="toggleTask('${id}')">${done?'<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>':''}</div><div style="flex:1;min-width:0;"><div style="font-size:13px;color:${done?'#57534A':'#1A1A18'};text-decoration:${done?'line-through':'none'};">${escapeHtml(t.label)}</div>${renderTaskMeta(t)}</div>${taskStatusBadge(t)}${prioritaBadge(t.priorita)}${done?`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`:taskListActions(t)}</div>`;
 }
 function taskBoardCard(t){
   return `<div class="task-card" data-task-id="${String(t.id).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"><div class="task-card-title">${escapeHtml(t.label)}</div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${prioritaBadge(t.priorita)}</div>${renderTaskMeta(t)}<div class="task-card-actions">${taskActionButtons(t)}</div></div>`;
@@ -2517,7 +2536,9 @@ function renderTaskBoard(){
   }).join('');
 }
 function renderTasks(){
-  const open=tasks.filter(t=>getTaskStatus(t)!=='done');
+  const todo=tasks.filter(t=>getTaskStatus(t)==='todo');
+  const inProgress=tasks.filter(t=>getTaskStatus(t)==='in_progress');
+  const open=[...todo,...inProgress];
   const done=tasks.filter(t=>getTaskStatus(t)==='done');
   const listView=document.getElementById('task-list-view');
   const boardView=document.getElementById('task-board-view');
@@ -2531,8 +2552,14 @@ function renderTasks(){
   const dl=document.getElementById('done-tasks-list');
   const dc=document.getElementById('done-tasks-card');
   if(ol){
-    document.getElementById('open-tasks-label').textContent=`Aperti (${open.length})`;
-    ol.innerHTML=open.length===0?'<div style="font-size:13px;color:#57534A;padding:8px 0;font-style:italic;">Nessun task aperto!</div>':open.map(t=>taskListRow(t,false)).join('');
+    document.getElementById('open-tasks-label').textContent=`Aperti (${open.length}) · Da fare ${todo.length} · In corso ${inProgress.length}`;
+    if(open.length===0){
+      ol.innerHTML='<div style="font-size:13px;color:#57534A;padding:8px 0;font-style:italic;">Nessun task aperto!</div>';
+    }else{
+      const todoHtml=todo.length?`<div class="task-list-section">Da fare (${todo.length})</div>${todo.map(t=>taskListRow(t,false)).join('')}`:'';
+      const progressHtml=inProgress.length?`<div class="task-list-section">In corso (${inProgress.length})</div>${inProgress.map(t=>taskListRow(t,false)).join('')}`:'';
+      ol.innerHTML=`${todoHtml}${progressHtml}`;
+    }
   }
   if(dc&&dl){
     if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>taskListRow(t,true)).join('');}
@@ -2611,7 +2638,7 @@ function updateBadges(){
   updateInboxSubtitle();
 }
 function updateInboxSubtitle(){const inboxCount=mailboxConnected?INBOX.length:0;const unread=mailboxConnected?INBOX.filter(i=>i.unread).length:0;PAGE_META.inbox[1]=mailboxConnected?`${inboxCount} messaggi · ${unread} non letti`:'Mailbox non collegata · Slack previsto in una integrazione dedicata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
-function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
+function updateTaskSubtitle(){const todo=tasks.filter(t=>getTaskStatus(t)==='todo').length;const progress=tasks.filter(t=>getTaskStatus(t)==='in_progress').length;const done=tasks.filter(t=>getTaskStatus(t)==='done').length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${todo+progress} aperti · ${progress} in corso · ${done} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError(mailboxConnectionError);mailboxSyncInProgress=false;renderInboxControls();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){if(isMailboxAuthExpiredError(err)){markMailboxReconnectRequired();}else{mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}}finally{mailboxSyncInProgress=false;renderAll();}}
