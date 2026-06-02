@@ -56,7 +56,18 @@ export async function updateTaskStatus(taskId, userId, status) {
     UPDATE tasks
     SET status = $3, updated_at = NOW()
     WHERE id = $1 AND user_id = $2
-    RETURNING ${TASK_RETURNING_COLUMNS}
+    RETURNING
+      id,
+      user_id,
+      title,
+      description,
+      status,
+      priority,
+      due_date,
+      energy_cost,
+      stress_impact,
+      created_at,
+      updated_at
   `;
 
   const { rows } = await query(sql, [taskId, userId, status]);

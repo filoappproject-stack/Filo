@@ -2750,8 +2750,8 @@ async function moveTaskStatus(id,status){
   const idKey=String(id);
   const t=tasks.find(task=>String(task.id)===idKey);
   if(!t)return;
-  const previous=tasks.map(task=>({...task}));
   const previousStatus=getTaskStatus(t);
+  if(previousStatus===status)return;
   const shouldCreateRecurrence=status==='done'&&previousStatus!=='done';
   setTaskStatusLocal(t,status);
   if(shouldCreateRecurrence){
@@ -2764,13 +2764,24 @@ async function moveTaskStatus(id,status){
   renderTasks();
   try{
     const updated=await persistTaskStatus(t,status);
-    if(updated){tasks=tasks.map(task=>String(task.id)===idKey?updated:task);}
-    if(shouldCreateRecurrence)await createRecurringFollowUp(updated||t);
+    const merged=updated?{
+      ...t,
+      ...updated,
+      dueDateIso:updated.dueDateIso||t.dueDateIso,
+      scadenza:updated.scadenza||t.scadenza,
+      reminderAt:updated.reminderAt||t.reminderAt,
+      recurrence:updated.recurrence||t.recurrence,
+      suggestionTitle:updated.suggestionTitle||t.suggestionTitle
+    }:t;
+    if(updated){tasks=tasks.map(task=>String(task.id)===idKey?merged:task);}
+    if(shouldCreateRecurrence)await createRecurringFollowUp(merged);
     saveTasksToCache();
     renderTasks();
   }catch(err){
-    console.warn('Errore cambio stato task:',err);
-    tasks=previous;
+    console.warn('Cambio stato task salvato localmente ma non sincronizzato col backend:',err);
+    // Mantieni l'aggiornamento ottimistico: tornare allo stato precedente crea un rimbalzo visivo
+    // quando l'API è lenta, non ancora deployata o il DB non ha ancora applicato la migration.
+    if(shouldCreateRecurrence)await createRecurringFollowUp(t);
     saveTasksToCache();
     renderTasks();
   }
