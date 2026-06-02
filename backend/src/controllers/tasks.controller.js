@@ -12,6 +12,8 @@ const CreateTaskSchema = z.object({
   description: z.string().max(2000).optional().default(''),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
   dueDate: z.string().datetime().optional().nullable(),
+  reminderAt: z.string().datetime().optional().nullable(),
+  recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']).default('none'),
   energyCost: z.coerce.number().int().min(1).max(5).default(3),
   stressImpact: z.coerce.number().int().min(1).max(5).default(3)
 });
