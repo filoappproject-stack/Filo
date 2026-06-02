@@ -1579,7 +1579,33 @@ function isTaskDueToday(task){return !task.done&&isTodayDate(parseTaskDueDate(ta
 function dueTodayLabel(count){return `${count} in scadenza oggi`;}
 function isPersistedTaskId(id){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id||''));}
 function normalizeSuggestionTaskTitle(title){return String(title||'').trim().replace(/\s+/g,' ').toLowerCase();}
-function isSuggestionTaskOpen(title){const normalized=normalizeSuggestionTaskTitle(title);return !!normalized&&tasks.some(t=>!t.done&&normalizeSuggestionTaskTitle(t.label)===normalized);}
+function getTaskSuggestionTitle(task){
+  const explicit=String(task?.suggestionTitle||task?.sourceSuggestionTitle||'').trim();
+  if(explicit)return explicit;
+  const label=String(task?.label||'').trim();
+  const suffixes=[
+    /\s*\(focus\s+45\s+min\)\s*$/i,
+    /\s*\(da ripianificare\)\s*$/i,
+    /\s*\(riprogrammare pomeriggio\)\s*$/i
+  ];
+  for(const suffix of suffixes){
+    if(suffix.test(label))return label.replace(suffix,'').trim();
+  }
+  const reminder=label.match(/^Reminder:\s*(.*?)\s*\(entro oggi\)\s*$/i);
+  if(reminder?.[1])return reminder[1].trim();
+  const checklist=label.match(/^Checklist:\s*(.+?)\s*$/i);
+  if(checklist?.[1])return checklist[1].trim();
+  const review=label.match(/^Review fine giornata:\s*(.+?)\s*$/i);
+  if(review?.[1])return review[1].trim();
+  return label;
+}
+function isSuggestionTaskOpen(title){
+  const normalized=normalizeSuggestionTaskTitle(title);
+  return !!normalized&&tasks.some(t=>!t.done&&(
+    normalizeSuggestionTaskTitle(t.label)===normalized||
+    normalizeSuggestionTaskTitle(getTaskSuggestionTitle(t))===normalized
+  ));
+}
 function loadDismissedSuggestionTitles(){
   const key=getSuggestionDismissalsCacheKey();
   if(!key)return [];
@@ -2555,24 +2581,26 @@ async function addTask() {
   document.getElementById('new-task-scad').value = '';
   toggleTaskForm();
 }
-function addTaskFromSuggestion(titolo,button=null){
+function addTaskFromSuggestion(titolo,button=null,sourceTitle=null){
   const label=String(titolo||'Azione').trim()||'Azione';
-  restoreSuggestionTitle(label);
-  if(!isSuggestionTaskOpen(label)){
-    tasks.push({id:nextTaskId++,label,done:false,priorita:'urgente',scadenza:'Oggi'});
+  const suggestionTitle=String(sourceTitle||button?.getAttribute?.('data-suggestion-task-title')||label).trim()||label;
+  restoreSuggestionTitle(suggestionTitle);
+  if(!isSuggestionTaskOpen(suggestionTitle)){
+    tasks.push({id:nextTaskId++,label,done:false,priorita:'urgente',scadenza:'Oggi',suggestionTitle});
     saveTasksToCache();
   }
   renderTasks();
   if(button)setSuggestionTaskButtonState(button,true);
   showPage('task',document.querySelectorAll('.nav-item')[3]);
 }
-function toggleTask(id){const idKey=String(id);const t=tasks.find(t=>String(t.id)===idKey);if(t){if(!t.done)recordTaskPostponed(t);else{t.done=false;restoreSuggestionTitle(t.label);saveTasksToCache();renderTasks();return;}t.done=true;dismissSuggestionTitle(t.label);recordTaskCompleted(t);}saveTasksToCache();renderTasks();}
+function toggleTask(id){const idKey=String(id);const t=tasks.find(t=>String(t.id)===idKey);if(t){const suggestionTitle=getTaskSuggestionTitle(t);if(!t.done)recordTaskPostponed(t);else{t.done=false;restoreSuggestionTitle(suggestionTitle);saveTasksToCache();renderTasks();return;}t.done=true;dismissSuggestionTitle(suggestionTitle);recordTaskCompleted(t);}saveTasksToCache();renderTasks();}
 async function deleteTask(id){
   const idKey=String(id);
   const previous=tasks.slice();
   const removed=tasks.find(t=>String(t.id)===idKey);
-  const wasSuggestionDismissed=removed?isSuggestionDismissed(removed.label):false;
-  if(removed)dismissSuggestionTitle(removed.label);
+  const removedSuggestionTitle=removed?getTaskSuggestionTitle(removed):'';
+  const wasSuggestionDismissed=removed?isSuggestionDismissed(removedSuggestionTitle):false;
+  if(removed)dismissSuggestionTitle(removedSuggestionTitle);
   tasks=tasks.filter(t=>String(t.id)!==idKey);
   saveTasksToCache();
   renderTasks();
@@ -2590,13 +2618,13 @@ async function deleteTask(id){
     const txt=await res.text().catch(()=> '');
     console.warn(`DELETE /tasks/${idKey} fallita (${res.status}):`,txt);
     tasks=previous;
-    if(removed&&!wasSuggestionDismissed)restoreSuggestionTitle(removed.label);
+    if(removed&&!wasSuggestionDismissed)restoreSuggestionTitle(removedSuggestionTitle);
     saveTasksToCache();
     renderTasks();
   }catch(err){
     console.warn('Errore delete task su backend:',err);
     tasks=previous;
-    if(removed&&!wasSuggestionDismissed)restoreSuggestionTitle(removed.label);
+    if(removed&&!wasSuggestionDismissed)restoreSuggestionTitle(removedSuggestionTitle);
     saveTasksToCache();
     renderTasks();
   }
@@ -2770,34 +2798,34 @@ function handleSuggestionAction(actionLabel,suggestionTitle,btn){
       focusSessionActionBtn=btn;
       focusSessionSiblingBtn=sibling||null;
     }
-    addTaskFromSuggestion(suggestionTitle||'Attività prioritaria');
+    addTaskFromSuggestion(suggestionTitle||'Attività prioritaria',null,suggestionTitle||'Attività prioritaria');
     openFocusSession(suggestionTitle||'Attività prioritaria',15);
     if(btn){btn.textContent='Timer avviato';btn.disabled=true;}
     return;
   }
   if(action.includes('blocca 45 minuti')){
-    addTaskFromSuggestion(`${suggestionTitle||'Attività'} (focus 45 min)`);
+    addTaskFromSuggestion(`${suggestionTitle||'Attività'} (focus 45 min)`,null,suggestionTitle||'Attività');
     openFocusSession(suggestionTitle||'Attività prioritaria',45);
     if(btn){btn.textContent='Focus 45m avviato';btn.disabled=true;}
     return;
   }
   if(action.includes('rimanda')){
-    addTaskFromSuggestion(`${suggestionTitle||'Attività'} (da ripianificare)`);
+    addTaskFromSuggestion(`${suggestionTitle||'Attività'} (da ripianificare)`,null,suggestionTitle||'Attività');
     if(btn){btn.textContent='Rimandato';btn.disabled=true;}
     return;
   }
   if(action.includes('prepara checklist')){
-    addTaskFromSuggestion(`Checklist: ${suggestionTitle||'attività'}`);
+    addTaskFromSuggestion(`Checklist: ${suggestionTitle||'attività'}`,null,suggestionTitle||'attività');
     if(btn){btn.textContent='Checklist creata';btn.disabled=true;}
     return;
   }
   if(action.includes('aggiungi reminder')){
-    addTaskFromSuggestion(`Reminder: ${suggestionTitle||'attività'} (entro oggi)`);
+    addTaskFromSuggestion(`Reminder: ${suggestionTitle||'attività'} (entro oggi)`,null,suggestionTitle||'attività');
     if(btn){btn.textContent='Reminder creato';btn.disabled=true;}
     return;
   }
   if(action.includes('rivedi a fine giornata')){
-    addTaskFromSuggestion(`Review fine giornata: ${suggestionTitle||'priorità'}`);
+    addTaskFromSuggestion(`Review fine giornata: ${suggestionTitle||'priorità'}`,null,suggestionTitle||'priorità');
     if(btn){btn.textContent='Review pianificata';btn.disabled=true;}
     return;
   }
