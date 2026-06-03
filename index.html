@@ -120,6 +120,27 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 .cal-block.hl{background:#E8EEFB;border-left-color:#1A4FBF;}
 .task-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(0,0,0,0.05);}
 .task-row:last-child{border-bottom:none;}
+.task-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;}
+.task-chip{font-size:10px;font-weight:500;padding:2px 7px;border-radius:999px;background:#F0EDE6;color:#6B6860;}
+.task-chip.reminder{background:#FFF4D8;color:#8A5A00;}
+.task-chip.recur{background:#E8EEFB;color:#0D2E7A;}
+.task-view-toggle{display:flex;gap:6px;align-items:center;}
+.task-view-toggle .btn-ghost.active{background:#E8EEFB;color:#0D2E7A;border-color:rgba(26,79,191,0.22);}
+.task-board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.task-board-col{background:#fff;border:1px solid rgba(0,0,0,0.07);border-radius:14px;padding:12px;min-height:180px;}
+.task-board-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.task-board-title{font-size:12px;font-weight:600;color:#1A1A18;text-transform:uppercase;letter-spacing:.04em;}
+.task-card{background:#F7F5F0;border:1px solid rgba(0,0,0,0.06);border-radius:12px;padding:11px 12px;margin-bottom:9px;}
+.task-card-title{font-size:13px;font-weight:500;color:#1A1A18;line-height:1.4;margin-bottom:6px;}
+.task-card-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;}
+.task-list-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.task-list-section{font-size:11px;font-weight:600;color:#6B6860;text-transform:uppercase;letter-spacing:.06em;padding:10px 0 4px;}
+.task-list-section:first-child{padding-top:0;}
+.reminder-toast{position:fixed;right:22px;bottom:22px;width:min(360px,calc(100vw - 44px));background:#fff;border:1px solid rgba(138,90,0,0.22);border-left:4px solid #D99600;border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,0.16);padding:14px;z-index:220;display:none;}
+.reminder-toast.active{display:block;}
+.reminder-toast-title{font-size:13px;font-weight:600;color:#1A1A18;margin-bottom:4px;}
+.reminder-toast-sub{font-size:12px;color:#6B6860;line-height:1.45;margin-bottom:10px;}
+@media (max-width:900px){.task-board{grid-template-columns:1fr;}}
 .note-card{background:#fff;border:1px solid rgba(0,0,0,0.07);border-radius:12px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:border-color 0.15s;}
 .note-card:hover{border-color:rgba(0,0,0,0.15);}
 .loader{text-align:center;padding:32px 0;display:none;}
@@ -482,7 +503,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
 
       <!-- TASK -->
       <div id="page-task" class="page">
-        <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+          <div class="task-view-toggle" aria-label="Vista task">
+            <button class="btn-ghost active" id="task-list-view-btn" onclick="setTaskViewMode('list')">Lista</button>
+            <button class="btn-ghost" id="task-board-view-btn" onclick="setTaskViewMode('board')">Board</button>
+          </div>
           <button class="btn-primary" id="task-form-toggle" onclick="toggleTaskForm()">+ Nuovo task</button>
         </div>
         <div class="card highlight-border" id="task-form" style="display:none;">
@@ -492,10 +517,18 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
             <div><div class="field-label">Priorità</div><select id="new-task-pri" class="f-select"><option value="urgente">Urgente</option><option value="alta">Alta</option><option value="normale" selected>Normale</option><option value="bassa">Bassa</option></select></div>
             <div><div class="field-label">Scadenza (opzionale)</div><input id="new-task-scad" class="f-input" placeholder="Es: Oggi, Venerd&igrave;..."></div>
           </div>
+          <div class="grid-2" style="margin-top:12px;">
+            <div><div class="field-label">Promemoria (opzionale)</div><input id="new-task-reminder" class="f-input" type="datetime-local"></div>
+            <div><div class="field-label">Ricorrenza</div><select id="new-task-recur" class="f-select"><option value="none" selected>Nessuna</option><option value="daily">Ogni giorno</option><option value="weekly">Ogni settimana</option><option value="monthly">Ogni mese</option></select></div>
+          </div>
+          <div class="small-help">I promemoria vengono mostrati in-app quando Filo è aperto; le ricorrenze creano automaticamente il prossimo task quando completi quello corrente.</div>
           <div class="form-actions"><button class="btn-primary" onclick="addTask()">Aggiungi task</button><button class="btn-ghost" onclick="toggleTaskForm()">Annulla</button></div>
         </div>
-        <div class="card"><div class="sec-label" id="open-tasks-label">Aperti (0)</div><div id="open-tasks-list"></div></div>
-        <div class="card" id="done-tasks-card" style="display:none;"><div class="sec-label" id="done-tasks-label">Completati (0)</div><div id="done-tasks-list"></div></div>
+        <div id="task-list-view">
+          <div class="card"><div class="sec-label" id="open-tasks-label">Aperti (0)</div><div id="open-tasks-list"></div></div>
+          <div class="card" id="done-tasks-card" style="display:none;"><div class="sec-label" id="done-tasks-label">Completati (0)</div><div id="done-tasks-list"></div></div>
+        </div>
+        <div id="task-board-view" class="task-board" style="display:none;"></div>
       </div>
 
       <!-- NOTE -->
@@ -615,6 +648,15 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#F7F5F0;color:#1A1A18
     <div class="focus-actions" id="focus-session-running-actions">
       <button class="btn-ghost" onclick="cancelFocusSession()">Chiudi timer</button>
     </div>
+  </div>
+</div>
+
+<div class="reminder-toast" id="task-reminder-toast" role="status" aria-live="polite">
+  <div class="reminder-toast-title">Promemoria task</div>
+  <div class="reminder-toast-sub" id="task-reminder-toast-sub"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;">
+    <button class="btn-ghost" onclick="dismissTaskReminderToast()">Chiudi</button>
+    <button class="btn-primary" onclick="openReminderTask()">Apri task</button>
   </div>
 </div>
 
@@ -1394,6 +1436,7 @@ async function loginSuccess(user) {
   const cachedTasks = loadTasksFromCache();
   if (cachedTasks) {
     tasks = cachedTasks;
+    normalizeCachedTasks();
     const numericTaskIds = tasks.map(t=>parseInt(t.id,10)).filter(n=>Number.isFinite(n));
     nextTaskId = numericTaskIds.length ? Math.max(...numericTaskIds)+1 : 100;
   }
@@ -1475,6 +1518,9 @@ const ENERGY_LABELS={1:"A pezzi",2:"Stanco",3:"Nella norma",4:"Bene",5:"Ottimo"}
 const ENERGY_COLORS={1:"#9B2525",2:"#8A5C00",3:"#6B6860",4:"#0E6B4A",5:"#0D2E7A"};
 let tasks=[];
 let nextTaskId=100;
+let taskViewMode='list';
+let activeReminderTaskId=null;
+let remindedTaskKeys=new Set();
 let mailboxConnected=false;
 let mailboxLastSync=null;
 let mailboxSyncInProgress=false;
@@ -1557,7 +1603,22 @@ const SUGGESTIONS_CACHE_TTL_MS=72*60*60*1000;
 const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
 const DAY_ANALYSIS_DRAFT_PREFIX='filo_day_analysis_draft_';
 
-function normalizeApiTask(task){const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};return{id:task.id,label:task.title,done:task.status==='done',priorita:uiPriorityMap[task.priority]||'normale',scadenza:task.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):''};}
+function normalizeApiTask(task){
+  const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};
+  const status=['todo','in_progress','done'].includes(task?.status)?task.status:(task?.done?'done':'todo');
+  return {
+    id:String(task?.id||`tmp-${Date.now()}`),
+    label:String(task?.title||task?.label||'Task senza titolo'),
+    done:status==='done',
+    status,
+    priorita:uiPriorityMap[task?.priority]||task?.priorita||'normale',
+    scadenza:task?.due_date?new Date(task.due_date).toLocaleDateString('it-IT'):(task?.scadenza||''),
+    dueDateIso:task?.due_date||task?.dueDateIso||null,
+    reminderAt:task?.reminder_at||task?.reminderAt||null,
+    recurrence:task?.recurrence||'none',
+    suggestionTitle:task?.suggestionTitle||task?.sourceSuggestionTitle||''
+  };
+}
 function isTodayDate(date){
   if(!(date instanceof Date)||Number.isNaN(date.getTime()))return false;
   const today=new Date();
@@ -1578,6 +1639,19 @@ function parseTaskDueDate(scadenza){
 function isTaskDueToday(task){return !task.done&&isTodayDate(parseTaskDueDate(task.scadenza));}
 function dueTodayLabel(count){return `${count} in scadenza oggi`;}
 function isPersistedTaskId(id){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id||''));}
+function getTaskStatus(task){return ['todo','in_progress','done'].includes(task?.status)?task.status:(task?.done?'done':'todo');}
+function setTaskStatusLocal(task,status){task.status=status;task.done=status==='done';}
+function recurrenceLabel(value){return {daily:'Ogni giorno',weekly:'Ogni settimana',monthly:'Ogni mese'}[value]||'';}
+function parseDateTimeLocalInput(value){const v=String(value||'').trim();if(!v)return null;const d=new Date(v);return Number.isNaN(d.getTime())?null:d;}
+function formatReminderLabel(value){if(!value)return '';const d=new Date(value);if(Number.isNaN(d.getTime()))return '';return d.toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
+function formatDueForUi(date){return date.toLocaleDateString('it-IT');}
+function addRecurrenceInterval(date,recurrence){const next=new Date(date.getTime());if(recurrence==='daily')next.setDate(next.getDate()+1);else if(recurrence==='weekly')next.setDate(next.getDate()+7);else if(recurrence==='monthly')next.setMonth(next.getMonth()+1);return next;}
+function getTaskDueDate(task){if(task?.dueDateIso){const d=new Date(task.dueDateIso);if(!Number.isNaN(d.getTime()))return d;}return parseTaskDueDate(task?.scadenza);}
+function getTaskReminderDate(task){if(!task?.reminderAt)return null;const d=new Date(task.reminderAt);return Number.isNaN(d.getTime())?null:d;}
+function normalizeCachedTasks(){tasks=tasks.map(t=>normalizeApiTask({id:t.id,title:t.label,status:getTaskStatus(t),priority:{bassa:'low',normale:'medium',alta:'high',urgente:'urgent'}[t.priorita]||'medium',due_date:t.dueDateIso||null,reminder_at:t.reminderAt||null,recurrence:t.recurrence||'none',suggestionTitle:t.suggestionTitle||''}));}
+function setTaskViewMode(mode){taskViewMode=mode==='board'?'board':'list';renderTasks();}
+function taskStatusLabel(status){return {todo:'Da fare',in_progress:'In corso',done:'Completati'}[status]||'Da fare';}
+
 function normalizeSuggestionTaskTitle(title){return String(title||'').trim().replace(/\s+/g,' ').toLowerCase();}
 function getTaskSuggestionTitle(task){
   const explicit=String(task?.suggestionTitle||task?.sourceSuggestionTitle||'').trim();
@@ -2163,7 +2237,7 @@ async function loadTasksFromApi(){
   }catch(err){
     console.warn('Impossibile caricare task da backend, uso cache locale:',err);
     const cached=loadTasksFromCache();
-    if(cached)tasks=cached;
+    if(cached){tasks=cached;normalizeCachedTasks();}
     const numericIds=tasks.map(t=>parseInt(t.id,10)).filter(n=>Number.isFinite(n));
     nextTaskId=numericIds.length?Math.max(...numericIds)+1:100;
   }
@@ -2357,7 +2431,7 @@ function renderMemoryPage(){
 }
 
 // ── NAVIGAZIONE ───────────────────────────────────────────────────────────────
-const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox unificata","0 messaggi · 0 non letti"],task:["Task",""],note:["Note",""],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
+const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox email","0 messaggi · 0 non letti · Slack previsto"],task:["Task",""],note:["Note",""],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
 function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');if(el)el.classList.add('active');const m=PAGE_META[id];const firstName=currentUser?(currentUser.user_metadata?.full_name||currentUser.email).split(' ')[0]:'';document.getElementById('page-title').textContent=id==='suggerimenti'?'Buongiorno, '+firstName:m[0];document.getElementById('page-sub').textContent=m[1];document.getElementById('topbar-actions').innerHTML='';if(id==='task')updateTaskSubtitle();if(id==='note'){showNoteList();document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">＋ Nuova nota</button>';}if(id==='memoria')renderMemoryPage();if(id==='impostazioni')updateStatsPage();renderAll();}
 
 // â”€â”€ RENDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -2373,8 +2447,8 @@ function ensureSingleSuggestionsContextNote(){
 function renderAll(){ensureSingleSuggestionsContextNote();renderInboxControls();renderInbox();renderCalendarControls();renderCalendar();renderTasks();renderNotes();updateBadges();}
 function openInboxMessage(id){inboxSelectedId=id;const item=INBOX.find(i=>i.id===id);if(!item)return;if(item.unread){item.unread=false;saveInboxToCache();}const modal=document.getElementById('inbox-message-modal');const fromEl=document.getElementById('inbox-modal-from');const subjEl=document.getElementById('inbox-modal-subj');const timeEl=document.getElementById('inbox-modal-time');const bodyEl=document.getElementById('inbox-modal-body');if(fromEl)fromEl.textContent=`Da: ${item.from}`;if(subjEl)subjEl.textContent=item.subj||'(Senza oggetto)';if(timeEl)timeEl.textContent=`Ricevuta alle ${item.time||'--:--'}`;if(bodyEl)bodyEl.textContent=item.prev||'(Nessun contenuto disponibile)';if(modal)modal.style.display='flex';updateBadges();renderInbox();}
 function closeInboxMessage(){const modal=document.getElementById('inbox-message-modal');if(modal)modal.style.display='none';inboxSelectedId=null;renderInbox();}
-function renderInboxControls(){const state=document.getElementById('inbox-connection-state');const connectBtn=document.getElementById('inbox-connect-btn');const syncBtn=document.getElementById('inbox-sync-btn');if(!state||!connectBtn||!syncBtn)return;if(!mailboxConnected){if(mailboxBackgroundSyncInProgress){state.textContent='Sincronizzazione mailbox in corso... potrebbe richiedere alcuni minuti.';state.style.color='#0D2E7A';connectBtn.style.display='';connectBtn.textContent='Sincronizzazione...';connectBtn.disabled=true;syncBtn.style.display='none';return;}state.textContent=mailboxConnectionError||'Mailbox non collegata';state.style.color=mailboxConnectionError?'#9B2525':'#6B6860';connectBtn.style.display='';connectBtn.textContent=mailboxSyncInProgress?'Connessione...':'Collega mailbox';connectBtn.disabled=mailboxSyncInProgress;syncBtn.style.display='none';return;}state.style.color='#6B6860';const last=mailboxLastSync?new Date(mailboxLastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'mai';state.textContent=`Mailbox collegata · ultima sync ${last}`;connectBtn.style.display='none';syncBtn.style.display='';syncBtn.disabled=mailboxSyncInProgress;syncBtn.innerHTML=mailboxSyncInProgress?'<span class="spinning">↻</span> Sincronizzo...':'Sincronizza';}
-function renderInbox(){const el=document.getElementById('inbox-list');if(!el)return;if(!mailboxConnected){if(mailboxBackgroundSyncInProgress){el.innerHTML='<div class="empty-state"><div class="empty-title"><span class="spinning">↻</span> Sincronizzazione in corso</div><div class="empty-sub">Stiamo collegando la mailbox e recuperando i messaggi. L\'operazione può richiedere qualche minuto.</div></div>';return;}el.innerHTML='<div class="empty-state"><div class="empty-title">Collega la mailbox</div><div class="empty-sub">Connettiti e poi premi "Sincronizza" per vedere i messaggi qui.</div></div>';return;}if(!INBOX.length){el.innerHTML='<div class="empty-state"><div class="empty-title">Nessun messaggio sincronizzato</div><div class="empty-sub">Premi "Sincronizza" per aggiornare la inbox.</div></div>';return;}el.innerHTML=INBOX.map(item=>`<div class="inbox-item" onclick="openInboxMessage('${item.id}')" style="cursor:pointer;${inboxSelectedId===item.id?'background:#F7FAFF;':''}"><div style="width:7px;height:7px;border-radius:50%;background:${item.unread?'#1A4FBF':'transparent'};margin-top:6px;flex-shrink:0;"></div><div class="av" style="background:${item.bg};color:${item.tc};">${item.initials}</div><div class="inbox-body"><div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span style="font-size:13px;font-weight:500;">${escapeHtml(item.from)}</span><span style="font-size:11px;color:#57534A;">${item.time}</span></div><div style="font-size:13px;margin-bottom:2px;">${escapeHtml(item.subj)}</div><div style="font-size:12px;color:#57534A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.prev)}</div></div><span class="badge ${item.source==='Slack'?'b-slack':'b-blue'}">${item.source}</span></div>`).join('');}
+function renderInboxControls(){const state=document.getElementById('inbox-connection-state');const connectBtn=document.getElementById('inbox-connect-btn');const syncBtn=document.getElementById('inbox-sync-btn');if(!state||!connectBtn||!syncBtn)return;if(!mailboxConnected){if(mailboxBackgroundSyncInProgress){state.textContent='Sincronizzazione mailbox in corso... potrebbe richiedere alcuni minuti.';state.style.color='#0D2E7A';connectBtn.style.display='';connectBtn.textContent='Sincronizzazione...';connectBtn.disabled=true;syncBtn.style.display='none';return;}state.textContent=mailboxConnectionError||'Mailbox non collegata · Slack previsto in una integrazione dedicata';state.style.color=mailboxConnectionError?'#9B2525':'#6B6860';connectBtn.style.display='';connectBtn.textContent=mailboxSyncInProgress?'Connessione...':'Collega mailbox';connectBtn.disabled=mailboxSyncInProgress;syncBtn.style.display='none';return;}state.style.color='#6B6860';const last=mailboxLastSync?new Date(mailboxLastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'mai';state.textContent=`Mailbox collegata · ultima sync ${last}`;connectBtn.style.display='none';syncBtn.style.display='';syncBtn.disabled=mailboxSyncInProgress;syncBtn.innerHTML=mailboxSyncInProgress?'<span class="spinning">↻</span> Sincronizzo...':'Sincronizza';}
+function renderInbox(){const el=document.getElementById('inbox-list');if(!el)return;if(!mailboxConnected){if(mailboxBackgroundSyncInProgress){el.innerHTML='<div class="empty-state"><div class="empty-title"><span class="spinning">↻</span> Sincronizzazione in corso</div><div class="empty-sub">Stiamo collegando la mailbox e recuperando i messaggi. L\'operazione può richiedere qualche minuto.</div></div>';return;}el.innerHTML='<div class="empty-state"><div class="empty-title">Collega la mailbox</div><div class="empty-sub">Oggi Filo sincronizza Gmail/Google Mailbox. Slack è previsto, ma non ancora attivo: lo teniamo fuori dalla promessa operativa finché non sarà collegabile.</div></div>';return;}if(!INBOX.length){el.innerHTML='<div class="empty-state"><div class="empty-title">Nessun messaggio sincronizzato</div><div class="empty-sub">Premi "Sincronizza" per aggiornare la inbox.</div></div>';return;}el.innerHTML=INBOX.map(item=>`<div class="inbox-item" onclick="openInboxMessage('${item.id}')" style="cursor:pointer;${inboxSelectedId===item.id?'background:#F7FAFF;':''}"><div style="width:7px;height:7px;border-radius:50%;background:${item.unread?'#1A4FBF':'transparent'};margin-top:6px;flex-shrink:0;"></div><div class="av" style="background:${item.bg};color:${item.tc};">${item.initials}</div><div class="inbox-body"><div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span style="font-size:13px;font-weight:500;">${escapeHtml(item.from)}</span><span style="font-size:11px;color:#57534A;">${item.time}</span></div><div style="font-size:13px;margin-bottom:2px;">${escapeHtml(item.subj)}</div><div style="font-size:12px;color:#57534A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.prev)}</div></div><span class="badge ${item.source==='Slack'?'b-slack':'b-blue'}">${item.source}</span></div>`).join('');}
 function renderCalendarControls(){
   const stateEl=document.getElementById('calendar-connection-state');
   const connectBtn=document.getElementById('calendar-connect-btn');
@@ -2410,7 +2484,138 @@ function renderCalendar(){
     document.getElementById('page-sub').textContent=PAGE_META.calendario[1];
   }
 }
-function renderTasks(){const open=tasks.filter(t=>!t.done);const done=tasks.filter(t=>t.done);const ol=document.getElementById('open-tasks-list');const dl=document.getElementById('done-tasks-list');const dc=document.getElementById('done-tasks-card');if(!ol)return;document.getElementById('open-tasks-label').textContent=`Aperti (${open.length})`;ol.innerHTML=open.length===0?'<div style="font-size:13px;color:#57534A;padding:8px 0;font-style:italic;">Nessun task aperto!</div>':open.map(t=>`<div class="task-row"><div class="checkbox" onclick="toggleTask('${String(t.id).replace(/'/g,"\\'")}')"></div><span style="font-size:13px;flex:1;">${t.label}</span>${t.scadenza?`<span style="font-size:11px;color:#57534A;">${t.scadenza}</span>`:''} ${prioritaBadge(t.priorita)}<button class="btn-icon" onclick="deleteTask('${String(t.id).replace(/'/g,"\\'")}')">✕</button></div>`).join('');if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>`<div class="task-row"><div class="checkbox done" onclick="toggleTask('${String(t.id).replace(/'/g,"\\'")}')"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div><span style="font-size:13px;flex:1;color:#57534A;text-decoration:line-through;">${t.label}</span><button class="btn-icon" onclick="deleteTask('${String(t.id).replace(/'/g,"\\'")}')">✕</button></div>`).join('');}else dc.style.display='none';updateTaskSubtitle();updateBadges();refreshSuggestionTaskButtons();}
+function renderTaskMeta(t){
+  const chips=[];
+  if(t.scadenza)chips.push(`<span class="task-chip">Scad. ${escapeHtml(t.scadenza)}</span>`);
+  const reminder=formatReminderLabel(t.reminderAt);
+  if(reminder)chips.push(`<span class="task-chip reminder">Promemoria ${escapeHtml(reminder)}</span>`);
+  const recur=recurrenceLabel(t.recurrence);
+  if(recur)chips.push(`<span class="task-chip recur">${escapeHtml(recur)}</span>`);
+  return chips.length?`<div class="task-meta">${chips.join('')}</div>`:'';
+}
+function taskActionButtons(t){
+  const id=String(t.id).replace(/'/g,"\\'");
+  const status=getTaskStatus(t);
+  const buttons=[];
+  if(status!=='todo')buttons.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','todo')">Riapri</button>`);
+  if(status!=='in_progress')buttons.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','in_progress')">In corso</button>`);
+  if(status!=='done')buttons.push(`<button class="btn-primary" onclick="moveTaskStatus('${id}','done')">Completa</button>`);
+  buttons.push(`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`);
+  return buttons.join('');
+}
+function taskStatusBadge(t){
+  const status=getTaskStatus(t);
+  const map={todo:['Da fare','b-bassa'],in_progress:['In corso','b-blue'],done:['Completato','b-green']};
+  const [label,cls]=map[status]||map.todo;
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+function taskListActions(t){
+  const id=String(t.id).replace(/'/g,"\\'");
+  const status=getTaskStatus(t);
+  const actions=[];
+  if(status==='todo')actions.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','in_progress')">In corso</button>`);
+  if(status==='in_progress')actions.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','todo')">Da fare</button>`);
+  if(status!=='done')actions.push(`<button class="btn-primary" onclick="moveTaskStatus('${id}','done')">Completa</button>`);
+  actions.push(`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`);
+  return `<div class="task-list-actions">${actions.join('')}</div>`;
+}
+function taskListRow(t,done=false){
+  const id=String(t.id).replace(/'/g,"\\'");
+  return `<div class="task-row" data-task-id="${id}"><div class="checkbox ${done?'done':''}" onclick="toggleTask('${id}')">${done?'<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>':''}</div><div style="flex:1;min-width:0;"><div style="font-size:13px;color:${done?'#57534A':'#1A1A18'};text-decoration:${done?'line-through':'none'};">${escapeHtml(t.label)}</div>${renderTaskMeta(t)}</div>${taskStatusBadge(t)}${prioritaBadge(t.priorita)}${done?`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`:taskListActions(t)}</div>`;
+}
+function taskBoardCard(t){
+  return `<div class="task-card" data-task-id="${String(t.id).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"><div class="task-card-title">${escapeHtml(t.label)}</div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${prioritaBadge(t.priorita)}</div>${renderTaskMeta(t)}<div class="task-card-actions">${taskActionButtons(t)}</div></div>`;
+}
+function renderTaskBoard(){
+  const board=document.getElementById('task-board-view');
+  if(!board)return;
+  const columns=[['todo','Da fare'],['in_progress','In corso'],['done','Completati']];
+  board.innerHTML=columns.map(([status,label])=>{
+    const items=tasks.filter(t=>getTaskStatus(t)===status);
+    return `<div class="task-board-col"><div class="task-board-head"><div class="task-board-title">${label}</div><span class="badge b-normale">${items.length}</span></div>${items.length?items.map(taskBoardCard).join(''):'<div class="empty-sub" style="padding:12px 0;">Nessun task</div>'}</div>`;
+  }).join('');
+}
+function renderTasks(){
+  const todo=tasks.filter(t=>getTaskStatus(t)==='todo');
+  const inProgress=tasks.filter(t=>getTaskStatus(t)==='in_progress');
+  const open=[...todo,...inProgress];
+  const done=tasks.filter(t=>getTaskStatus(t)==='done');
+  const listView=document.getElementById('task-list-view');
+  const boardView=document.getElementById('task-board-view');
+  const listBtn=document.getElementById('task-list-view-btn');
+  const boardBtn=document.getElementById('task-board-view-btn');
+  if(listView)listView.style.display=taskViewMode==='list'?'':'none';
+  if(boardView)boardView.style.display=taskViewMode==='board'?'grid':'none';
+  if(listBtn)listBtn.classList.toggle('active',taskViewMode==='list');
+  if(boardBtn)boardBtn.classList.toggle('active',taskViewMode==='board');
+  const ol=document.getElementById('open-tasks-list');
+  const dl=document.getElementById('done-tasks-list');
+  const dc=document.getElementById('done-tasks-card');
+  if(ol){
+    document.getElementById('open-tasks-label').textContent=`Aperti (${open.length}) · Da fare ${todo.length} · In corso ${inProgress.length}`;
+    if(open.length===0){
+      ol.innerHTML='<div style="font-size:13px;color:#57534A;padding:8px 0;font-style:italic;">Nessun task aperto!</div>';
+    }else{
+      const todoHtml=todo.length?`<div class="task-list-section">Da fare (${todo.length})</div>${todo.map(t=>taskListRow(t,false)).join('')}`:'';
+      const progressHtml=inProgress.length?`<div class="task-list-section">In corso (${inProgress.length})</div>${inProgress.map(t=>taskListRow(t,false)).join('')}`:'';
+      ol.innerHTML=`${todoHtml}${progressHtml}`;
+    }
+  }
+  if(dc&&dl){
+    if(done.length>0){dc.style.display='';document.getElementById('done-tasks-label').textContent=`Completati (${done.length})`;dl.innerHTML=done.map(t=>taskListRow(t,true)).join('');}
+    else dc.style.display='none';
+  }
+  renderTaskBoard();
+  updateTaskSubtitle();
+  updateBadges();
+  refreshSuggestionTaskButtons();
+}
+
+function dismissTaskReminderToast(){
+  const toast=document.getElementById('task-reminder-toast');
+  if(toast)toast.classList.remove('active');
+  activeReminderTaskId=null;
+}
+function openReminderTask(){
+  const id=activeReminderTaskId;
+  dismissTaskReminderToast();
+  showPage('task',document.querySelectorAll('.nav-item')[3]);
+  setTaskViewMode('list');
+  if(id){
+    setTimeout(()=>{
+      const row=document.querySelector(`[data-task-id="${CSS.escape(String(id))}"]`);
+      if(row)row.scrollIntoView({behavior:'smooth',block:'center'});
+    },50);
+  }
+}
+function showTaskReminder(task){
+  activeReminderTaskId=String(task.id);
+  const sub=document.getElementById('task-reminder-toast-sub');
+  const toast=document.getElementById('task-reminder-toast');
+  if(sub)sub.textContent=`${task.label} · ${formatReminderLabel(task.reminderAt)}`;
+  if(toast)toast.classList.add('active');
+  if('Notification' in window){
+    if(Notification.permission==='granted')new Notification('Promemoria Filo',{body:task.label});
+    else if(Notification.permission==='default')Notification.requestPermission().catch(()=>{});
+  }
+}
+function checkDueTaskReminders(){
+  if(!currentUser?.id)return;
+  const now=Date.now();
+  tasks.forEach(task=>{
+    if(getTaskStatus(task)==='done'||!task.reminderAt)return;
+    const reminder=getTaskReminderDate(task);
+    if(!reminder)return;
+    const key=`${currentUser.id}:${task.id}:${task.reminderAt}`;
+    if(remindedTaskKeys.has(key))return;
+    const ts=reminder.getTime();
+    if(ts<=now&&ts>=now-15*60*1000){
+      remindedTaskKeys.add(key);
+      showTaskReminder(task);
+    }
+  });
+}
+
 function renderNotes(){const el=document.getElementById('notes-container');if(!el)return;if(!notes.length){el.innerHTML='<div class="empty-state"><div class="empty-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#57534A" stroke-width="1.4"><rect x="3" y="2" width="14" height="16" rx="2"/><line x1="7" y1="7" x2="13" y2="7"/><line x1="7" y1="10" x2="13" y2="10"/><line x1="7" y1="13" x2="10" y2="13"/></svg></div><div class="empty-title">Nessuna nota ancora</div></div>';return;}el.innerHTML=notes.map(n=>`<div class="note-card" onclick="openNoteEditor('${String(n.id).replace(/'/g,"\\'")}')"><div style="font-size:14px;font-weight:500;margin-bottom:4px;">${n.title}</div><div style="font-size:12px;color:#6B6860;line-height:1.5;margin-bottom:8px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${n.body}</div><div style="display:flex;gap:5px;">${n.tags.map((t,j)=>tagBadge(t,j)).join('')}</div></div>`).join('');}
 function updateBadges(){
   const open=tasks.filter(t=>!t.done).length;
@@ -2432,8 +2637,8 @@ function updateBadges(){
   if(dueToday)dueToday.textContent=dueTodayLabel(tasks.filter(isTaskDueToday).length);
   updateInboxSubtitle();
 }
-function updateInboxSubtitle(){const inboxCount=mailboxConnected?INBOX.length:0;const unread=mailboxConnected?INBOX.filter(i=>i.unread).length:0;PAGE_META.inbox[1]=mailboxConnected?`${inboxCount} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
-function updateTaskSubtitle(){const o=tasks.filter(t=>!t.done).length;const d=tasks.filter(t=>t.done).length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${o} aperti · ${d} completati`;}
+function updateInboxSubtitle(){const inboxCount=mailboxConnected?INBOX.length:0;const unread=mailboxConnected?INBOX.filter(i=>i.unread).length:0;PAGE_META.inbox[1]=mailboxConnected?`${inboxCount} messaggi · ${unread} non letti`:'Mailbox non collegata · Slack previsto in una integrazione dedicata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
+function updateTaskSubtitle(){const todo=tasks.filter(t=>getTaskStatus(t)==='todo').length;const progress=tasks.filter(t=>getTaskStatus(t)==='in_progress').length;const done=tasks.filter(t=>getTaskStatus(t)==='done').length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${todo+progress} aperti · ${progress} in corso · ${done} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError(mailboxConnectionError);mailboxSyncInProgress=false;renderInboxControls();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/google/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST /inbox/google/sync fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt);await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){if(isMailboxAuthExpiredError(err)){markMailboxReconnectRequired();}else{mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}}finally{mailboxSyncInProgress=false;renderAll();}}
@@ -2530,24 +2735,110 @@ async function syncCalendar(){
 
 // ── TASK CRUD ─────────────────────────────────────────────────────────────────
 function toggleTaskForm(){const f=document.getElementById('task-form');const b=document.getElementById('task-form-toggle');const open=f.style.display==='none';f.style.display=open?'':'none';b.textContent=open?'Annulla':'+ Nuovo task';b.style.background=open?'#F0EDE6':'#1A4FBF';b.style.color=open?'#6B6860':'#fff';if(open)document.getElementById('new-task-label').focus();}
+async function persistTaskStatus(task,status){
+  if(!currentUser?.id||!isPersistedTaskId(task.id))return null;
+  const res=await fetchApi(`/api/v1/tasks/${encodeURIComponent(task.id)}/status`,{
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({userId:currentUser.id,status})
+  });
+  if(!res.ok){const txt=await res.text().catch(()=> '');throw new Error(`PATCH /tasks/${task.id}/status fallita (${res.status}): ${txt}`);}
+  const payload=await res.json();
+  return payload?.data?normalizeApiTask(payload.data):null;
+}
+async function createRecurringFollowUp(sourceTask){
+  const recurrence=sourceTask?.recurrence||'none';
+  if(!['daily','weekly','monthly'].includes(recurrence))return;
+  const baseDue=getTaskDueDate(sourceTask)||new Date();
+  const nextDue=addRecurrenceInterval(baseDue,recurrence);
+  const currentReminder=getTaskReminderDate(sourceTask);
+  const nextReminder=currentReminder?addRecurrenceInterval(currentReminder,recurrence):null;
+  const apiPriorityMap={bassa:'low',normale:'medium',alta:'high',urgente:'urgent'};
+  const fallback={
+    id:nextTaskId++,
+    label:sourceTask.label,
+    done:false,
+    status:'todo',
+    priorita:sourceTask.priorita||'normale',
+    scadenza:formatDueForUi(nextDue),
+    dueDateIso:nextDue.toISOString(),
+    reminderAt:nextReminder?nextReminder.toISOString():null,
+    recurrence
+  };
+  try{
+    if(currentUser?.id){
+      const res=await fetchApi('/api/v1/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,title:sourceTask.label,priority:apiPriorityMap[sourceTask.priorita]||'medium',dueDate:nextDue.toISOString(),reminderAt:nextReminder?nextReminder.toISOString():null,recurrence})});
+      if(res.ok){const payload=await res.json();tasks.unshift(payload?.data?normalizeApiTask(payload.data):fallback);return;}
+    }
+  }catch(err){console.warn('Creazione ricorrenza su backend fallita:',err);}
+  tasks.unshift(fallback);
+}
+async function moveTaskStatus(id,status){
+  const idKey=String(id);
+  const t=tasks.find(task=>String(task.id)===idKey);
+  if(!t)return;
+  const previousStatus=getTaskStatus(t);
+  if(previousStatus===status)return;
+  const shouldCreateRecurrence=status==='done'&&previousStatus!=='done';
+  setTaskStatusLocal(t,status);
+  if(shouldCreateRecurrence){
+    dismissSuggestionTitle(getTaskSuggestionTitle(t));
+    recordTaskCompleted(t);
+  }else if(status!=='done'&&previousStatus==='done'){
+    restoreSuggestionTitle(getTaskSuggestionTitle(t));
+  }
+  saveTasksToCache();
+  renderTasks();
+  try{
+    const updated=await persistTaskStatus(t,status);
+    const merged=updated?{
+      ...t,
+      ...updated,
+      dueDateIso:updated.dueDateIso||t.dueDateIso,
+      scadenza:updated.scadenza||t.scadenza,
+      reminderAt:updated.reminderAt||t.reminderAt,
+      recurrence:updated.recurrence||t.recurrence,
+      suggestionTitle:updated.suggestionTitle||t.suggestionTitle
+    }:t;
+    if(updated){tasks=tasks.map(task=>String(task.id)===idKey?merged:task);}
+    if(shouldCreateRecurrence)await createRecurringFollowUp(merged);
+    saveTasksToCache();
+    renderTasks();
+  }catch(err){
+    console.warn('Cambio stato task salvato localmente ma non sincronizzato col backend:',err);
+    // Mantieni l'aggiornamento ottimistico: tornare allo stato precedente crea un rimbalzo visivo
+    // quando l'API è lenta, non ancora deployata o il DB non ha ancora applicato la migration.
+    if(shouldCreateRecurrence)await createRecurringFollowUp(t);
+    saveTasksToCache();
+    renderTasks();
+  }
+}
 async function addTask() {
   const label = document.getElementById('new-task-label').value.trim();
   const priority = document.getElementById('new-task-pri').value;
   const dueInput = document.getElementById('new-task-scad').value.trim();
+  const reminderInput = document.getElementById('new-task-reminder').value;
+  const recurrence = document.getElementById('new-task-recur').value || 'none';
   const apiPriorityMap = { bassa: 'low', normale: 'medium', alta: 'high', urgente: 'urgent' };
   const userId = currentUser?.id || '11111111-1111-1111-1111-111111111111';
 
   if (!label) return;
 
+  const parsedDueDate = dueInput ? parseTaskDueDate(dueInput) : null;
+  const dueDateIso = parsedDueDate && !Number.isNaN(parsedDueDate.getTime()) ? parsedDueDate.toISOString() : null;
+  const parsedReminder = parseDateTimeLocalInput(reminderInput);
+  const reminderAt = parsedReminder ? parsedReminder.toISOString() : null;
   const fallbackTask = {
     id: nextTaskId++,
     label,
     done: false,
+    status: 'todo',
     priorita: priority,
-    scadenza: dueInput
+    scadenza: dueInput,
+    dueDateIso,
+    reminderAt,
+    recurrence
   };
-  const parsedDueDate = dueInput ? new Date(dueInput) : null;
-  const dueDateIso = parsedDueDate && !Number.isNaN(parsedDueDate.getTime()) ? parsedDueDate.toISOString() : null;
 
   try {
     const res = await fetchApi('/api/v1/tasks', {
@@ -2557,7 +2848,9 @@ async function addTask() {
         userId,
         title: label,
         priority: apiPriorityMap[priority] || 'medium',
-        dueDate: dueDateIso
+        dueDate: dueDateIso,
+        reminderAt,
+        recurrence
       })
     });
 
@@ -2579,6 +2872,8 @@ async function addTask() {
   document.getElementById('new-task-label').value = '';
   document.getElementById('new-task-pri').value = 'normale';
   document.getElementById('new-task-scad').value = '';
+  document.getElementById('new-task-reminder').value = '';
+  document.getElementById('new-task-recur').value = 'none';
   toggleTaskForm();
 }
 function addTaskFromSuggestion(titolo,button=null,sourceTitle=null){
@@ -2586,14 +2881,19 @@ function addTaskFromSuggestion(titolo,button=null,sourceTitle=null){
   const suggestionTitle=String(sourceTitle||button?.getAttribute?.('data-suggestion-task-title')||label).trim()||label;
   restoreSuggestionTitle(suggestionTitle);
   if(!isSuggestionTaskOpen(suggestionTitle)){
-    tasks.push({id:nextTaskId++,label,done:false,priorita:'urgente',scadenza:'Oggi',suggestionTitle});
+    tasks.push({id:nextTaskId++,label,done:false,status:'todo',priorita:'urgente',scadenza:'Oggi',dueDateIso:new Date().toISOString(),reminderAt:null,recurrence:'none',suggestionTitle});
     saveTasksToCache();
   }
   renderTasks();
   if(button)setSuggestionTaskButtonState(button,true);
   showPage('task',document.querySelectorAll('.nav-item')[3]);
 }
-function toggleTask(id){const idKey=String(id);const t=tasks.find(t=>String(t.id)===idKey);if(t){const suggestionTitle=getTaskSuggestionTitle(t);if(!t.done)recordTaskPostponed(t);else{t.done=false;restoreSuggestionTitle(suggestionTitle);saveTasksToCache();renderTasks();return;}t.done=true;dismissSuggestionTitle(suggestionTitle);recordTaskCompleted(t);}saveTasksToCache();renderTasks();}
+async function toggleTask(id){
+  const idKey=String(id);
+  const t=tasks.find(task=>String(task.id)===idKey);
+  if(!t)return;
+  await moveTaskStatus(idKey,getTaskStatus(t)==='done'?'todo':'done');
+}
 async function deleteTask(id){
   const idKey=String(id);
   const previous=tasks.slice();
@@ -3314,8 +3614,10 @@ async function init() {
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible'&&currentUser?.id){
       refreshAnalyzeQuota();
+      checkDueTaskReminders();
     }
   });
+  setInterval(checkDueTaskReminders,60000);
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log('Auth event:', event, session ? 'session ok' : 'no session');

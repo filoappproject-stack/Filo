@@ -28,10 +28,10 @@ All'accesso, Filo chiede come stai — energia, sonno, stress. I suggerimenti ve
 Filo registra i tuoi pattern nel tempo: energia media, task che tendi a rimandare, abitudini produttive. I suggerimenti diventano sempre più precisi.
 
 ### Inbox unificata
-Email e messaggi Slack in un unico flusso, con classificazione automatica per fonte.
+Email Google in un unico flusso operativo, con classificazione automatica per fonte. L'integrazione Slack è prevista nella roadmap, ma non è ancora inclusa nella beta operativa.
 
 ### Gestione task
-Crea task manualmente o direttamente dai suggerimenti AI. Priorità, scadenze, stato completato.
+Crea task manualmente o direttamente dai suggerimenti AI. Priorità, scadenze, promemoria in-app, ricorrenze semplici e stati `Da fare / In corso / Completato`, con vista lista o board.
 
 ### Note con tag
 Editor integrato con titolo, contenuto e tag personalizzabili. Ricercabili globalmente.
@@ -68,6 +68,8 @@ Cerca in tempo reale tra task, note e inbox.
 - Schema SQL iniziale con tabelle `users`, `tasks`, `daily_checkins`
 
 Dettagli architetturali: [`docs/ARCHITETTURA.md`](docs/ARCHITETTURA.md).
+
+Backlog P0 avanzata/definitiva: [`docs/P0_AVANZATA.md`](docs/P0_AVANZATA.md).
 
 ---
 
@@ -161,7 +163,7 @@ Prima di invitare una cerchia ristretta, completa questi controlli minimi:
 
 - **Affidabilità**: smoke test giornaliero su `/api/v1/health` e su `/api/v1/assistant/day-analysis` con monitoraggio errori 5xx e timeout.
 - **Sicurezza**: verifica RLS/permessi dati utente, rotazione chiavi API e assenza di segreti nel frontend.
-- **Qualità UX**: onboarding iniziale chiaro (1-2 minuti), stati di errore leggibili e fallback quando l'AI non risponde.
+- **Qualità UX**: onboarding iniziale chiaro (1-2 minuti), stati di errore leggibili, fallback quando l'AI non risponde, reminder/ricorrenze task e board task verificati.
 - **Protezione dati**: privacy notice essenziale (quali dati salvi, per quanto tempo, come cancellarli).
 - **Operatività**: canale feedback unico (es. form) e processo triage bug con priorità P0/P1/P2.
 
