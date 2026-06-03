@@ -69,6 +69,8 @@ Cerca in tempo reale tra task, note e inbox.
 
 Dettagli architetturali: [`docs/ARCHITETTURA.md`](docs/ARCHITETTURA.md).
 
+Backlog P0 avanzata/definitiva: [`docs/P0_AVANZATA.md`](docs/P0_AVANZATA.md).
+
 ---
 
 ## Branding login Google
