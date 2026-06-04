@@ -76,11 +76,16 @@ export async function postDayAnalysis(req, res) {
       calendarTo: data.calendarTo,
       includeCelebrationSuggestions: data.includeCelebrationSuggestions
     });
-    const suggerimenti = await analyzeDay({ ...data, calendarContext });
+    const analysis = await analyzeDay({ ...data, calendarContext });
 
     return res.json({
       data: {
-        suggerimenti,
+        suggerimenti: analysis.suggestions,
+        source: analysis.source,
+        degraded: analysis.degraded,
+        degradedStage: analysis.degradedStage,
+        degradedReason: analysis.degradedReason,
+        degradedHint: analysis.degradedHint,
         quota: {
           limit: quota.limit,
           used: quota.used,
