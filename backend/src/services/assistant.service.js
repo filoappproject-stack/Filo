@@ -3,7 +3,7 @@ import { env } from '../config/env.js';
 let aiAttemptCounter = 0;
 
 let lastAnalyzedSignature = null;
-let lastSuggestions = null;
+let lastAnalysisResult = null;
 
 const FALLBACK_ANTHROPIC_MODELS = [
   'claude-sonnet-4-20250514',
@@ -125,6 +125,25 @@ export function buildFallbackSuggestions(input) {
   return out.slice(0, 5);
 }
 
+function getAiFallbackReasonForConfiguration() {
+  if (!env.AI_ENABLED) {
+    return {
+      code: 'AI_DISABLED',
+      hint: 'Analisi IA disattivata da configurazione: uso fallback locale.'
+    };
+  }
+  if (!env.ANTHROPIC_API_KEY) {
+    return {
+      code: 'AI_API_KEY_MISSING',
+      hint: 'Provider IA non configurato: manca la chiave API, quindi uso il fallback locale.'
+    };
+  }
+  return {
+    code: 'AI_EMPTY_RESPONSE',
+    hint: 'Il provider IA non ha restituito suggerimenti utilizzabili.'
+  };
+}
+
 async function askAnthropic(input) {
   aiAttemptCounter += 1;
   if (!env.AI_ENABLED) {
@@ -218,29 +237,50 @@ ${celebrationRule}`;
 export async function analyzeDay(input) {
   const inputSignature = normalizeInputForCache(input);
 
-  if (inputSignature === lastAnalyzedSignature && Array.isArray(lastSuggestions)) {
-    return lastSuggestions;
+  if (inputSignature === lastAnalyzedSignature && lastAnalysisResult?.suggestions) {
+    return lastAnalysisResult;
   }
 
   let suggestions;
+  let source = 'ai';
+  let degraded = false;
+  let degradedReason = null;
+  let degradedHint = null;
 
   try {
     const aiSuggestions = await askAnthropic(input);
     if (aiSuggestions?.length) {
       suggestions = aiSuggestions.slice(0, 5);
+    } else {
+      const fallbackReason = getAiFallbackReasonForConfiguration();
+      degradedReason = fallbackReason.code;
+      degradedHint = fallbackReason.hint;
     }
   } catch (err) {
+    degradedReason = 'AI_PROVIDER_UNAVAILABLE';
+    degradedHint = 'Il provider IA non è disponibile o non ha risposto entro i tempi previsti.';
     console.warn('AI day analysis fallback attivato:', err?.message || err);
   }
 
   if (!suggestions) {
+    source = 'local-fallback';
+    degraded = true;
     suggestions = buildFallbackSuggestions(input);
   }
 
   suggestions = enforceCheckinFacts(suggestions, input);
 
-  lastAnalyzedSignature = inputSignature;
-  lastSuggestions = suggestions;
+  const result = {
+    suggestions,
+    source,
+    degraded,
+    degradedStage: degraded ? 'analysis' : null,
+    degradedReason,
+    degradedHint
+  };
 
-  return suggestions;
+  lastAnalyzedSignature = inputSignature;
+  lastAnalysisResult = result;
+
+  return result;
 }

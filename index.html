@@ -1537,7 +1537,7 @@ async function loginSuccess(user) {
   restoreDayDraft();
   const cachedSuggestions=loadSuggestionsFromCache();
   if(cachedSuggestions?.suggestions?.length){
-    renderDaySuggestions(ensureCelebrationSuggestion(cachedSuggestions.suggestions),{persist:false,updatedAt:cachedSuggestions.savedAt,source:'cache'});
+    renderDaySuggestions(ensureCelebrationSuggestion(cachedSuggestions.suggestions),{persist:false,updatedAt:cachedSuggestions.savedAt,source:'cache',originalSource:cachedSuggestions.source,degraded:cachedSuggestions.degraded,degradedReason:cachedSuggestions.degradedReason,degradedHint:cachedSuggestions.degradedHint});
   }
   renderAll();
   restorePostOauthPage();
@@ -1889,12 +1889,13 @@ function getCurrentLocalDayKey(){
   return `${y}-${m}-${d}`;
 }
 
-function saveSuggestionsToCache(suggestions){
+function saveSuggestionsToCache(suggestions,metadata={}){
   const key=getSuggestionsCacheKey();
   if(!key)return;
   const safeSuggestions=Array.isArray(suggestions)?suggestions:[];
+  const source=normalizeSuggestionSource(metadata?.source);
   try{
-    localStorage.setItem(key,JSON.stringify({savedAt:new Date().toISOString(),dayKey:getCurrentLocalDayKey(),suggestions:safeSuggestions}));
+    localStorage.setItem(key,JSON.stringify({savedAt:new Date().toISOString(),dayKey:getCurrentLocalDayKey(),suggestions:safeSuggestions,source,degraded:Boolean(metadata?.degraded),degradedReason:metadata?.degradedReason||'',degradedHint:metadata?.degradedHint||''}));
   }catch(e){}
 }
 function loadSuggestionsFromCache(){
@@ -1907,18 +1908,18 @@ function loadSuggestionsFromCache(){
 
     // Compatibilità: vecchi formati cache (array puro) o object senza savedAt.
     if(Array.isArray(parsed)){
-      return {savedAt:null,suggestions:parsed};
+      return {savedAt:null,suggestions:parsed,source:'unknown',degraded:false,degradedReason:'',degradedHint:''};
     }
     if(!Array.isArray(parsed.suggestions))return null;
     if(!parsed.savedAt){
-      return {savedAt:null,suggestions:parsed.suggestions};
+      return {savedAt:null,suggestions:parsed.suggestions,source:normalizeSuggestionSource(parsed.source),degraded:Boolean(parsed.degraded)||normalizeSuggestionSource(parsed.source)==='local-fallback',degradedReason:parsed.degradedReason||'',degradedHint:parsed.degradedHint||''};
     }
     const savedAtMs=new Date(parsed.savedAt).getTime();
-    if(!Number.isFinite(savedAtMs)||savedAtMs<=0)return {savedAt:null,suggestions:parsed.suggestions};
+    if(!Number.isFinite(savedAtMs)||savedAtMs<=0)return {savedAt:null,suggestions:parsed.suggestions,source:normalizeSuggestionSource(parsed.source),degraded:Boolean(parsed.degraded)||normalizeSuggestionSource(parsed.source)==='local-fallback',degradedReason:parsed.degradedReason||'',degradedHint:parsed.degradedHint||''};
     const currentDayKey=getCurrentLocalDayKey();
-    if(parsed.dayKey&&parsed.dayKey===currentDayKey)return parsed;
+    if(parsed.dayKey&&parsed.dayKey===currentDayKey)return {...parsed,source:normalizeSuggestionSource(parsed.source),degraded:Boolean(parsed.degraded)||normalizeSuggestionSource(parsed.source)==='local-fallback',degradedReason:parsed.degradedReason||'',degradedHint:parsed.degradedHint||''};
     if((Date.now()-savedAtMs)>SUGGESTIONS_CACHE_TTL_MS)return null;
-    return parsed;
+    return {...parsed,source:normalizeSuggestionSource(parsed.source),degraded:Boolean(parsed.degraded)||normalizeSuggestionSource(parsed.source)==='local-fallback',degradedReason:parsed.degradedReason||'',degradedHint:parsed.degradedHint||''};
   }catch(e){return null;}
 }
 function loadCalendarFromCache(userIdOverride=null){
@@ -3380,7 +3381,36 @@ function ensureCelebrationSuggestion(suggestions){
   return [suggestion,...list].slice(0,5);
 }
 
-function setSuggestionsUpdatedAtLabel(updatedAt,source='live'){
+function normalizeSuggestionSource(source){
+  const value=String(source||'').trim();
+  if(['ai','local-fallback','cache'].includes(value))return value;
+  return 'unknown';
+}
+function getSuggestionSourceLabel(source,{degraded=false,originalSource='unknown'}={}){
+  const normalized=normalizeSuggestionSource(source);
+  if(normalized==='ai')return 'Fonte: IA (usa quota/costo)';
+  if(normalized==='local-fallback')return 'Fonte: fallback locale (generazione gratuita)';
+  if(normalized==='cache'){
+    const original=normalizeSuggestionSource(originalSource);
+    const originalLabel=original==='ai'?'origine IA':original==='local-fallback'?'origine fallback locale':'origine non disponibile';
+    return `Fonte: cache (${originalLabel})`;
+  }
+  return degraded?'Fonte: fallback locale (generazione gratuita)':'Fonte: non disponibile';
+}
+function getSuggestionFallbackReasonLabel({degradedReason='',degradedHint=''}={}){
+  const hint=String(degradedHint||'').trim();
+  if(hint)return hint;
+  const reason=String(degradedReason||'').trim();
+  const labels={
+    AI_DISABLED:'Analisi IA disattivata da configurazione.',
+    AI_API_KEY_MISSING:'Provider IA non configurato: manca la chiave API.',
+    AI_EMPTY_RESPONSE:'Il provider IA non ha restituito suggerimenti utilizzabili.',
+    AI_PROVIDER_UNAVAILABLE:'Il provider IA non è disponibile o non ha risposto entro i tempi previsti.',
+    FRONTEND_LOCAL_FALLBACK:'Il frontend ha generato suggerimenti locali perché il servizio analisi non era disponibile.'
+  };
+  return labels[reason]||'';
+}
+function setSuggestionsUpdatedAtLabel(updatedAt,source='unknown',options={}){
   const el=document.getElementById('suggestions-updated-at');
   if(!el)return;
   const dt=updatedAt?new Date(updatedAt):new Date();
@@ -3390,11 +3420,23 @@ function setSuggestionsUpdatedAtLabel(updatedAt,source='live'){
     return;
   }
   const hhmm=dt.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
-  const suffix=source==='cache'?' · Ripristinato da cache':'';
-  el.textContent=`Suggerimenti aggiornati alle ${hhmm}${suffix}`;
+  const normalized=normalizeSuggestionSource(source);
+  const originalSource=normalizeSuggestionSource(options?.originalSource);
+  const fallbackOrigin=Boolean(options?.degraded)||normalized==='local-fallback'||(normalized==='cache'&&originalSource==='local-fallback');
+  const sourceLabel=getSuggestionSourceLabel(normalized,{degraded:fallbackOrigin,originalSource});
+  const explicitReason=fallbackOrigin?getSuggestionFallbackReasonLabel({degradedReason:options?.degradedReason,degradedHint:options?.degradedHint}):'';
+  const reasonLabel=explicitReason||((normalized==='cache'&&originalSource==='local-fallback')?'Motivo non disponibile: suggerimento fallback salvato prima della tracciatura del motivo. Dalla prossima analisi verrà mostrata la causa precisa.':'');
+  const reasonSuffix=reasonLabel?` · Motivo: ${reasonLabel}`:'';
+  const cacheSuffix=normalized==='cache'?' · Ripristinato da cache':'';
+  el.textContent=`Suggerimenti aggiornati alle ${hhmm} · ${sourceLabel}${reasonSuffix}${cacheSuffix}`;
   el.style.display='';
+  el.style.color=fallbackOrigin?'#8A5C00':'#0E6B4A';
 }
 function renderDaySuggestions(suggestions,options={}){
+  const source=normalizeSuggestionSource(options?.source);
+  const degraded=Boolean(options?.degraded)||source==='local-fallback';
+  const degradedReason=options?.degradedReason||'';
+  const degradedHint=options?.degradedHint||'';
   const enrichedSuggestions=ensureCelebrationSuggestion(suggestions).filter(s=>!isSuggestionDismissed(s?.titolo));
   const container=document.getElementById('suggestions-container');
   if(!container)return;
@@ -3418,8 +3460,8 @@ function renderDaySuggestions(suggestions,options={}){
     return `<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(title)}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${titleForHandler}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'var(--color-primary)':'transparent'};color:${j===0?'#fff':'var(--color-muted-strong)'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button data-suggestion-task-title="${escapeHtml(title)}" aria-pressed="${added?'true':'false'}" onclick="addTaskFromSuggestion('${titleForHandler}',this)" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:${added?'#0E6B4A':'#6F6A61'};cursor:pointer;">${added?'✓ Aggiunto':'+ Aggiungi ai task'}</button></div></div>`;
   }).join('');
   const shouldPersist=options?.persist!==false;
-  if(shouldPersist)saveSuggestionsToCache(suggestions);
-  setSuggestionsUpdatedAtLabel(options?.updatedAt||(shouldPersist?new Date().toISOString():null),options?.source||'live');
+  if(shouldPersist)saveSuggestionsToCache(suggestions,{source,degraded,degradedReason,degradedHint});
+  setSuggestionsUpdatedAtLabel(options?.updatedAt||(shouldPersist?new Date().toISOString():null),source,{degraded,originalSource:options?.originalSource,degradedReason,degradedHint});
 }
 function updateAnalyzeQuotaHint(limit){
   const hint=document.getElementById('analyze-quota-hint');
@@ -3499,7 +3541,7 @@ function applyLocalAnalyzeFallbackState(input,requestId,message,options={}){
   updateAnalyzeQuotaLabel(estimated.limit,estimated.remaining);
   setAnalyzeFallbackStatus(true,errBox.textContent);
   setAnalyzeRequestDebug(`Errore risposta (#${requestId})`);
-  renderDaySuggestions(fallbackSuggestions);
+  renderDaySuggestions(fallbackSuggestions,{source:'local-fallback',degraded:true,degradedReason:'FRONTEND_LOCAL_FALLBACK',degradedHint:errBox.textContent});
 }
 function markAnalyzeRemoteUnavailable(status){
   const multiplier=status===404?12:1;
@@ -3711,11 +3753,15 @@ async function analyzeDay(){
           renderDaySuggestions(cachedSuggestions.suggestions,{
             persist:false,
             updatedAt:cachedSuggestions.savedAt,
-            source:'cache'
+            source:'cache',
+            originalSource:cachedSuggestions.source,
+            degraded:cachedSuggestions.degraded,
+            degradedReason:cachedSuggestions.degradedReason,
+            degradedHint:cachedSuggestions.degradedHint
           });
         }else{
           const fallbackSuggestions=buildLocalDayFallback({agenda,pending,dayFocus});
-          renderDaySuggestions(fallbackSuggestions,{persist:false});
+          renderDaySuggestions(fallbackSuggestions,{persist:false,source:'local-fallback',degraded:true,degradedReason:'FRONTEND_LOCAL_FALLBACK',degradedHint:'Limite analisi raggiunto: mostro suggerimenti locali gratuiti.'});
         }
         if(Number(payload?.retryAfterSeconds)>0)startAnalyzeCooldown(payload.retryAfterSeconds);
         loader.classList.remove('active');
@@ -3731,7 +3777,13 @@ async function analyzeDay(){
     if(quota)applyAnalyzeQuotaState(quota);
     loader.classList.remove('active');
     if(!quota)setAnalyzeButtonAvailability(Number.NaN);
-    renderDaySuggestions(ensureCelebrationSuggestion(suggestions));
+    const responseSource=normalizeSuggestionSource(payload?.data?.source);
+    const responseDegraded=Boolean(payload?.data?.degraded)||responseSource==='local-fallback';
+    if(responseDegraded){
+      const reasonLabel=getSuggestionFallbackReasonLabel({degradedReason:payload?.data?.degradedReason,degradedHint:payload?.data?.degradedHint});
+      setAnalyzeFallbackStatus(true,`Suggerimenti generati dal fallback locale gratuito: non sono una risposta dell'IA.${reasonLabel?` Motivo: ${reasonLabel}`:''}`);
+    }
+    renderDaySuggestions(ensureCelebrationSuggestion(suggestions),{source:responseSource,degraded:responseDegraded,degradedReason:payload?.data?.degradedReason,degradedHint:payload?.data?.degradedHint});
     analyzeRequestInFlight=false;
   }catch(e){
     loader.classList.remove('active');
