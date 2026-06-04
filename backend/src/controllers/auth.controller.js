@@ -9,7 +9,8 @@ import { HttpError } from '../utils/httpError.js';
 
 const ConnectSchema = z.object({
   redirectUri: z.string().url(),
-  state: z.string().min(8).max(500)
+  state: z.string().min(8).max(500),
+  colorSet: z.enum(['classic', 'salvia']).optional()
 });
 
 const ExchangeSchema = z.object({
@@ -46,14 +47,16 @@ function sendGoogleLoginCallbackPage(res, payload) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Accesso a Filo...</title>
 <style>
-  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#F7F5F0;color:#1A1A18;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
-  .box{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:20px;padding:32px 36px;box-shadow:0 10px 40px rgba(0,0,0,.08);text-align:center;max-width:360px;}
-  .mark{width:56px;height:56px;border-radius:16px;background:#1A4FBF;color:#fff;display:grid;place-items:center;margin:0 auto 18px;font-size:26px;font-weight:700;}
+  :root{--color-bg:#F7F5F0;--color-surface:#fff;--color-text:#1A1A18;--color-muted:#57534A;--color-primary:#1A4FBF;}
+  body[data-color-set="salvia"]{--color-bg:#F4F3EE;--color-surface:#fff;--color-text:#1B1A17;--color-muted:#566158;--color-primary:#2D7D68;}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--color-bg);color:var(--color-text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
+  .box{background:var(--color-surface);border:1px solid rgba(0,0,0,.08);border-radius:20px;padding:32px 36px;box-shadow:0 10px 40px rgba(0,0,0,.08);text-align:center;max-width:360px;}
+  .mark{width:56px;height:56px;border-radius:16px;background:var(--color-primary);color:#fff;display:grid;place-items:center;margin:0 auto 18px;font-size:26px;font-weight:700;}
   .title{font-size:22px;font-weight:650;margin-bottom:8px;letter-spacing:-.3px;}
-  .sub{font-size:14px;color:#57534A;line-height:1.5;}
+  .sub{font-size:14px;color:var(--color-muted);line-height:1.5;}
 </style>
 </head>
-<body>
+<body data-color-set="${payload.colorSet === 'salvia' ? 'salvia' : 'classic'}">
   <div class="box" role="status" aria-live="polite">
     <div class="mark">F</div>
     <div class="title">Accesso a Filo...</div>
@@ -119,6 +122,7 @@ export async function getGoogleLoginCallback(req, res) {
   const statePayload = decodeStatePayload(req.query.state);
   const appRedirectUri = statePayload?.appRedirectUri;
   const appState = statePayload?.appState;
+  const colorSet = statePayload?.colorSet === 'salvia' ? 'salvia' : 'classic';
   if (!appRedirectUri || !appState) {
     throw new HttpError(400, 'State login Google non valido');
   }
@@ -150,6 +154,7 @@ export async function getGoogleLoginCallback(req, res) {
     appRedirectUri,
     appState,
     callbackRedirectUri,
+    colorSet,
     code
   });
 }

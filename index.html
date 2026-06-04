@@ -1004,7 +1004,7 @@ async function doGoogleLogin() {
     const res = await fetch('/api/v1/auth/google/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ redirectUri, state })
+      body: JSON.stringify({ redirectUri, state, colorSet: normalizeColorSet(prefs.colorSet) })
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => '');
