@@ -33,12 +33,20 @@ export function getGoogleLoginCallbackRedirectUri(appRedirectUri) {
   return new URL('/api/v1/auth/google/callback', appRedirectUri).toString();
 }
 
-export function buildGoogleLoginAuthUrl({ redirectUri, state }) {
+function normalizeColorSet(colorSet) {
+  return colorSet === 'salvia' ? 'salvia' : 'classic';
+}
+
+export function buildGoogleLoginAuthUrl({ redirectUri, state, colorSet }) {
   const { clientId } = getGoogleLoginClientConfig();
   if (!redirectUri) throw new HttpError(400, 'Redirect URI Google mancante');
 
   const callbackRedirectUri = getGoogleLoginCallbackRedirectUri(redirectUri);
-  const callbackState = encodeStatePayload({ appRedirectUri: redirectUri, appState: state });
+  const callbackState = encodeStatePayload({
+    appRedirectUri: redirectUri,
+    appState: state,
+    colorSet: normalizeColorSet(colorSet)
+  });
 
   const params = new URLSearchParams({
     client_id: clientId,
