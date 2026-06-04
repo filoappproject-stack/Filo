@@ -6,7 +6,7 @@ import { HttpError } from '../utils/httpError.js';
 
 const DEFAULT_WORK_START_HOUR = 9;
 const DEFAULT_WORK_END_HOUR = 18;
-const MIN_SLOT_MINUTES = 15;
+const MIN_SLOT_MINUTES = 5;
 const MAX_SUGGESTIONS = 3;
 
 function clamp(value, min, max) {
@@ -212,7 +212,7 @@ async function getTodayCheckinOrNeutral(userId, localDate) {
 }
 
 export async function suggestSmartSlots(input) {
-  const durationMinutes = clamp(Number(input.durationMinutes) || 45, MIN_SLOT_MINUTES, 180);
+  const durationMinutes = clamp(Number(input.durationMinutes) || 30, MIN_SLOT_MINUTES, 180);
   const window = resolveSchedulingWindow(input);
   const now = new Date();
   const requestedWindowStartsTodayOrPast = window.from <= now && now < window.to;
@@ -224,7 +224,7 @@ export async function suggestSmartSlots(input) {
   if (windowEnd.getTime() - windowStart.getTime() < durationMinutes * 60 * 1000) {
     return {
       suggestions: [],
-      message: 'Oggi non resta una finestra abbastanza lunga per questo task.',
+      message: `Oggi non resta una finestra abbastanza lunga per un blocco da ${durationMinutes} min.`,
       meta: { durationMinutes, calendarEventsConsidered: 0, checkinSource: 'not-needed' }
     };
   }
@@ -261,8 +261,8 @@ export async function suggestSmartSlots(input) {
     },
     suggestions,
     message: suggestions.length
-      ? `Ho trovato ${suggestions.length} slot utili per "${taskTitle}".`
-      : 'Oggi non vedo uno slot abbastanza sano per questo task.',
+      ? `Ho trovato ${suggestions.length} slot utili da ${durationMinutes} min per "${taskTitle}".`
+      : `Oggi non vedo uno slot abbastanza sano da ${durationMinutes} min per questo task.`,
     meta: {
       durationMinutes,
       bufferMinutes,

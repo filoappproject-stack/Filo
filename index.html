@@ -2604,10 +2604,18 @@ function taskStatusBadge(t){
 }
 
 function getTaskByUiId(id){const key=String(id);return tasks.find(t=>String(t.id)===key)||null;}
+function inferSmartSlotDuration(task){
+  const title=String(task?.label||'').toLowerCase();
+  if(/\b(chiam|telefon|call|zoom|meet|teams)\w*/i.test(title))return 10;
+  if(/\b(email|mail|rispond|messaggio|whatsapp)\w*/i.test(title))return 15;
+  if(Number(task?.energyCost||3)<=2)return 20;
+  if(Number(task?.energyCost||3)>=4)return 60;
+  return 30;
+}
 function buildTodayWorkWindow(){
   const start=new Date();start.setHours(9,0,0,0);
-  const end=new Date();end.setHours(18,0,0,0);
-  return{from:start,to:end,date:formatLocalDate(start)};
+  const end=new Date();end.setHours(21,30,0,0);
+  return{from:start,to:end,date:formatLocalDate(start),workStartHour:9,workEndHour:22};
 }
 function formatSmartSlotRange(startIso,endIso){
   const start=new Date(startIso);const end=new Date(endIso);
@@ -2636,12 +2644,12 @@ async function suggestSmartSlot(taskId,button=null){
     const win=buildTodayWorkWindow();
     const payload={
       userId:currentUser.id,
-      durationMinutes:task.energyCost>=4?60:45,
+      durationMinutes:inferSmartSlotDuration(task),
       date:win.date,
       from:win.from.toISOString(),
       to:win.to.toISOString(),
-      workStartHour:9,
-      workEndHour:18,
+      workStartHour:win.workStartHour,
+      workEndHour:win.workEndHour,
       task:{title:task.label,energyCost:task.energyCost||3,stressImpact:task.stressImpact||3}
     };
     if(isPersistedTaskId(task.id))payload.taskId=task.id;
