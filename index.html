@@ -167,6 +167,14 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-bg);color
 .task-list-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
 .task-list-section{font-size:11px;font-weight:600;color:var(--color-muted-strong);text-transform:uppercase;letter-spacing:.06em;padding:10px 0 4px;}
 .task-list-section:first-child{padding-top:0;}
+.smart-slot-panel{margin:8px 0 12px 34px;padding:11px 12px;border:1px solid rgba(43,124,106,.18);border-radius:12px;background:#F3FBF8;color:var(--color-text);}
+.task-card .smart-slot-panel{margin:9px 0 0 0;background:#F8FCFA;}
+.smart-slot-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:6px;}
+.smart-slot-title{font-size:12px;font-weight:600;color:var(--color-primary-strong);}
+.smart-slot-time{font-size:13px;font-weight:600;color:var(--color-text);}
+.smart-slot-reason{font-size:12px;line-height:1.45;color:var(--color-muted-strong);}
+.smart-slot-alt{font-size:11px;color:var(--color-muted);margin-top:6px;}
+.smart-slot-empty{font-size:12px;color:var(--color-muted-strong);line-height:1.45;}
 .reminder-toast{position:fixed;right:22px;bottom:22px;width:min(360px,calc(100vw - 44px));background:var(--color-surface);border:1px solid rgba(138,90,0,0.22);border-left:4px solid #D99600;border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,0.16);padding:14px;z-index:220;display:none;}
 .reminder-toast.active{display:block;}
 .reminder-toast-title{font-size:13px;font-weight:600;color:var(--color-text);margin-bottom:4px;}
@@ -1487,6 +1495,8 @@ async function loginSuccess(user) {
 
   activeSessionUserId = user.id;
   currentUser = user;
+  Object.keys(smartSlotAccepted).forEach(key=>delete smartSlotAccepted[key]);
+  Object.assign(smartSlotAccepted,loadSmartSlotAccepted());
   const cachedNotes = loadNotesFromCache();
   if (cachedNotes) notes = cachedNotes;
   const numericNoteIds = notes.map(n=>parseInt(n.id,10)).filter(n=>Number.isFinite(n));
@@ -1681,6 +1691,9 @@ const SUGGESTION_DISMISSALS_PREFIX='filo_suggestion_dismissals_';
 const SUGGESTIONS_CACHE_TTL_MS=72*60*60*1000;
 const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
 const DAY_ANALYSIS_DRAFT_PREFIX='filo_day_analysis_draft_';
+const SMART_SLOT_ACCEPTED_PREFIX='filo_smart_slot_accepted_';
+const smartSlotState={};
+const smartSlotAccepted={};
 
 function normalizeApiTask(task){
   const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};
@@ -1695,6 +1708,8 @@ function normalizeApiTask(task){
     dueDateIso:task?.due_date||task?.dueDateIso||null,
     reminderAt:task?.reminder_at||task?.reminderAt||null,
     recurrence:task?.recurrence||'none',
+    energyCost:Number(task?.energy_cost??task?.energyCost??3)||3,
+    stressImpact:Number(task?.stress_impact??task?.stressImpact??3)||3,
     suggestionTitle:task?.suggestionTitle||task?.sourceSuggestionTitle||'',
     sourceNoteId:task?.sourceNoteId||task?.source_note_id||''
   };
@@ -1728,7 +1743,7 @@ function formatDueForUi(date){return date.toLocaleDateString('it-IT');}
 function addRecurrenceInterval(date,recurrence){const next=new Date(date.getTime());if(recurrence==='daily')next.setDate(next.getDate()+1);else if(recurrence==='weekly')next.setDate(next.getDate()+7);else if(recurrence==='monthly')next.setMonth(next.getMonth()+1);return next;}
 function getTaskDueDate(task){if(task?.dueDateIso){const d=new Date(task.dueDateIso);if(!Number.isNaN(d.getTime()))return d;}return parseTaskDueDate(task?.scadenza);}
 function getTaskReminderDate(task){if(!task?.reminderAt)return null;const d=new Date(task.reminderAt);return Number.isNaN(d.getTime())?null:d;}
-function normalizeCachedTasks(){tasks=tasks.map(t=>normalizeApiTask({id:t.id,title:t.label,status:getTaskStatus(t),priority:{bassa:'low',normale:'medium',alta:'high',urgente:'urgent'}[t.priorita]||'medium',due_date:t.dueDateIso||null,reminder_at:t.reminderAt||null,recurrence:t.recurrence||'none',suggestionTitle:t.suggestionTitle||'',sourceNoteId:t.sourceNoteId||''}));}
+function normalizeCachedTasks(){tasks=tasks.map(t=>normalizeApiTask({id:t.id,title:t.label,status:getTaskStatus(t),priority:{bassa:'low',normale:'medium',alta:'high',urgente:'urgent'}[t.priorita]||'medium',due_date:t.dueDateIso||null,reminder_at:t.reminderAt||null,recurrence:t.recurrence||'none',energyCost:t.energyCost||3,stressImpact:t.stressImpact||3,suggestionTitle:t.suggestionTitle||'',sourceNoteId:t.sourceNoteId||''}));}
 function setTaskViewMode(mode){taskViewMode=mode==='board'?'board':'list';renderTasks();}
 function taskStatusLabel(status){return {todo:'Da fare',in_progress:'In corso',done:'Completati'}[status]||'Da fare';}
 
@@ -1860,6 +1875,9 @@ function initDayDraftAutosave(){
   });
 }
 function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
+function getSmartSlotAcceptedKey(){return currentUser?.id?`${SMART_SLOT_ACCEPTED_PREFIX}${currentUser.id}`:null;}
+function loadSmartSlotAccepted(){const key=getSmartSlotAcceptedKey();if(!key)return {};try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):{};return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:{};}catch(e){return {};}}
+function saveSmartSlotAccepted(){const key=getSmartSlotAcceptedKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(smartSlotAccepted));}catch(e){}}
 function saveTasksToCache(){const key=getTaskCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(tasks));}catch(e){}}
 function loadTasksFromCache(){const key=getTaskCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
 function getNotesCacheKey(){return currentUser?.id?`${NOTES_CACHE_PREFIX}${currentUser.id}`:null;}
@@ -2580,6 +2598,10 @@ function taskActionButtons(t){
   const buttons=[];
   if(status!=='todo')buttons.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','todo')">Riapri</button>`);
   if(status!=='in_progress')buttons.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','in_progress')">In corso</button>`);
+  if(status!=='done'){
+    if(getAcceptedSmartSlot(t))buttons.push('<button class="btn-ghost" disabled>Slot fissato</button>');
+    else buttons.push(`<button class="btn-ghost" onclick="suggestSmartSlot('${id}',this)">Trova slot oggi</button>`);
+  }
   if(status!=='done')buttons.push(`<button class="btn-primary" onclick="moveTaskStatus('${id}','done')">Completa</button>`);
   buttons.push(`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`);
   return buttons.join('');
@@ -2590,22 +2612,113 @@ function taskStatusBadge(t){
   const [label,cls]=map[status]||map.todo;
   return `<span class="badge ${cls}">${label}</span>`;
 }
+
+function getTaskByUiId(id){const key=String(id);return tasks.find(t=>String(t.id)===key)||null;}
+function inferSmartSlotDuration(task){
+  const title=String(task?.label||'').toLowerCase();
+  if(/\b(chiam|telefon|call|zoom|meet|teams)\w*/i.test(title))return 10;
+  if(/\b(email|mail|rispond|messaggio|whatsapp)\w*/i.test(title))return 15;
+  if(Number(task?.energyCost||3)<=2)return 20;
+  if(Number(task?.energyCost||3)>=4)return 60;
+  return 30;
+}
+function buildTodayWorkWindow(){
+  const start=new Date();start.setHours(9,0,0,0);
+  const end=new Date();end.setHours(21,30,0,0);
+  return{from:start,to:end,date:formatLocalDate(start),workStartHour:9,workEndHour:22};
+}
+function formatSmartSlotRange(startIso,endIso){
+  const start=new Date(startIso);const end=new Date(endIso);
+  if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime()))return 'Orario da definire';
+  return `${start.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})} – ${end.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`;
+}
+function smartSlotFitLabel(score){
+  const value=Number(score);
+  if(!Number.isFinite(value))return 'Compatibilità buona';
+  if(value>=85)return 'Compatibilità alta';
+  if(value>=70)return 'Compatibilità buona';
+  return 'Compatibilità possibile';
+}
+function getAcceptedSmartSlot(task){return smartSlotAccepted[String(task?.id||'')]||null;}
+function acceptSmartSlot(taskId,start,end){
+  const key=String(taskId);
+  if(!key||!start||!end)return;
+  smartSlotAccepted[key]={start,end,acceptedAt:new Date().toISOString()};
+  saveSmartSlotAccepted();
+  renderTasks();
+}
+function renderSmartSlotPanel(t){
+  const accepted=getAcceptedSmartSlot(t);
+  if(accepted){
+    return `<div class="smart-slot-panel"><div class="smart-slot-head"><div><div class="smart-slot-title">Slot fissato</div><div class="smart-slot-time">Oggi ${escapeHtml(formatSmartSlotRange(accepted.start,accepted.end))}</div></div><span class="badge b-green">Pianificato</span></div><div class="smart-slot-reason">Filo considera questo task già pianificato e non cercherà altri slot finché resta fissato.</div></div>`;
+  }
+  const state=smartSlotState[String(t.id)];
+  if(!state)return '';
+  if(state.loading)return '<div class="smart-slot-panel"><div class="smart-slot-empty"><span class="spinning">↻</span> Cerco uno slot sano in calendario per oggi…</div></div>';
+  if(state.error)return `<div class="smart-slot-panel"><div class="smart-slot-title">Smart Slot Suggestion</div><div class="smart-slot-empty">${escapeHtml(state.error)}</div></div>`;
+  const suggestions=Array.isArray(state.suggestions)?state.suggestions:[];
+  if(!suggestions.length)return `<div class="smart-slot-panel"><div class="smart-slot-title">Smart Slot Suggestion</div><div class="smart-slot-empty">${escapeHtml(state.message||'Oggi non vedo uno slot abbastanza sano per questo task.')}</div></div>`;
+  const best=suggestions[0];
+  const alternatives=suggestions.slice(1).map(s=>formatSmartSlotRange(s.start,s.end)).join(' · ');
+  const safeTaskId=String(t.id).replace(/'/g,"\\'");
+  const safeStart=String(best.start||'').replace(/'/g,"\\'");
+  const safeEnd=String(best.end||'').replace(/'/g,"\\'");
+  return `<div class="smart-slot-panel"><div class="smart-slot-head"><div><div class="smart-slot-title">${escapeHtml(best.label||'Slot consigliato')}</div><div class="smart-slot-time">Oggi ${escapeHtml(formatSmartSlotRange(best.start,best.end))}</div></div><span class="badge b-green" title="Valutazione interna basata su calendario, energia, stress e durata del task">${escapeHtml(smartSlotFitLabel(best.score))}</span></div><div class="smart-slot-reason">${escapeHtml(best.reason||state.message||'Slot libero compatibile con energia e stress di oggi.')}</div><div class="task-card-actions"><button class="btn-primary" onclick="acceptSmartSlot('${safeTaskId}','${safeStart}','${safeEnd}')">Ho fissato questo slot</button></div>${alternatives?`<div class="smart-slot-alt">Alternative: ${escapeHtml(alternatives)}</div>`:''}</div>`;
+}
+async function suggestSmartSlot(taskId,button=null){
+  const task=getTaskByUiId(taskId);
+  if(!task||!currentUser?.id)return;
+  const key=String(task.id);
+  smartSlotState[key]={loading:true};
+  if(button){button.disabled=true;button.textContent='Cerco…';}
+  renderTasks();
+  try{
+    const win=buildTodayWorkWindow();
+    const payload={
+      userId:currentUser.id,
+      durationMinutes:inferSmartSlotDuration(task),
+      date:win.date,
+      from:win.from.toISOString(),
+      to:win.to.toISOString(),
+      workStartHour:win.workStartHour,
+      workEndHour:win.workEndHour,
+      task:{title:task.label,energyCost:task.energyCost||3,stressImpact:task.stressImpact||3}
+    };
+    if(isPersistedTaskId(task.id))payload.taskId=task.id;
+    const res=await fetchApi('/api/v1/scheduling/smart-slot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!res.ok){const txt=await res.text().catch(()=> '');throw new Error(`POST /scheduling/smart-slot fallita (${res.status}): ${txt}`);}
+    const data=await res.json();
+    const result=data?.data||{};
+    smartSlotState[key]={loading:false,suggestions:Array.isArray(result.suggestions)?result.suggestions:[],message:result.message||''};
+  }catch(err){
+    console.warn('Smart Slot Suggestion fallita:',err);
+    smartSlotState[key]={loading:false,error:'Non riesco a calcolare lo slot ora. Verifica calendario collegato e riprova.'};
+  }finally{
+    if(button){button.disabled=false;button.textContent='Trova slot oggi';}
+    renderTasks();
+  }
+}
+
 function taskListActions(t){
   const id=String(t.id).replace(/'/g,"\\'");
   const status=getTaskStatus(t);
   const actions=[];
   if(status==='todo')actions.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','in_progress')">In corso</button>`);
   if(status==='in_progress')actions.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','todo')">Da fare</button>`);
+  if(status!=='done'){
+    if(getAcceptedSmartSlot(t))actions.push('<button class="btn-ghost" disabled>Slot fissato</button>');
+    else actions.push(`<button class="btn-ghost" onclick="suggestSmartSlot('${id}',this)">Trova slot oggi</button>`);
+  }
   if(status!=='done')actions.push(`<button class="btn-primary" onclick="moveTaskStatus('${id}','done')">Completa</button>`);
   actions.push(`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`);
   return `<div class="task-list-actions">${actions.join('')}</div>`;
 }
 function taskListRow(t,done=false){
   const id=String(t.id).replace(/'/g,"\\'");
-  return `<div class="task-row" data-task-id="${id}"><div class="checkbox ${done?'done':''}" onclick="toggleTask('${id}')">${done?'<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>':''}</div><div style="flex:1;min-width:0;"><div style="font-size:13px;color:${done?'var(--color-muted)':'var(--color-text)'};text-decoration:${done?'line-through':'none'};">${escapeHtml(t.label)}</div>${renderTaskMeta(t)}</div>${taskStatusBadge(t)}${prioritaBadge(t.priorita)}${done?`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`:taskListActions(t)}</div>`;
+  return `<div class="task-row" data-task-id="${id}"><div class="checkbox ${done?'done':''}" onclick="toggleTask('${id}')">${done?'<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>':''}</div><div style="flex:1;min-width:0;"><div style="font-size:13px;color:${done?'var(--color-muted)':'var(--color-text)'};text-decoration:${done?'line-through':'none'};">${escapeHtml(t.label)}</div>${renderTaskMeta(t)}</div>${taskStatusBadge(t)}${prioritaBadge(t.priorita)}${done?`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`:taskListActions(t)}</div>${done?'':renderSmartSlotPanel(t)}`;
 }
 function taskBoardCard(t){
-  return `<div class="task-card" data-task-id="${String(t.id).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"><div class="task-card-title">${escapeHtml(t.label)}</div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${prioritaBadge(t.priorita)}</div>${renderTaskMeta(t)}<div class="task-card-actions">${taskActionButtons(t)}</div></div>`;
+  return `<div class="task-card" data-task-id="${String(t.id).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"><div class="task-card-title">${escapeHtml(t.label)}</div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${prioritaBadge(t.priorita)}</div>${renderTaskMeta(t)}<div class="task-card-actions">${taskActionButtons(t)}</div>${renderSmartSlotPanel(t)}</div>`;
 }
 function renderTaskBoard(){
   const board=document.getElementById('task-board-view');
@@ -2863,7 +2976,9 @@ async function createRecurringFollowUp(sourceTask){
     scadenza:formatDueForUi(nextDue),
     dueDateIso:nextDue.toISOString(),
     reminderAt:nextReminder?nextReminder.toISOString():null,
-    recurrence
+    recurrence,
+    energyCost:3,
+    stressImpact:3
   };
   try{
     if(currentUser?.id){
@@ -2937,7 +3052,9 @@ async function addTask() {
     scadenza: dueInput,
     dueDateIso,
     reminderAt,
-    recurrence
+    recurrence,
+    energyCost:3,
+    stressImpact:3
   };
 
   try {
@@ -2986,7 +3103,7 @@ async function createTaskFromNote(noteId,button=null){
   const label=String(note.title||'Nota senza titolo').trim().slice(0,200)||'Task da nota';
   const tagLine=Array.isArray(note.tags)&&note.tags.length?`\n\nTag nota: ${note.tags.join(', ')}`:'';
   const description=`Da nota Filo:\n${String(note.body||'').trim()}${tagLine}`.trim().slice(0,2000);
-  const fallbackTask={id:nextTaskId++,label,done:false,status:'todo',priorita:'normale',scadenza:'',dueDateIso:null,reminderAt:null,recurrence:'none',sourceNoteId:String(note.id)};
+  const fallbackTask={id:nextTaskId++,label,done:false,status:'todo',priorita:'normale',scadenza:'',dueDateIso:null,reminderAt:null,recurrence:'none',energyCost:3,stressImpact:3,sourceNoteId:String(note.id)};
 
   if(button){
     button.disabled=true;
@@ -3039,7 +3156,7 @@ function addTaskFromSuggestion(titolo,button=null,sourceTitle=null){
   const suggestionTitle=String(sourceTitle||button?.getAttribute?.('data-suggestion-task-title')||label).trim()||label;
   restoreSuggestionTitle(suggestionTitle);
   if(!isSuggestionTaskOpen(suggestionTitle)){
-    tasks.push({id:nextTaskId++,label,done:false,status:'todo',priorita:'urgente',scadenza:'Oggi',dueDateIso:new Date().toISOString(),reminderAt:null,recurrence:'none',suggestionTitle});
+    tasks.push({id:nextTaskId++,label,done:false,status:'todo',priorita:'urgente',scadenza:'Oggi',dueDateIso:new Date().toISOString(),reminderAt:null,recurrence:'none',energyCost:3,stressImpact:3,suggestionTitle});
     saveTasksToCache();
   }
   renderTasks();
