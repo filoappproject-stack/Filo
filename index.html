@@ -2616,9 +2616,9 @@ function taskStatusBadge(t){
 function getTaskByUiId(id){const key=String(id);return tasks.find(t=>String(t.id)===key)||null;}
 function inferSmartSlotDuration(task){
   const title=String(task?.label||'').toLowerCase();
-  if(/\b(chiam|telefon|call|zoom|meet|teams)\w*/i.test(title))return 10;
+  if(/\b(chiam|telefon|call|zoom|meet|teams)\w*/i.test(title))return 15;
   if(/\b(email|mail|rispond|messaggio|whatsapp)\w*/i.test(title))return 15;
-  if(Number(task?.energyCost||3)<=2)return 20;
+  if(Number(task?.energyCost||3)<=2)return 15;
   if(Number(task?.energyCost||3)>=4)return 60;
   return 30;
 }

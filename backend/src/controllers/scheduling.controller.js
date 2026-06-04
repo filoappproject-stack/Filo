@@ -13,7 +13,7 @@ const SmartSlotSchema = z.object({
       stressImpact: z.coerce.number().int().min(1).max(5).optional()
     })
     .optional(),
-  durationMinutes: z.coerce.number().int().min(5).max(180).default(30),
+  durationMinutes: z.coerce.number().int().min(15).max(180).default(30),
   date: z.string().date().optional(),
   from: z.string().datetime(),
   to: z.string().datetime(),

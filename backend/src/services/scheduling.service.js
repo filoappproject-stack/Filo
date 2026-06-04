@@ -6,11 +6,18 @@ import { HttpError } from '../utils/httpError.js';
 
 const DEFAULT_WORK_START_HOUR = 9;
 const DEFAULT_WORK_END_HOUR = 18;
-const MIN_SLOT_MINUTES = 5;
+const MIN_SLOT_MINUTES = 15;
+const SLOT_GRANULARITY_MINUTES = 15;
 const MAX_SUGGESTIONS = 3;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function normalizeDurationMinutes(value) {
+  const raw = Number(value) || 30;
+  const rounded = Math.ceil(raw / SLOT_GRANULARITY_MINUTES) * SLOT_GRANULARITY_MINUTES;
+  return clamp(rounded, MIN_SLOT_MINUTES, 180);
 }
 
 function roundUpToNextQuarter(date) {
@@ -212,7 +219,7 @@ async function getTodayCheckinOrNeutral(userId, localDate) {
 }
 
 export async function suggestSmartSlots(input) {
-  const durationMinutes = clamp(Number(input.durationMinutes) || 30, MIN_SLOT_MINUTES, 180);
+  const durationMinutes = normalizeDurationMinutes(input.durationMinutes);
   const window = resolveSchedulingWindow(input);
   const now = new Date();
   const requestedWindowStartsTodayOrPast = window.from <= now && now < window.to;
