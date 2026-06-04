@@ -28,6 +28,18 @@ export async function listTasks(userId) {
   return rows;
 }
 
+export async function getTaskById(taskId, userId) {
+  const sql = `
+    SELECT ${TASK_RETURNING_COLUMNS}
+    FROM tasks
+    WHERE id = $1 AND user_id = $2
+    LIMIT 1
+  `;
+
+  const { rows } = await query(sql, [taskId, userId]);
+  return rows[0] ?? null;
+}
+
 export async function createTask(input) {
   const sql = `
     INSERT INTO tasks (user_id, title, description, status, priority, due_date, reminder_at, recurrence, energy_cost, stress_impact)
