@@ -2622,6 +2622,13 @@ function formatSmartSlotRange(startIso,endIso){
   if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime()))return 'Orario da definire';
   return `${start.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})} – ${end.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`;
 }
+function smartSlotFitLabel(score){
+  const value=Number(score);
+  if(!Number.isFinite(value))return 'Compatibilità buona';
+  if(value>=85)return 'Compatibilità alta';
+  if(value>=70)return 'Compatibilità buona';
+  return 'Compatibilità possibile';
+}
 function renderSmartSlotPanel(t){
   const state=smartSlotState[String(t.id)];
   if(!state)return '';
@@ -2631,7 +2638,7 @@ function renderSmartSlotPanel(t){
   if(!suggestions.length)return `<div class="smart-slot-panel"><div class="smart-slot-title">Smart Slot Suggestion</div><div class="smart-slot-empty">${escapeHtml(state.message||'Oggi non vedo uno slot abbastanza sano per questo task.')}</div></div>`;
   const best=suggestions[0];
   const alternatives=suggestions.slice(1).map(s=>formatSmartSlotRange(s.start,s.end)).join(' · ');
-  return `<div class="smart-slot-panel"><div class="smart-slot-head"><div><div class="smart-slot-title">${escapeHtml(best.label||'Slot consigliato')}</div><div class="smart-slot-time">Oggi ${escapeHtml(formatSmartSlotRange(best.start,best.end))}</div></div><span class="badge b-green">score ${Number(best.score)||'-'}</span></div><div class="smart-slot-reason">${escapeHtml(best.reason||state.message||'Slot libero compatibile con energia e stress di oggi.')}</div>${alternatives?`<div class="smart-slot-alt">Alternative: ${escapeHtml(alternatives)}</div>`:''}</div>`;
+  return `<div class="smart-slot-panel"><div class="smart-slot-head"><div><div class="smart-slot-title">${escapeHtml(best.label||'Slot consigliato')}</div><div class="smart-slot-time">Oggi ${escapeHtml(formatSmartSlotRange(best.start,best.end))}</div></div><span class="badge b-green" title="Valutazione interna basata su calendario, energia, stress e durata del task">${escapeHtml(smartSlotFitLabel(best.score))}</span></div><div class="smart-slot-reason">${escapeHtml(best.reason||state.message||'Slot libero compatibile con energia e stress di oggi.')}</div>${alternatives?`<div class="smart-slot-alt">Alternative: ${escapeHtml(alternatives)}</div>`:''}</div>`;
 }
 async function suggestSmartSlot(taskId,button=null){
   const task=getTaskByUiId(taskId);
