@@ -125,6 +125,25 @@ export function buildFallbackSuggestions(input) {
   return out.slice(0, 5);
 }
 
+function getAiFallbackReasonForConfiguration() {
+  if (!env.AI_ENABLED) {
+    return {
+      code: 'AI_DISABLED',
+      hint: 'Analisi IA disattivata da configurazione: uso fallback locale.'
+    };
+  }
+  if (!env.ANTHROPIC_API_KEY) {
+    return {
+      code: 'AI_API_KEY_MISSING',
+      hint: 'Provider IA non configurato: manca la chiave API, quindi uso il fallback locale.'
+    };
+  }
+  return {
+    code: 'AI_EMPTY_RESPONSE',
+    hint: 'Il provider IA non ha restituito suggerimenti utilizzabili.'
+  };
+}
+
 async function askAnthropic(input) {
   aiAttemptCounter += 1;
   if (!env.AI_ENABLED) {
@@ -233,13 +252,14 @@ export async function analyzeDay(input) {
     if (aiSuggestions?.length) {
       suggestions = aiSuggestions.slice(0, 5);
     } else {
-      degradedReason = 'AI_EMPTY_RESPONSE';
-      degradedHint = 'Il provider AI non ha restituito suggerimenti utilizzabili.';
+      const fallbackReason = getAiFallbackReasonForConfiguration();
+      degradedReason = fallbackReason.code;
+      degradedHint = fallbackReason.hint;
     }
   } catch (err) {
     degradedReason = 'AI_PROVIDER_UNAVAILABLE';
-    degradedHint = err?.message || 'Errore temporaneo del provider AI.';
-    console.warn('AI day analysis fallback attivato:', degradedHint);
+    degradedHint = 'Il provider IA non è disponibile o non ha risposto entro i tempi previsti.';
+    console.warn('AI day analysis fallback attivato:', err?.message || err);
   }
 
   if (!suggestions) {
