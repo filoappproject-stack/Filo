@@ -1912,14 +1912,14 @@ function loadSuggestionsFromCache(){
     }
     if(!Array.isArray(parsed.suggestions))return null;
     if(!parsed.savedAt){
-      return {savedAt:null,suggestions:parsed.suggestions,source:normalizeSuggestionSource(parsed.source),degraded:Boolean(parsed.degraded),degradedReason:parsed.degradedReason||'',degradedHint:parsed.degradedHint||''};
+      return {savedAt:null,suggestions:parsed.suggestions,source:normalizeSuggestionSource(parsed.source),degraded:Boolean(parsed.degraded)||normalizeSuggestionSource(parsed.source)==='local-fallback',degradedReason:parsed.degradedReason||'',degradedHint:parsed.degradedHint||''};
     }
     const savedAtMs=new Date(parsed.savedAt).getTime();
-    if(!Number.isFinite(savedAtMs)||savedAtMs<=0)return {savedAt:null,suggestions:parsed.suggestions,source:normalizeSuggestionSource(parsed.source),degraded:Boolean(parsed.degraded),degradedReason:parsed.degradedReason||'',degradedHint:parsed.degradedHint||''};
+    if(!Number.isFinite(savedAtMs)||savedAtMs<=0)return {savedAt:null,suggestions:parsed.suggestions,source:normalizeSuggestionSource(parsed.source),degraded:Boolean(parsed.degraded)||normalizeSuggestionSource(parsed.source)==='local-fallback',degradedReason:parsed.degradedReason||'',degradedHint:parsed.degradedHint||''};
     const currentDayKey=getCurrentLocalDayKey();
-    if(parsed.dayKey&&parsed.dayKey===currentDayKey)return {...parsed,source:normalizeSuggestionSource(parsed.source),degraded:Boolean(parsed.degraded),degradedReason:parsed.degradedReason||'',degradedHint:parsed.degradedHint||''};
+    if(parsed.dayKey&&parsed.dayKey===currentDayKey)return {...parsed,source:normalizeSuggestionSource(parsed.source),degraded:Boolean(parsed.degraded)||normalizeSuggestionSource(parsed.source)==='local-fallback',degradedReason:parsed.degradedReason||'',degradedHint:parsed.degradedHint||''};
     if((Date.now()-savedAtMs)>SUGGESTIONS_CACHE_TTL_MS)return null;
-    return {...parsed,source:normalizeSuggestionSource(parsed.source),degraded:Boolean(parsed.degraded),degradedReason:parsed.degradedReason||'',degradedHint:parsed.degradedHint||''};
+    return {...parsed,source:normalizeSuggestionSource(parsed.source),degraded:Boolean(parsed.degraded)||normalizeSuggestionSource(parsed.source)==='local-fallback',degradedReason:parsed.degradedReason||'',degradedHint:parsed.degradedHint||''};
   }catch(e){return null;}
 }
 function loadCalendarFromCache(userIdOverride=null){
@@ -3421,13 +3421,16 @@ function setSuggestionsUpdatedAtLabel(updatedAt,source='unknown',options={}){
   }
   const hhmm=dt.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
   const normalized=normalizeSuggestionSource(source);
-  const sourceLabel=getSuggestionSourceLabel(normalized,{degraded:Boolean(options?.degraded),originalSource:options?.originalSource});
-  const reasonLabel=options?.degraded?getSuggestionFallbackReasonLabel({degradedReason:options?.degradedReason,degradedHint:options?.degradedHint}):'';
+  const originalSource=normalizeSuggestionSource(options?.originalSource);
+  const fallbackOrigin=Boolean(options?.degraded)||normalized==='local-fallback'||(normalized==='cache'&&originalSource==='local-fallback');
+  const sourceLabel=getSuggestionSourceLabel(normalized,{degraded:fallbackOrigin,originalSource});
+  const explicitReason=fallbackOrigin?getSuggestionFallbackReasonLabel({degradedReason:options?.degradedReason,degradedHint:options?.degradedHint}):'';
+  const reasonLabel=explicitReason||((normalized==='cache'&&originalSource==='local-fallback')?'Motivo non disponibile: suggerimento fallback salvato prima della tracciatura del motivo. Dalla prossima analisi verrà mostrata la causa precisa.':'');
   const reasonSuffix=reasonLabel?` · Motivo: ${reasonLabel}`:'';
   const cacheSuffix=normalized==='cache'?' · Ripristinato da cache':'';
   el.textContent=`Suggerimenti aggiornati alle ${hhmm} · ${sourceLabel}${reasonSuffix}${cacheSuffix}`;
   el.style.display='';
-  el.style.color=normalized==='local-fallback'||options?.degraded?'#8A5C00':'#0E6B4A';
+  el.style.color=fallbackOrigin?'#8A5C00':'#0E6B4A';
 }
 function renderDaySuggestions(suggestions,options={}){
   const source=normalizeSuggestionSource(options?.source);
