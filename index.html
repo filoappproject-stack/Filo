@@ -1495,6 +1495,8 @@ async function loginSuccess(user) {
 
   activeSessionUserId = user.id;
   currentUser = user;
+  Object.keys(smartSlotAccepted).forEach(key=>delete smartSlotAccepted[key]);
+  Object.assign(smartSlotAccepted,loadSmartSlotAccepted());
   const cachedNotes = loadNotesFromCache();
   if (cachedNotes) notes = cachedNotes;
   const numericNoteIds = notes.map(n=>parseInt(n.id,10)).filter(n=>Number.isFinite(n));
@@ -1689,7 +1691,9 @@ const SUGGESTION_DISMISSALS_PREFIX='filo_suggestion_dismissals_';
 const SUGGESTIONS_CACHE_TTL_MS=72*60*60*1000;
 const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
 const DAY_ANALYSIS_DRAFT_PREFIX='filo_day_analysis_draft_';
+const SMART_SLOT_ACCEPTED_PREFIX='filo_smart_slot_accepted_';
 const smartSlotState={};
+const smartSlotAccepted={};
 
 function normalizeApiTask(task){
   const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};
@@ -1871,6 +1875,9 @@ function initDayDraftAutosave(){
   });
 }
 function getTaskCacheKey(){return currentUser?.id?`${TASKS_CACHE_PREFIX}${currentUser.id}`:null;}
+function getSmartSlotAcceptedKey(){return currentUser?.id?`${SMART_SLOT_ACCEPTED_PREFIX}${currentUser.id}`:null;}
+function loadSmartSlotAccepted(){const key=getSmartSlotAcceptedKey();if(!key)return {};try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):{};return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:{};}catch(e){return {};}}
+function saveSmartSlotAccepted(){const key=getSmartSlotAcceptedKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(smartSlotAccepted));}catch(e){}}
 function saveTasksToCache(){const key=getTaskCacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify(tasks));}catch(e){}}
 function loadTasksFromCache(){const key=getTaskCacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);const parsed=raw?JSON.parse(raw):null;return Array.isArray(parsed)?parsed:null;}catch(e){return null;}}
 function getNotesCacheKey(){return currentUser?.id?`${NOTES_CACHE_PREFIX}${currentUser.id}`:null;}
@@ -2591,7 +2598,10 @@ function taskActionButtons(t){
   const buttons=[];
   if(status!=='todo')buttons.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','todo')">Riapri</button>`);
   if(status!=='in_progress')buttons.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','in_progress')">In corso</button>`);
-  if(status!=='done')buttons.push(`<button class="btn-ghost" onclick="suggestSmartSlot('${id}',this)">Trova slot oggi</button>`);
+  if(status!=='done'){
+    if(getAcceptedSmartSlot(t))buttons.push('<button class="btn-ghost" disabled>Slot fissato</button>');
+    else buttons.push(`<button class="btn-ghost" onclick="suggestSmartSlot('${id}',this)">Trova slot oggi</button>`);
+  }
   if(status!=='done')buttons.push(`<button class="btn-primary" onclick="moveTaskStatus('${id}','done')">Completa</button>`);
   buttons.push(`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`);
   return buttons.join('');
@@ -2629,7 +2639,19 @@ function smartSlotFitLabel(score){
   if(value>=70)return 'Compatibilità buona';
   return 'Compatibilità possibile';
 }
+function getAcceptedSmartSlot(task){return smartSlotAccepted[String(task?.id||'')]||null;}
+function acceptSmartSlot(taskId,start,end){
+  const key=String(taskId);
+  if(!key||!start||!end)return;
+  smartSlotAccepted[key]={start,end,acceptedAt:new Date().toISOString()};
+  saveSmartSlotAccepted();
+  renderTasks();
+}
 function renderSmartSlotPanel(t){
+  const accepted=getAcceptedSmartSlot(t);
+  if(accepted){
+    return `<div class="smart-slot-panel"><div class="smart-slot-head"><div><div class="smart-slot-title">Slot fissato</div><div class="smart-slot-time">Oggi ${escapeHtml(formatSmartSlotRange(accepted.start,accepted.end))}</div></div><span class="badge b-green">Pianificato</span></div><div class="smart-slot-reason">Filo considera questo task già pianificato e non cercherà altri slot finché resta fissato.</div></div>`;
+  }
   const state=smartSlotState[String(t.id)];
   if(!state)return '';
   if(state.loading)return '<div class="smart-slot-panel"><div class="smart-slot-empty"><span class="spinning">↻</span> Cerco uno slot sano in calendario per oggi…</div></div>';
@@ -2638,7 +2660,10 @@ function renderSmartSlotPanel(t){
   if(!suggestions.length)return `<div class="smart-slot-panel"><div class="smart-slot-title">Smart Slot Suggestion</div><div class="smart-slot-empty">${escapeHtml(state.message||'Oggi non vedo uno slot abbastanza sano per questo task.')}</div></div>`;
   const best=suggestions[0];
   const alternatives=suggestions.slice(1).map(s=>formatSmartSlotRange(s.start,s.end)).join(' · ');
-  return `<div class="smart-slot-panel"><div class="smart-slot-head"><div><div class="smart-slot-title">${escapeHtml(best.label||'Slot consigliato')}</div><div class="smart-slot-time">Oggi ${escapeHtml(formatSmartSlotRange(best.start,best.end))}</div></div><span class="badge b-green" title="Valutazione interna basata su calendario, energia, stress e durata del task">${escapeHtml(smartSlotFitLabel(best.score))}</span></div><div class="smart-slot-reason">${escapeHtml(best.reason||state.message||'Slot libero compatibile con energia e stress di oggi.')}</div>${alternatives?`<div class="smart-slot-alt">Alternative: ${escapeHtml(alternatives)}</div>`:''}</div>`;
+  const safeTaskId=String(t.id).replace(/'/g,"\\'");
+  const safeStart=String(best.start||'').replace(/'/g,"\\'");
+  const safeEnd=String(best.end||'').replace(/'/g,"\\'");
+  return `<div class="smart-slot-panel"><div class="smart-slot-head"><div><div class="smart-slot-title">${escapeHtml(best.label||'Slot consigliato')}</div><div class="smart-slot-time">Oggi ${escapeHtml(formatSmartSlotRange(best.start,best.end))}</div></div><span class="badge b-green" title="Valutazione interna basata su calendario, energia, stress e durata del task">${escapeHtml(smartSlotFitLabel(best.score))}</span></div><div class="smart-slot-reason">${escapeHtml(best.reason||state.message||'Slot libero compatibile con energia e stress di oggi.')}</div><div class="task-card-actions"><button class="btn-primary" onclick="acceptSmartSlot('${safeTaskId}','${safeStart}','${safeEnd}')">Ho fissato questo slot</button></div>${alternatives?`<div class="smart-slot-alt">Alternative: ${escapeHtml(alternatives)}</div>`:''}</div>`;
 }
 async function suggestSmartSlot(taskId,button=null){
   const task=getTaskByUiId(taskId);
@@ -2680,7 +2705,10 @@ function taskListActions(t){
   const actions=[];
   if(status==='todo')actions.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','in_progress')">In corso</button>`);
   if(status==='in_progress')actions.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','todo')">Da fare</button>`);
-  if(status!=='done')actions.push(`<button class="btn-ghost" onclick="suggestSmartSlot('${id}',this)">Trova slot oggi</button>`);
+  if(status!=='done'){
+    if(getAcceptedSmartSlot(t))actions.push('<button class="btn-ghost" disabled>Slot fissato</button>');
+    else actions.push(`<button class="btn-ghost" onclick="suggestSmartSlot('${id}',this)">Trova slot oggi</button>`);
+  }
   if(status!=='done')actions.push(`<button class="btn-primary" onclick="moveTaskStatus('${id}','done')">Completa</button>`);
   actions.push(`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`);
   return `<div class="task-list-actions">${actions.join('')}</div>`;
