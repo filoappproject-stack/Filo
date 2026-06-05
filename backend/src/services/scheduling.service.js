@@ -9,6 +9,14 @@ const DEFAULT_WORK_END_HOUR = 18;
 const MIN_SLOT_MINUTES = 15;
 const SLOT_GRANULARITY_MINUTES = 15;
 const MAX_SUGGESTIONS = 3;
+const LIGHT_AUTO_SCHEDULING_POLICY = {
+  mode: 'preview',
+  calendarWriteRequired: false,
+  calendarWriteAllowed: false,
+  allowedActions: ['suggest_free_slots', 'mark_slot_locally'],
+  disallowedActions: ['create_calendar_event', 'update_calendar_event', 'delete_calendar_event', 'move_calendar_event'],
+  consentRequiredForCalendarWrite: true
+};
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -232,7 +240,12 @@ export async function suggestSmartSlots(input) {
     return {
       suggestions: [],
       message: `Oggi non resta una finestra abbastanza lunga per un blocco da ${durationMinutes} min.`,
-      meta: { durationMinutes, calendarEventsConsidered: 0, checkinSource: 'not-needed' }
+      meta: {
+        durationMinutes,
+        calendarEventsConsidered: 0,
+        checkinSource: 'not-needed',
+        autoScheduling: LIGHT_AUTO_SCHEDULING_POLICY
+      }
     };
   }
 
@@ -278,7 +291,8 @@ export async function suggestSmartSlots(input) {
       window: {
         from: window.from.toISOString(),
         to: window.to.toISOString()
-      }
+      },
+      autoScheduling: LIGHT_AUTO_SCHEDULING_POLICY
     }
   };
 }
