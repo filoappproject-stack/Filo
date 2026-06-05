@@ -295,6 +295,20 @@
             <button class="btn-primary" id="calendar-sync-btn" onclick="syncCalendar()" style="display:none;">Sincronizza</button>
           </div>
         </div>
+        <div class="card">
+          <div class="template-head">
+            <div>
+              <div class="sec-label">Template giornata/settimana</div>
+              <div class="template-note">Scegli un ritmo: Filo aggiunge blocchi consigliati al calendario e prepara i task di partenza.</div>
+            </div>
+            <div class="template-actions">
+              <button class="btn-primary" onclick="applySelectedTemplate()">Applica blocchi</button>
+              <button class="btn-ghost" onclick="createTasksFromTemplate()">Crea task</button>
+            </div>
+          </div>
+          <div class="template-grid" id="template-grid"></div>
+          <div class="template-feedback" id="template-feedback"></div>
+        </div>
         <div class="card"><div id="cal-events"></div></div>
       </div>
 

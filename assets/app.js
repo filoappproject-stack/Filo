@@ -860,6 +860,11 @@ const INBOX=[];
 const TAG_PALETTE=[{bg:"var(--color-primary-soft)",tc:"var(--color-primary-strong)"},{bg:"#E4F4EE",tc:"#0E6B4A"},{bg:"#FDF3DC",tc:"#8A5C00"},{bg:"#FDECEC",tc:"#9B2525"},{bg:"#F0EAF8",tc:"#5B2D8E"},{bg:"var(--color-subtle)",tc:"var(--color-muted-strong)"}];
 const ENERGY_LABELS={1:"A pezzi",2:"Stanco",3:"Nella norma",4:"Bene",5:"Ottimo"};
 const ENERGY_COLORS={1:"#9B2525",2:"#8A5C00",3:"var(--color-muted-strong)",4:"#0E6B4A",5:"var(--color-primary-strong)"};
+const DAY_TEMPLATES=[
+  {id:"focus",name:"Giornata focus",sub:"Pochi blocchi profondi, admin raccolto, chiusura netta.",tasks:["Scegliere la priorita principale","Preparare materiali per il blocco profondo","Chiudere follow-up rapidi"],blocks:[{time:"09:00",title:"Priorita principale",meta:"90 min · lavoro profondo"},{time:"10:45",title:"Follow-up rapidi",meta:"45 min · email, risposte, sblocco team"},{time:"14:00",title:"Secondo blocco focus",meta:"90 min · consegna importante"},{time:"16:00",title:"Admin e decisioni leggere",meta:"45 min · task brevi"},{time:"17:00",title:"Chiusura giornata",meta:"15 min · cosa resta e prossimo passo"}]},
+  {id:"light",name:"Giornata leggera",sub:"Carico ridotto quando energia o sonno chiedono piu margine.",tasks:["Ridurre la lista alle 2 cose essenziali","Spostare un task non urgente","Preparare la ripartenza di domani"],blocks:[{time:"09:30",title:"Una priorita essenziale",meta:"60 min · focus sostenibile"},{time:"11:00",title:"Comunicazioni necessarie",meta:"45 min · risposte e coordinamento"},{time:"14:30",title:"Task operativo leggero",meta:"60 min · avanzamento senza pressione"},{time:"16:00",title:"Buffer recupero",meta:"30 min · margine protetto"},{time:"16:45",title:"Piano minimo per domani",meta:"15 min · chiusura"}]},
+  {id:"week",name:"Settimana bilanciata",sub:"Un ritmo settimanale semplice: pianifica, produci, coordina, chiudi.",tasks:["Definire le 3 priorita della settimana","Bloccare due sessioni di deep work","Preparare revisione del venerdi"],blocks:[{time:"Lun",title:"Pianificazione e priorita",meta:"Obiettivi, vincoli, slot protetti"},{time:"Mar",title:"Deep work",meta:"Produzione senza riunioni non necessarie"},{time:"Mer",title:"Deep work + allineamenti",meta:"Avanzamento e check di meta settimana"},{time:"Gio",title:"Meeting e follow-up",meta:"Decisioni, risposte, coordinamento"},{time:"Ven",title:"Chiusura e retrospettiva",meta:"Pulizia task e preparazione prossima settimana"}]}
+];
 let tasks=[];
 let nextTaskId=100;
 let taskViewMode='list';
@@ -878,6 +883,8 @@ let calendarLastSync=null;
 let calendarSyncInProgress=false;
 let calendarConnectionError='';
 let calendarEvents=[];
+let templateEvents=[];
+let selectedTemplateId='focus';
 let calendarDiagnosticStatus='--';
 let calendarDiagnosticTimeoutId=null;
 let notes=[];
@@ -1816,7 +1823,7 @@ function ensureSingleSuggestionsContextNote(){
   if(notes.length<=1)return;
   notes.forEach((note,idx)=>{if(idx>0)note.remove();});
 }
-function renderAll(){ensureSingleSuggestionsContextNote();renderInboxControls();renderInbox();renderCalendarControls();renderCalendar();renderTasks();renderNotes();updateBadges();}
+function renderAll(){ensureSingleSuggestionsContextNote();renderInboxControls();renderInbox();renderCalendarControls();renderTemplates();renderCalendar();renderTasks();renderNotes();updateBadges();}
 function openInboxMessage(id){inboxSelectedId=id;const item=INBOX.find(i=>i.id===id);if(!item)return;if(item.unread){item.unread=false;saveInboxToCache();}const modal=document.getElementById('inbox-message-modal');const fromEl=document.getElementById('inbox-modal-from');const subjEl=document.getElementById('inbox-modal-subj');const timeEl=document.getElementById('inbox-modal-time');const bodyEl=document.getElementById('inbox-modal-body');if(fromEl)fromEl.textContent=`Da: ${item.from}`;if(subjEl)subjEl.textContent=item.subj||'(Senza oggetto)';if(timeEl)timeEl.textContent=`Ricevuta alle ${item.time||'--:--'}`;if(bodyEl)bodyEl.textContent=item.prev||'(Nessun contenuto disponibile)';if(modal)modal.style.display='flex';updateBadges();renderInbox();}
 function closeInboxMessage(){const modal=document.getElementById('inbox-message-modal');if(modal)modal.style.display='none';inboxSelectedId=null;renderInbox();}
 function renderInboxControls(){const state=document.getElementById('inbox-connection-state');const connectBtn=document.getElementById('inbox-connect-btn');const syncBtn=document.getElementById('inbox-sync-btn');if(!state||!connectBtn||!syncBtn)return;if(!mailboxConnected){if(mailboxBackgroundSyncInProgress){state.textContent='Sincronizzazione mailbox in corso... potrebbe richiedere alcuni minuti.';state.style.color='var(--color-primary-strong)';connectBtn.style.display='';connectBtn.textContent='Sincronizzazione...';connectBtn.disabled=true;syncBtn.style.display='none';return;}state.textContent=mailboxConnectionError||'Mailbox non collegata · Slack previsto in una integrazione dedicata';state.style.color=mailboxConnectionError?'#9B2525':'var(--color-muted-strong)';connectBtn.style.display='';connectBtn.textContent=mailboxSyncInProgress?'Connessione...':'Collega mailbox';connectBtn.disabled=mailboxSyncInProgress;syncBtn.style.display='none';return;}state.style.color='var(--color-muted-strong)';const last=mailboxLastSync?new Date(mailboxLastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'mai';state.textContent=`Mailbox collegata · ultima sync ${last}`;connectBtn.style.display='none';syncBtn.style.display='';syncBtn.disabled=mailboxSyncInProgress;syncBtn.innerHTML=mailboxSyncInProgress?'<span class="spinning">↻</span> Sincronizzo...':'Sincronizza';}
@@ -1839,20 +1846,85 @@ function renderCalendarControls(){
   connectBtn.disabled=calendarSyncInProgress;
   syncBtn.disabled=calendarSyncInProgress;
 }
+function getTemplateById(id){return DAY_TEMPLATES.find(t=>t.id===id)||DAY_TEMPLATES[0];}
+function getEnergyAwareTemplate(){
+  if(todayEnergy&&todayEnergy<=2)return getTemplateById('light');
+  return getTemplateById(selectedTemplateId);
+}
+function renderTemplates(){
+  const el=document.getElementById('template-grid');
+  if(!el)return;
+  el.innerHTML=DAY_TEMPLATES.map(t=>`<button class="template-card ${t.id===selectedTemplateId?'active':''}" onclick="selectTemplate('${t.id}')"><div class="template-title">${escapeHtml(t.name)}</div><div class="template-sub">${escapeHtml(t.sub)}</div></button>`).join('');
+}
+function selectTemplate(id){
+  selectedTemplateId=id;
+  const fb=document.getElementById('template-feedback');
+  if(fb)fb.textContent='';
+  renderTemplates();
+}
+function applySelectedTemplate(){
+  const tpl=getEnergyAwareTemplate();
+  templateEvents=tpl.blocks.map((block,idx)=>({
+    id:`template-${tpl.id}-${idx}`,
+    time:block.time,
+    title:block.title,
+    meta:block.meta,
+    template:true,
+    week:tpl.id==='week',
+    hl:false
+  }));
+  const fb=document.getElementById('template-feedback');
+  if(fb)fb.textContent=todayEnergy&&todayEnergy<=2&&selectedTemplateId!=='light'?'Energia bassa: ho usato la giornata leggera.':`${tpl.name} applicato al calendario.`;
+  renderCalendar();
+}
+async function createTemplateTask(label,priority='normale',dueInput='Oggi'){
+  const parsedDueDate=dueInput==='Oggi'?new Date():parseTaskDueDate(dueInput);
+  const dueDateIso=parsedDueDate&&!Number.isNaN(parsedDueDate.getTime())?parsedDueDate.toISOString():null;
+  const fallbackTask={id:nextTaskId++,label,done:false,status:'todo',priorita:priority,scadenza:dueInput,dueDateIso,reminderAt:null,recurrence:'none',energyCost:3,stressImpact:3};
+  const apiPriorityMap={bassa:'low',normale:'medium',alta:'high',urgente:'urgent'};
+  const userId=currentUser?.id||'11111111-1111-1111-1111-111111111111';
+  try{
+    const res=await fetchApi('/api/v1/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,title:label,priority:apiPriorityMap[priority]||'medium',dueDate:dueDateIso,reminderAt:null,recurrence:'none'})});
+    if(!res.ok)throw new Error(`POST /tasks fallita (${res.status})`);
+    const payload=await res.json();
+    tasks.unshift(payload?.data?normalizeApiTask(payload.data):fallbackTask);
+  }catch(err){
+    console.warn('Errore creazione task da template:',err);
+    tasks.unshift(fallbackTask);
+  }
+}
+async function createTasksFromTemplate(){
+  const tpl=getEnergyAwareTemplate();
+  const existing=new Set(tasks.map(t=>String(t.label||'').trim().toLowerCase()));
+  const items=tpl.tasks.filter(label=>!existing.has(label.toLowerCase()));
+  const fb=document.getElementById('template-feedback');
+  if(!items.length){if(fb)fb.textContent='Task gia presenti.';return;}
+  for(const label of items)await createTemplateTask(label,tpl.id==='focus'?'alta':'normale',tpl.id==='week'?'Questa settimana':'Oggi');
+  saveTasksToCache();
+  renderTasks();
+  updateBadges();
+  if(fb)fb.textContent=`${items.length} task creati da ${tpl.name}.`;
+}
 function renderCalendar(){
   const el=document.getElementById('cal-events');if(!el)return;
-  const source=calendarEvents;
+  const source=[...calendarEvents,...templateEvents].sort((a,b)=>String(a.time||'').localeCompare(String(b.time||''),'it',{numeric:true}));
   if(!source.length){
     el.innerHTML=calendarConnected
-      ? '<div class="empty-state"><div class="empty-title">Nessun evento Google Calendar per oggi</div><div class="empty-sub">Prova "Sincronizza" oppure controlla che ci siano eventi nella giornata corrente.</div></div>'
-      : '<div class="empty-state"><div class="empty-title">Google Calendar non collegato</div><div class="empty-sub">Collega il tuo account per vedere qui i tuoi eventi reali.</div></div>';
+      ? '<div class="empty-state"><div class="empty-title">Nessun evento Google Calendar per oggi</div><div class="empty-sub">Prova "Sincronizza" oppure applica un template per costruire un ritmo di lavoro.</div></div>'
+      : '<div class="empty-state"><div class="empty-title">Google Calendar non collegato</div><div class="empty-sub">Collega il tuo account oppure applica un template per vedere i blocchi consigliati da Filo.</div></div>';
     return;
   }
-  el.innerHTML=source.map(ev=>`<div class="cal-slot"><div class="cal-time">${ev.time||'--:--'}</div><div class="cal-block ${ev.hl?'hl':''}" role="button" tabindex="0" onclick="openCalendarEventModal('${String(ev.id).replace(/'/g,"\\'")}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCalendarEventModal('${String(ev.id).replace(/'/g,"\\'")}');}"><div style="font-size:13px;font-weight:500;color:${ev.hl?'var(--color-primary-strong)':'var(--color-text)'};margin-bottom:3px;">${escapeHtml(ev.title||'(Senza titolo)')}</div><div style="font-size:12px;color:${ev.hl?'#185FA5':'var(--color-muted)'};">${escapeHtml(ev.meta||'')}</div></div></div>`).join('');
+  el.innerHTML=source.map(ev=>{
+    const isTemplate=!!ev.template;
+    const safeId=String(ev.id).replace(/'/g,"\\'");
+    const attrs=isTemplate?'':`role="button" tabindex="0" onclick="openCalendarEventModal('${safeId}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCalendarEventModal('${safeId}');}"`;
+    return `<div class="cal-slot"><div class="cal-time">${escapeHtml(ev.time||'--:--')}</div><div class="cal-block ${ev.hl?'hl':''} ${isTemplate?'template':''} ${ev.week?'week':''}" ${attrs}><div style="font-size:13px;font-weight:500;color:${ev.hl?'var(--color-primary-strong)':'var(--color-text)'};margin-bottom:3px;">${escapeHtml(ev.title||'(Senza titolo)')}</div><div style="font-size:12px;color:${ev.hl?'#185FA5':'var(--color-muted)'};">${escapeHtml(ev.meta||'')}</div></div></div>`;
+  }).join('');
   const activeCalendarPage=document.getElementById('page-calendario').classList.contains('active');
   if(activeCalendarPage){
-    const count=source.length;
-    PAGE_META.calendario[1]=calendarConnected?`${count} eventi Google Calendar oggi`:'Collega Google Calendar per importare i tuoi eventi';
+    const eventCount=calendarEvents.length;
+    const templateCount=templateEvents.length;
+    PAGE_META.calendario[1]=calendarConnected?`${eventCount} eventi Google Calendar oggi${templateCount?` · ${templateCount} blocchi Filo`:''}`:(templateCount?`${templateCount} blocchi Filo applicati`:'Collega Google Calendar per importare i tuoi eventi');
     document.getElementById('page-sub').textContent=PAGE_META.calendario[1];
   }
 }
