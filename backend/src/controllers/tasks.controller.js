@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { HttpError } from '../utils/httpError.js';
-import { createTask, deleteTask, listTasks, updateTaskStatus } from '../services/tasks.service.js';
+import { createTask, deleteTask, importTasks, listTasks, updateTaskStatus } from '../services/tasks.service.js';
 
 const UserQuerySchema = z.object({
   userId: z.string().uuid()
@@ -16,6 +16,22 @@ const CreateTaskSchema = z.object({
   recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']).default('none'),
   energyCost: z.coerce.number().int().min(1).max(5).default(3),
   stressImpact: z.coerce.number().int().min(1).max(5).default(3)
+});
+
+const ImportTasksSchema = z.object({
+  userId: z.string().uuid(),
+  tasks: z.array(
+    z.object({
+      title: z.string().trim().min(1).max(200),
+      description: z.string().max(2000).optional().default(''),
+      priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
+      dueDate: z.string().datetime().optional().nullable(),
+      reminderAt: z.string().datetime().optional().nullable(),
+      recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']).default('none'),
+      energyCost: z.coerce.number().int().min(1).max(5).default(3),
+      stressImpact: z.coerce.number().int().min(1).max(5).default(3)
+    })
+  ).min(1).max(100)
 });
 
 const UpdateStatusSchema = z.object({
@@ -45,6 +61,16 @@ export async function postTask(req, res) {
 
   const task = await createTask(parsed.data);
   res.status(201).json({ data: task });
+}
+
+export async function postTaskImport(req, res) {
+  const parsed = ImportTasksSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Payload import task non valido');
+  }
+
+  const result = await importTasks(parsed.data.userId, parsed.data.tasks);
+  res.status(201).json({ data: result });
 }
 
 export async function patchTaskStatus(req, res) {

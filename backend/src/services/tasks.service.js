@@ -63,6 +63,49 @@ export async function createTask(input) {
   return rows[0];
 }
 
+function normalizeDedupKey(title, dueDate) {
+  const normalizedTitle = String(title || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const normalizedDueDate = dueDate ? new Date(dueDate).toISOString().slice(0, 10) : '';
+  return `${normalizedTitle}::${normalizedDueDate}`;
+}
+
+export async function importTasks(userId, items) {
+  const safeItems = Array.isArray(items) ? items : [];
+  const existingSql = `
+    SELECT title, due_date
+    FROM tasks
+    WHERE user_id = $1
+  `;
+  const { rows: existingRows } = await query(existingSql, [userId]);
+  const seen = new Set(existingRows.map((row) => normalizeDedupKey(row.title, row.due_date)));
+  const created = [];
+  const skipped = [];
+
+  for (const item of safeItems) {
+    const key = normalizeDedupKey(item.title, item.dueDate);
+    if (!key.split('::')[0] || seen.has(key)) {
+      skipped.push({ title: item.title, dueDate: item.dueDate ?? null, reason: 'duplicate' });
+      continue;
+    }
+
+    seen.add(key);
+    const task = await createTask({
+      userId,
+      title: item.title,
+      description: item.description || '',
+      priority: item.priority || 'medium',
+      dueDate: item.dueDate ?? null,
+      reminderAt: item.reminderAt ?? null,
+      recurrence: item.recurrence || 'none',
+      energyCost: item.energyCost ?? 3,
+      stressImpact: item.stressImpact ?? 3
+    });
+    created.push(task);
+  }
+
+  return { created, skipped };
+}
+
 export async function updateTaskStatus(taskId, userId, status) {
   const sql = `
     UPDATE tasks

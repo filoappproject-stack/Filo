@@ -167,6 +167,20 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-bg);color
 .task-list-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
 .task-list-section{font-size:11px;font-weight:600;color:var(--color-muted-strong);text-transform:uppercase;letter-spacing:.06em;padding:10px 0 4px;}
 .task-list-section:first-child{padding-top:0;}
+.task-import-panel{border:1px solid rgba(var(--color-primary-rgb),0.2);background:var(--color-primary-soft-bg);}
+.task-import-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;}
+.task-import-title{font-size:13px;font-weight:600;color:var(--color-text);}
+.task-import-sub{font-size:12px;color:var(--color-muted-strong);line-height:1.45;margin-top:3px;}
+.task-import-preview{margin-top:12px;border:1px solid rgba(0,0,0,0.07);border-radius:10px;overflow:hidden;background:var(--color-surface);display:none;}
+.task-import-preview.active{display:block;}
+.task-import-preview-row{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(88px,.7fr) minmax(78px,.6fr) minmax(0,1.2fr);gap:10px;padding:9px 12px;border-bottom:1px solid rgba(0,0,0,0.05);align-items:center;font-size:12px;}
+.task-import-preview-row:last-child{border-bottom:none;}
+.task-import-preview-row.head{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--color-muted);background:var(--color-bg);}
+.task-import-preview-row.skip{color:var(--color-muted);background:#FAF8F2;}
+.task-import-status{font-size:10px;font-weight:600;border-radius:999px;padding:2px 7px;white-space:nowrap;justify-self:start;}
+.task-import-status.ok{background:#E4F4EE;color:#0E6B4A;}
+.task-import-status.skip{background:#FDF3DC;color:#8A5C00;}
+@media(max-width:700px){.task-import-preview-row{grid-template-columns:1fr;gap:4px}.task-import-preview-row.head{display:none;}}
 .smart-slot-panel{margin:8px 0 12px 34px;padding:11px 12px;border:1px solid rgba(43,124,106,.18);border-radius:12px;background:#F3FBF8;color:var(--color-text);}
 .task-card .smart-slot-panel{margin:9px 0 0 0;background:#F8FCFA;}
 .smart-slot-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:6px;}
@@ -565,7 +579,10 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-bg);color
             <button class="btn-ghost active" id="task-list-view-btn" onclick="setTaskViewMode('list')">Lista</button>
             <button class="btn-ghost" id="task-board-view-btn" onclick="setTaskViewMode('board')">Board</button>
           </div>
-          <button class="btn-primary" id="task-form-toggle" onclick="toggleTaskForm()">+ Nuovo task</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn-ghost" id="task-import-toggle" onclick="toggleTaskImport()">Importa</button>
+            <button class="btn-primary" id="task-form-toggle" onclick="toggleTaskForm()">+ Nuovo task</button>
+          </div>
         </div>
         <div class="card highlight-border" id="task-form" style="display:none;">
           <div style="font-size:13px;font-weight:500;color:var(--color-text);margin-bottom:14px;">Aggiungi un nuovo task</div>
@@ -580,6 +597,37 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-bg);color
           </div>
           <div class="small-help">I promemoria vengono mostrati in-app quando Filo è aperto; le ricorrenze creano automaticamente il prossimo task quando completi quello corrente.</div>
           <div class="form-actions"><button class="btn-primary" onclick="addTask()">Aggiungi task</button><button class="btn-ghost" onclick="toggleTaskForm()">Annulla</button></div>
+        </div>
+        <div class="card task-import-panel" id="task-import-panel" style="display:none;">
+          <div class="task-import-head">
+            <div>
+              <div class="task-import-title">Importa task da CSV o testo</div>
+              <div class="task-import-sub">Incolla una lista, una riga per task, oppure carica un CSV con colonne come titolo, scadenza, priorita e note.</div>
+            </div>
+            <button class="btn-ghost" onclick="toggleTaskImport()">Chiudi</button>
+          </div>
+          <div class="grid-2">
+            <div>
+              <div class="field-label">Lista o CSV incollato</div>
+              <textarea id="task-import-text" class="f-textarea" rows="6" placeholder="Chiamare cliente&#10;Preparare budget; domani; alta&#10;titolo,scadenza,priorita,note"></textarea>
+              <div class="small-help">Formato rapido: una riga = un task. Con separatori ; , o tab puoi indicare titolo, scadenza, priorita e note.</div>
+            </div>
+            <div>
+              <div class="field-label">File CSV</div>
+              <input id="task-import-file" class="f-input" type="file" accept=".csv,text/csv" onchange="handleTaskImportFile(this)">
+              <div class="small-help">Il CSV puo avere intestazioni: title/titolo, due/scadenza/data, priority/priorita, notes/note/description.</div>
+              <div class="form-actions" style="margin-top:14px;">
+                <button class="btn-primary" id="task-import-preview-btn" onclick="previewTaskImport()">Anteprima</button>
+                <button class="btn-ghost" onclick="clearTaskImport()">Svuota</button>
+              </div>
+            </div>
+          </div>
+          <div id="task-import-message" class="small-help"></div>
+          <div class="task-import-preview" id="task-import-preview"></div>
+          <div class="form-actions" id="task-import-actions" style="display:none;">
+            <button class="btn-primary" id="task-import-confirm-btn" onclick="confirmTaskImport()">Importa task</button>
+            <button class="btn-ghost" onclick="clearTaskImportPreview()">Rivedi input</button>
+          </div>
         </div>
         <div id="task-list-view">
           <div class="card"><div class="sec-label" id="open-tasks-label">Aperti (0)</div><div id="open-tasks-list"></div></div>
@@ -1608,6 +1656,7 @@ const ENERGY_COLORS={1:"#9B2525",2:"#8A5C00",3:"var(--color-muted-strong)",4:"#0
 let tasks=[];
 let nextTaskId=100;
 let taskViewMode='list';
+let taskImportRows=[];
 let activeReminderTaskId=null;
 let remindedTaskKeys=new Set();
 let mailboxConnected=false;
@@ -1724,6 +1773,7 @@ function parseTaskDueDate(scadenza){
   if(!value)return null;
   const lower=value.toLowerCase();
   if(lower==='oggi')return new Date();
+  if(lower==='domani'){const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);return tomorrow;}
   const isoDate=value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if(isoDate)return new Date(Number(isoDate[1]),Number(isoDate[2])-1,Number(isoDate[3]));
   const italianDate=value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -3094,6 +3144,275 @@ async function addTask() {
   document.getElementById('new-task-reminder').value = '';
   document.getElementById('new-task-recur').value = 'none';
   toggleTaskForm();
+}
+function toggleTaskImport(){
+  const panel=document.getElementById('task-import-panel');
+  const btn=document.getElementById('task-import-toggle');
+  if(!panel||!btn)return;
+  const open=panel.style.display==='none';
+  panel.style.display=open?'':'none';
+  btn.textContent=open?'Chiudi import':'Importa';
+  if(open){
+    const form=document.getElementById('task-form');
+    if(form&&form.style.display!=='none')toggleTaskForm();
+    document.getElementById('task-import-text')?.focus();
+  }
+}
+function clearTaskImport(){
+  const text=document.getElementById('task-import-text');
+  const file=document.getElementById('task-import-file');
+  if(text)text.value='';
+  if(file)file.value='';
+  clearTaskImportPreview();
+}
+function clearTaskImportPreview(){
+  taskImportRows=[];
+  resetTaskImportPreviewUi();
+}
+function resetTaskImportPreviewUi(){
+  const preview=document.getElementById('task-import-preview');
+  const actions=document.getElementById('task-import-actions');
+  const message=document.getElementById('task-import-message');
+  if(preview){preview.classList.remove('active');preview.innerHTML='';}
+  if(actions)actions.style.display='none';
+  if(message){message.textContent='';message.style.color='#6F6A61';}
+}
+function taskImportDedupKey(title,dueDateIso){
+  const normalizedTitle=String(title||'').trim().replace(/\s+/g,' ').toLowerCase();
+  const normalizedDate=dueDateIso?new Date(dueDateIso).toISOString().slice(0,10):'';
+  return `${normalizedTitle}::${normalizedDate}`;
+}
+function normalizeImportPriority(value){
+  const normalized=String(value||'').trim().toLowerCase();
+  if(['urgente','urgent','u','4'].includes(normalized))return { ui:'urgente', api:'urgent' };
+  if(['alta','alto','high','h','3'].includes(normalized))return { ui:'alta', api:'high' };
+  if(['bassa','basso','low','l','1'].includes(normalized))return { ui:'bassa', api:'low' };
+  return { ui:'normale', api:'medium' };
+}
+function parseTaskImportDueDate(value){
+  const raw=String(value||'').trim();
+  if(!raw)return { label:'', iso:null };
+  const parsed=parseTaskDueDate(raw);
+  if(parsed&&!Number.isNaN(parsed.getTime()))return { label:raw, iso:parsed.toISOString() };
+  return { label:raw, iso:null };
+}
+function parseDelimitedRows(text,delimiter=null){
+  const rows=[];
+  let row=[];
+  let cell='';
+  let inQuotes=false;
+  const source=String(text||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  const detectDelimiter=(line)=>{
+    if(delimiter)return delimiter;
+    const candidates=['\t',';',','];
+    return candidates
+      .map(value=>({value,count:line.split(value).length}))
+      .sort((a,b)=>b.count-a.count)[0].value;
+  };
+  let activeDelimiter=delimiter;
+  for(let i=0;i<source.length;i++){
+    const ch=source[i];
+    const next=source[i+1];
+    if(ch==='"'){
+      if(inQuotes&&next==='"'){cell+='"';i+=1;}
+      else inQuotes=!inQuotes;
+      continue;
+    }
+    if(!inQuotes&&ch==='\n'){
+      row.push(cell.trim());
+      if(row.some(Boolean))rows.push(row);
+      row=[];
+      cell='';
+      activeDelimiter=null;
+      continue;
+    }
+    if(!activeDelimiter){
+      const lineEnd=source.indexOf('\n',i);
+      const line=lineEnd>=0?source.slice(i,lineEnd):source.slice(i);
+      activeDelimiter=detectDelimiter(line);
+    }
+    if(!inQuotes&&ch===activeDelimiter){
+      row.push(cell.trim());
+      cell='';
+      continue;
+    }
+    cell+=ch;
+  }
+  row.push(cell.trim());
+  if(row.some(Boolean))rows.push(row);
+  return rows;
+}
+function looksLikeTaskImportHeader(row){
+  const headers=(Array.isArray(row)?row:[]).map(v=>String(v||'').trim().toLowerCase());
+  return headers.some(h=>['title','titolo','task','attivita','attività'].includes(h)) ||
+    headers.some(h=>['due','due_date','scadenza','data','date'].includes(h));
+}
+function taskImportHeaderIndex(headers,names){
+  return headers.findIndex(h=>names.includes(String(h||'').trim().toLowerCase()));
+}
+function mapTaskImportRow(row,headers=null){
+  const safe=Array.isArray(row)?row:[];
+  let title='',dueRaw='',priorityRaw='',notes='';
+  if(headers){
+    const normalized=headers.map(h=>String(h||'').trim().toLowerCase());
+    const titleIdx=taskImportHeaderIndex(normalized,['title','titolo','task','attivita','attività']);
+    const dueIdx=taskImportHeaderIndex(normalized,['due','due_date','scadenza','data','date']);
+    const priorityIdx=taskImportHeaderIndex(normalized,['priority','priorita','priorità']);
+    const notesIdx=taskImportHeaderIndex(normalized,['notes','note','description','descrizione']);
+    title=titleIdx>=0?safe[titleIdx]:'';
+    dueRaw=dueIdx>=0?safe[dueIdx]:'';
+    priorityRaw=priorityIdx>=0?safe[priorityIdx]:'';
+    notes=notesIdx>=0?safe[notesIdx]:'';
+  }else{
+    [title,dueRaw,priorityRaw,notes]=safe;
+  }
+  const due=parseTaskImportDueDate(dueRaw);
+  const priority=normalizeImportPriority(priorityRaw);
+  return {
+    title:String(title||'').trim().replace(/\s+/g,' ').slice(0,200),
+    description:String(notes||'').trim().slice(0,2000),
+    dueLabel:due.label,
+    dueDateIso:due.iso,
+    priorityUi:priority.ui,
+    priorityApi:priority.api,
+    status:'ok',
+    reason:''
+  };
+}
+function parseTaskImportInput(raw){
+  const text=String(raw||'').trim();
+  if(!text)return [];
+  const hasDelimited=/[;\t,]/.test(text);
+  if(!hasDelimited){
+    return text.split(/\n+/).map(line=>mapTaskImportRow([line.trim()])).filter(row=>row.title);
+  }
+  const rows=parseDelimitedRows(text);
+  if(!rows.length)return [];
+  const hasHeader=looksLikeTaskImportHeader(rows[0]);
+  const headers=hasHeader?rows.shift():null;
+  return rows.map(row=>mapTaskImportRow(row,headers)).filter(row=>row.title);
+}
+function decorateTaskImportRows(rows){
+  const existing=new Set(tasks.map(t=>taskImportDedupKey(t.label,t.dueDateIso)));
+  const seen=new Set();
+  return rows.map((row)=>{
+    const key=taskImportDedupKey(row.title,row.dueDateIso);
+    if(!row.title)return {...row,status:'skip',reason:'titolo mancante'};
+    if(existing.has(key))return {...row,status:'skip',reason:'duplicato esistente'};
+    if(seen.has(key))return {...row,status:'skip',reason:'duplicato nel file'};
+    seen.add(key);
+    return row;
+  });
+}
+function renderTaskImportPreview(){
+  const preview=document.getElementById('task-import-preview');
+  const actions=document.getElementById('task-import-actions');
+  const message=document.getElementById('task-import-message');
+  if(!preview||!actions||!message)return;
+  const importable=taskImportRows.filter(row=>row.status==='ok');
+  const skipped=taskImportRows.length-importable.length;
+  if(!taskImportRows.length){
+    preview.classList.remove('active');
+    preview.innerHTML='';
+    actions.style.display='none';
+    message.textContent='Nessun task valido trovato.';
+    message.style.color='#9B2525';
+    return;
+  }
+  preview.innerHTML=[
+    '<div class="task-import-preview-row head"><div>Task</div><div>Scadenza</div><div>Priorita</div><div>Esito</div></div>',
+    ...taskImportRows.map(row=>`<div class="task-import-preview-row ${row.status==='skip'?'skip':''}"><div>${escapeHtml(row.title)}</div><div>${escapeHtml(row.dueLabel||'-')}</div><div>${escapeHtml(row.priorityUi)}</div><div><span class="task-import-status ${row.status==='skip'?'skip':'ok'}">${row.status==='skip'?'Saltato':'Importa'}</span>${row.reason?` <span style="color:var(--color-muted);">${escapeHtml(row.reason)}</span>`:''}</div></div>`)
+  ].join('');
+  preview.classList.add('active');
+  actions.style.display=importable.length?'flex':'none';
+  message.textContent=`Anteprima: ${importable.length} task da importare${skipped?`, ${skipped} saltati`:''}.`;
+  message.style.color=importable.length?'#0E6B4A':'#8A5C00';
+}
+function previewTaskImport(){
+  const raw=document.getElementById('task-import-text')?.value||'';
+  taskImportRows=decorateTaskImportRows(parseTaskImportInput(raw));
+  renderTaskImportPreview();
+}
+function handleTaskImportFile(input){
+  const file=input?.files?.[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const text=document.getElementById('task-import-text');
+    if(text)text.value=String(reader.result||'');
+    previewTaskImport();
+  };
+  reader.readAsText(file);
+}
+async function confirmTaskImport(){
+  const importable=taskImportRows.filter(row=>row.status==='ok');
+  if(!importable.length)return;
+  const btn=document.getElementById('task-import-confirm-btn');
+  const message=document.getElementById('task-import-message');
+  const apiPayload=importable.map(row=>({
+    title:row.title,
+    description:row.description||'',
+    priority:row.priorityApi,
+    dueDate:row.dueDateIso,
+    reminderAt:null,
+    recurrence:'none'
+  }));
+  let finalMessage=`Import completato: ${importable.length} task aggiunti.`;
+  let finalColor='#0E6B4A';
+  if(btn){btn.disabled=true;btn.textContent='Importo...';}
+  try{
+    if(currentUser?.id){
+      const res=await fetchApi('/api/v1/tasks/import',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({userId:currentUser.id,tasks:apiPayload})
+      });
+      if(!res.ok){
+        const txt=await res.text().catch(()=> '');
+        throw new Error(`POST /tasks/import fallita (${res.status}): ${txt}`);
+      }
+      const payload=await res.json();
+      const created=Array.isArray(payload?.data?.created)?payload.data.created:[];
+      tasks.unshift(...created.map(normalizeApiTask));
+      const skipped=Number(payload?.data?.skipped?.length||0);
+      finalMessage=`Import completato: ${created.length} task salvati${skipped?`, ${skipped} duplicati saltati`:''}.`;
+    }else{
+      throw new Error('Utente non disponibile');
+    }
+  }catch(err){
+    console.warn('Import task salvato localmente:',err);
+    const fallback=importable.map(row=>({
+      id:nextTaskId++,
+      label:row.title,
+      done:false,
+      status:'todo',
+      priorita:row.priorityUi,
+      scadenza:row.dueLabel,
+      dueDateIso:row.dueDateIso,
+      reminderAt:null,
+      recurrence:'none',
+      energyCost:3,
+      stressImpact:3
+    }));
+    tasks.unshift(...fallback);
+    finalMessage=`Backend non raggiungibile: ${fallback.length} task importati in locale.`;
+    finalColor='#8A5C00';
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Importa task';}
+    saveTasksToCache();
+    taskImportRows=[];
+    resetTaskImportPreviewUi();
+    if(message){
+      message.textContent=finalMessage;
+      message.style.color=finalColor;
+    }
+    const panel=document.getElementById('task-import-panel');
+    const toggle=document.getElementById('task-import-toggle');
+    if(panel)panel.style.display='none';
+    if(toggle)toggle.textContent='Importa';
+    renderTasks();
+    updateBadges();
+  }
 }
 async function createTaskFromNote(noteId,button=null){
   const note=notes.find(n=>String(n.id)===String(noteId));
