@@ -1303,9 +1303,8 @@ async function tryHandleMailboxOauthCallback() {
   let state = url.searchParams.get('state');
   if (!code || !isMailboxOauthState(state)) {
     try {
-      const raw = sessionStorage.getItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
-      if (raw) {
-        const stored = JSON.parse(raw);
+      const stored = getStoredMailboxOauthPayload();
+      if (stored) {
         const storedCode = typeof stored?.code === 'string' ? stored.code : '';
         const storedState = typeof stored?.state === 'string' ? stored.state : '';
         if (storedCode && isMailboxOauthState(storedState)) {
@@ -1321,6 +1320,9 @@ async function tryHandleMailboxOauthCallback() {
   if (!userId) return false;
 
   try {
+    mailboxBackgroundSyncInProgress=true;
+    mailboxConnectionError='';
+    renderAll();
     const redirectUri = sessionStorage.getItem(MAILBOX_REDIRECT_URI_KEY) || getInboxConnectRedirectUri();
     const res = await fetchApi('/api/v1/inbox/google/exchange', {
       method: 'POST',
@@ -1353,6 +1355,7 @@ async function tryHandleMailboxOauthCallback() {
     sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
     sessionStorage.removeItem('filo_inbox_oauth_state');
     sessionStorage.removeItem(MAILBOX_REDIRECT_URI_KEY);
+    mailboxBackgroundSyncInProgress=false;
     return true;
   } catch (err) {
     const reason = err?.message ? String(err.message) : 'errore sconosciuto';
@@ -1362,6 +1365,7 @@ async function tryHandleMailboxOauthCallback() {
     sessionStorage.removeItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
     sessionStorage.removeItem('filo_inbox_oauth_state');
     sessionStorage.removeItem(MAILBOX_REDIRECT_URI_KEY);
+    mailboxBackgroundSyncInProgress=false;
     renderInboxControls();
     return false;
   }
@@ -1595,6 +1599,7 @@ async function loginSuccess(user) {
   // Dopo il login ricarichiamo sempre stato e messaggi della mailbox dell'utente autenticato.
   const cachedInbox = null;
   setInboxConnectionState(false,null);
+  mailboxBackgroundSyncInProgress=hasPendingMailboxOauthCallback();
   const cachedCalendar = loadCalendarFromCache();
   if (cachedCalendar) {
     calendarEvents = Array.isArray(cachedCalendar.events)?cachedCalendar.events:[];
@@ -2088,6 +2093,22 @@ function getInboxConnectRedirectUri(){return `${window.location.origin}${window.
 function getInboxStatePrefix(){return 'mailbox:';}
 function isMailboxOauthState(state){return typeof state==='string'&&state.startsWith(getInboxStatePrefix());}
 function extractUserIdFromMailboxState(state){if(!isMailboxOauthState(state))return null;const [,userId]=state.split(':');return userId||null;}
+function getStoredMailboxOauthPayload(){
+  try{
+    const raw=sessionStorage.getItem(INBOX_OAUTH_QUERY_STORAGE_KEY);
+    return raw?JSON.parse(raw):null;
+  }catch(e){return null;}
+}
+function hasPendingMailboxOauthCallback(){
+  try{
+    const url=new URL(window.location.href);
+    const code=getQueryParamPreservePlus(url,'code');
+    const state=url.searchParams.get('state');
+    if(code&&isMailboxOauthState(state))return true;
+  }catch(e){}
+  const stored=getStoredMailboxOauthPayload();
+  return !!(stored?.code&&isMailboxOauthState(stored?.state));
+}
 function isUuid(value){return typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);}
 function getCalendarConnectRedirectUri(){return `${window.location.origin}${window.location.pathname}`;}
 function getCalendarStatePrefix(){return 'calendar:';}
