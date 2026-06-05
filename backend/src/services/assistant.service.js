@@ -144,6 +144,68 @@ function getAiFallbackReasonForConfiguration() {
   };
 }
 
+
+function truncateDiagnosticDetail(value) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  return text.length > 220 ? `${text.slice(0, 217)}...` : text;
+}
+
+function classifyAiProviderFailure(error) {
+  const message = String(error?.message || error || '').trim();
+  const detail = truncateDiagnosticDetail(message);
+
+  if (error?.name === 'AbortError' || /timeout|abort/i.test(message)) {
+    return {
+      code: 'AI_PROVIDER_TIMEOUT',
+      hint: `Il provider IA non ha risposto entro ${env.ANTHROPIC_TIMEOUT_MS}ms.`
+    };
+  }
+
+  const statusMatch = message.match(/Anthropic API error \((\d{3})\)/i);
+  const status = statusMatch ? Number(statusMatch[1]) : null;
+
+  if (status === 401 || status === 403) {
+    return {
+      code: 'AI_PROVIDER_AUTH_ERROR',
+      hint: `Il provider IA ha rifiutato le credenziali configurate${detail ? `: ${detail}` : '.'}`
+    };
+  }
+
+  if (status === 404) {
+    return {
+      code: 'AI_PROVIDER_MODEL_UNAVAILABLE',
+      hint: `Il modello IA configurato non risulta disponibile${detail ? `: ${detail}` : '.'}`
+    };
+  }
+
+  if (status === 429) {
+    return {
+      code: 'AI_PROVIDER_RATE_LIMITED',
+      hint: `Il provider IA ha limitato temporaneamente le richieste${detail ? `: ${detail}` : '.'}`
+    };
+  }
+
+  if (status && status >= 500) {
+    return {
+      code: 'AI_PROVIDER_SERVER_ERROR',
+      hint: `Il provider IA ha risposto con errore temporaneo (${status})${detail ? `: ${detail}` : '.'}`
+    };
+  }
+
+  if (/json|parse|unexpected token/i.test(message)) {
+    return {
+      code: 'AI_RESPONSE_PARSE_FAILED',
+      hint: `Il provider IA ha risposto, ma il contenuto non era nel formato JSON atteso${detail ? `: ${detail}` : '.'}`
+    };
+  }
+
+  return {
+    code: 'AI_PROVIDER_UNAVAILABLE',
+    hint: `Il provider IA non è disponibile o non ha risposto entro i tempi previsti${detail ? `: ${detail}` : '.'}`
+  };
+}
+
 async function askAnthropic(input) {
   aiAttemptCounter += 1;
   if (!env.AI_ENABLED) {
@@ -257,9 +319,10 @@ export async function analyzeDay(input) {
       degradedHint = fallbackReason.hint;
     }
   } catch (err) {
-    degradedReason = 'AI_PROVIDER_UNAVAILABLE';
-    degradedHint = 'Il provider IA non è disponibile o non ha risposto entro i tempi previsti.';
-    console.warn('AI day analysis fallback attivato:', err?.message || err);
+    const providerFailure = classifyAiProviderFailure(err);
+    degradedReason = providerFailure.code;
+    degradedHint = providerFailure.hint;
+    console.warn('AI day analysis fallback attivato:', providerFailure.code, err?.message || err);
   }
 
   if (!suggestions) {
