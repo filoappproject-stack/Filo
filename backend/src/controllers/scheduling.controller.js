@@ -18,7 +18,9 @@ const SmartSlotSchema = z.object({
   from: z.string().datetime(),
   to: z.string().datetime(),
   workStartHour: z.coerce.number().int().min(0).max(23).optional(),
-  workEndHour: z.coerce.number().int().min(1).max(24).optional()
+  workEndHour: z.coerce.number().int().min(1).max(24).optional(),
+  mode: z.enum(['preview']).default('preview'),
+  writeToCalendar: z.literal(false).optional()
 });
 
 export async function postSmartSlotSuggestion(req, res) {

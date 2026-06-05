@@ -2599,8 +2599,8 @@ function taskActionButtons(t){
   if(status!=='todo')buttons.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','todo')">Riapri</button>`);
   if(status!=='in_progress')buttons.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','in_progress')">In corso</button>`);
   if(status!=='done'){
-    if(getAcceptedSmartSlot(t))buttons.push('<button class="btn-ghost" disabled>Slot fissato</button>');
-    else buttons.push(`<button class="btn-ghost" onclick="suggestSmartSlot('${id}',this)">Trova slot oggi</button>`);
+    if(getAcceptedSmartSlot(t))buttons.push('<button class="btn-ghost" disabled>Slot segnato</button>');
+    else buttons.push(`<button class="btn-ghost" onclick="suggestSmartSlot('${id}',this)">Proponi slot oggi</button>`);
   }
   if(status!=='done')buttons.push(`<button class="btn-primary" onclick="moveTaskStatus('${id}','done')">Completa</button>`);
   buttons.push(`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`);
@@ -2643,27 +2643,27 @@ function getAcceptedSmartSlot(task){return smartSlotAccepted[String(task?.id||''
 function acceptSmartSlot(taskId,start,end){
   const key=String(taskId);
   if(!key||!start||!end)return;
-  smartSlotAccepted[key]={start,end,acceptedAt:new Date().toISOString()};
+  smartSlotAccepted[key]={start,end,acceptedAt:new Date().toISOString(),mode:'local_preview'};
   saveSmartSlotAccepted();
   renderTasks();
 }
 function renderSmartSlotPanel(t){
   const accepted=getAcceptedSmartSlot(t);
   if(accepted){
-    return `<div class="smart-slot-panel"><div class="smart-slot-head"><div><div class="smart-slot-title">Slot fissato</div><div class="smart-slot-time">Oggi ${escapeHtml(formatSmartSlotRange(accepted.start,accepted.end))}</div></div><span class="badge b-green">Pianificato</span></div><div class="smart-slot-reason">Filo considera questo task già pianificato e non cercherà altri slot finché resta fissato.</div></div>`;
+    return `<div class="smart-slot-panel"><div class="smart-slot-head"><div><div class="smart-slot-title">Slot segnato</div><div class="smart-slot-time">Oggi ${escapeHtml(formatSmartSlotRange(accepted.start,accepted.end))}</div></div><span class="badge b-green">Preview</span></div><div class="smart-slot-reason">Filo lo considera pianificato solo in questa vista. Non ha creato, spostato o modificato eventi nel Calendar.</div></div>`;
   }
   const state=smartSlotState[String(t.id)];
   if(!state)return '';
-  if(state.loading)return '<div class="smart-slot-panel"><div class="smart-slot-empty"><span class="spinning">↻</span> Cerco uno slot sano in calendario per oggi…</div></div>';
-  if(state.error)return `<div class="smart-slot-panel"><div class="smart-slot-title">Smart Slot Suggestion</div><div class="smart-slot-empty">${escapeHtml(state.error)}</div></div>`;
+  if(state.loading)return '<div class="smart-slot-panel"><div class="smart-slot-empty"><span class="spinning">↻</span> Cerco una proposta leggera in calendario per oggi…</div></div>';
+  if(state.error)return `<div class="smart-slot-panel"><div class="smart-slot-title">Auto-scheduling leggero</div><div class="smart-slot-empty">${escapeHtml(state.error)}</div></div>`;
   const suggestions=Array.isArray(state.suggestions)?state.suggestions:[];
-  if(!suggestions.length)return `<div class="smart-slot-panel"><div class="smart-slot-title">Smart Slot Suggestion</div><div class="smart-slot-empty">${escapeHtml(state.message||'Oggi non vedo uno slot abbastanza sano per questo task.')}</div></div>`;
+  if(!suggestions.length)return `<div class="smart-slot-panel"><div class="smart-slot-title">Auto-scheduling leggero</div><div class="smart-slot-empty">${escapeHtml(state.message||'Oggi non vedo uno slot abbastanza sano per questo task.')}</div></div>`;
   const best=suggestions[0];
   const alternatives=suggestions.slice(1).map(s=>formatSmartSlotRange(s.start,s.end)).join(' · ');
   const safeTaskId=String(t.id).replace(/'/g,"\\'");
   const safeStart=String(best.start||'').replace(/'/g,"\\'");
   const safeEnd=String(best.end||'').replace(/'/g,"\\'");
-  return `<div class="smart-slot-panel"><div class="smart-slot-head"><div><div class="smart-slot-title">${escapeHtml(best.label||'Slot consigliato')}</div><div class="smart-slot-time">Oggi ${escapeHtml(formatSmartSlotRange(best.start,best.end))}</div></div><span class="badge b-green" title="Valutazione interna basata su calendario, energia, stress e durata del task">${escapeHtml(smartSlotFitLabel(best.score))}</span></div><div class="smart-slot-reason">${escapeHtml(best.reason||state.message||'Slot libero compatibile con energia e stress di oggi.')}</div><div class="task-card-actions"><button class="btn-primary" onclick="acceptSmartSlot('${safeTaskId}','${safeStart}','${safeEnd}')">Ho fissato questo slot</button></div>${alternatives?`<div class="smart-slot-alt">Alternative: ${escapeHtml(alternatives)}</div>`:''}</div>`;
+  return `<div class="smart-slot-panel"><div class="smart-slot-head"><div><div class="smart-slot-title">${escapeHtml(best.label||'Slot proposto')}</div><div class="smart-slot-time">Oggi ${escapeHtml(formatSmartSlotRange(best.start,best.end))}</div></div><span class="badge b-green" title="Valutazione interna basata su calendario, energia, stress e durata del task">${escapeHtml(smartSlotFitLabel(best.score))}</span></div><div class="smart-slot-reason">${escapeHtml(best.reason||state.message||'Slot libero compatibile con energia e stress di oggi.')} Filo non scrive nel Calendar: resta una proposta da confermare manualmente.</div><div class="task-card-actions"><button class="btn-primary" onclick="acceptSmartSlot('${safeTaskId}','${safeStart}','${safeEnd}')">Segna come fissato</button></div>${alternatives?`<div class="smart-slot-alt">Alternative: ${escapeHtml(alternatives)}</div>`:''}</div>`;
 }
 async function suggestSmartSlot(taskId,button=null){
   const task=getTaskByUiId(taskId);
@@ -2682,6 +2682,8 @@ async function suggestSmartSlot(taskId,button=null){
       to:win.to.toISOString(),
       workStartHour:win.workStartHour,
       workEndHour:win.workEndHour,
+      mode:'preview',
+      writeToCalendar:false,
       task:{title:task.label,energyCost:task.energyCost||3,stressImpact:task.stressImpact||3}
     };
     if(isPersistedTaskId(task.id))payload.taskId=task.id;
@@ -2694,7 +2696,7 @@ async function suggestSmartSlot(taskId,button=null){
     console.warn('Smart Slot Suggestion fallita:',err);
     smartSlotState[key]={loading:false,error:'Non riesco a calcolare lo slot ora. Verifica calendario collegato e riprova.'};
   }finally{
-    if(button){button.disabled=false;button.textContent='Trova slot oggi';}
+    if(button){button.disabled=false;button.textContent='Proponi slot oggi';}
     renderTasks();
   }
 }
@@ -2706,8 +2708,8 @@ function taskListActions(t){
   if(status==='todo')actions.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','in_progress')">In corso</button>`);
   if(status==='in_progress')actions.push(`<button class="btn-ghost" onclick="moveTaskStatus('${id}','todo')">Da fare</button>`);
   if(status!=='done'){
-    if(getAcceptedSmartSlot(t))actions.push('<button class="btn-ghost" disabled>Slot fissato</button>');
-    else actions.push(`<button class="btn-ghost" onclick="suggestSmartSlot('${id}',this)">Trova slot oggi</button>`);
+    if(getAcceptedSmartSlot(t))actions.push('<button class="btn-ghost" disabled>Slot segnato</button>');
+    else actions.push(`<button class="btn-ghost" onclick="suggestSmartSlot('${id}',this)">Proponi slot oggi</button>`);
   }
   if(status!=='done')actions.push(`<button class="btn-primary" onclick="moveTaskStatus('${id}','done')">Completa</button>`);
   actions.push(`<button class="btn-icon" onclick="deleteTask('${id}')">✕</button>`);
