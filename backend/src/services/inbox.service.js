@@ -52,9 +52,9 @@ function resolveRedirectUri(redirectUri) {
 
 export function buildGoogleAuthUrl({ userId, redirectUri, state, authEmail }) {
   requireGoogleOauthEnv();
+  const userEmail = normalizeEmail(authEmail);
   assertGoogleOauthTester(userEmail);
   const effectiveRedirectUri = resolveRedirectUri(redirectUri);
-  const userEmail = normalizeEmail(authEmail);
 
   const params = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
