@@ -145,15 +145,8 @@ function getAiFallbackReasonForConfiguration() {
 }
 
 
-function truncateDiagnosticDetail(value) {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
-  if (!text) return '';
-  return text.length > 220 ? `${text.slice(0, 217)}...` : text;
-}
-
 function classifyAiProviderFailure(error) {
   const message = String(error?.message || error || '').trim();
-  const detail = truncateDiagnosticDetail(message);
 
   if (error?.name === 'AbortError' || /timeout|abort/i.test(message)) {
     return {
@@ -168,41 +161,41 @@ function classifyAiProviderFailure(error) {
   if (status === 401 || status === 403) {
     return {
       code: 'AI_PROVIDER_AUTH_ERROR',
-      hint: `Il provider IA ha rifiutato le credenziali configurate${detail ? `: ${detail}` : '.'}`
+      hint: 'Chiave API Anthropic non valida o non autorizzata: aggiorna ANTHROPIC_API_KEY nell’ambiente di deploy e ridistribuisci.'
     };
   }
 
   if (status === 404) {
     return {
       code: 'AI_PROVIDER_MODEL_UNAVAILABLE',
-      hint: `Il modello IA configurato non risulta disponibile${detail ? `: ${detail}` : '.'}`
+      hint: 'Il modello Anthropic configurato non risulta disponibile: verifica ANTHROPIC_MODEL o usa il modello predefinito.'
     };
   }
 
   if (status === 429) {
     return {
       code: 'AI_PROVIDER_RATE_LIMITED',
-      hint: `Il provider IA ha limitato temporaneamente le richieste${detail ? `: ${detail}` : '.'}`
+      hint: 'Il provider IA ha limitato temporaneamente le richieste: riprova più tardi o verifica quota e billing del provider.'
     };
   }
 
   if (status && status >= 500) {
     return {
       code: 'AI_PROVIDER_SERVER_ERROR',
-      hint: `Il provider IA ha risposto con errore temporaneo (${status})${detail ? `: ${detail}` : '.'}`
+      hint: `Il provider IA ha risposto con errore temporaneo (${status}): riprova tra qualche minuto.`
     };
   }
 
   if (/json|parse|unexpected token/i.test(message)) {
     return {
       code: 'AI_RESPONSE_PARSE_FAILED',
-      hint: `Il provider IA ha risposto, ma il contenuto non era nel formato JSON atteso${detail ? `: ${detail}` : '.'}`
+      hint: 'Il provider IA ha risposto, ma il contenuto non era nel formato JSON atteso.'
     };
   }
 
   return {
     code: 'AI_PROVIDER_UNAVAILABLE',
-    hint: `Il provider IA non è disponibile o non ha risposto entro i tempi previsti${detail ? `: ${detail}` : '.'}`
+    hint: 'Il provider IA non è raggiungibile o non ha completato la richiesta: controlla rete, configurazione provider e log backend.'
   };
 }
 
