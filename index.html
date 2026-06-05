@@ -180,6 +180,10 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-bg);color
 .task-import-status{font-size:10px;font-weight:600;border-radius:999px;padding:2px 7px;white-space:nowrap;justify-self:start;}
 .task-import-status.ok{background:#E4F4EE;color:#0E6B4A;}
 .task-import-status.skip{background:#FDF3DC;color:#8A5C00;}
+.task-import-example{margin-top:12px;padding:10px 12px;border:1px dashed rgba(var(--color-primary-rgb),0.28);border-radius:10px;background:rgba(255,255,255,0.54);}
+.task-import-example-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.task-import-example-title{font-size:11px;font-weight:600;color:var(--color-primary-strong);text-transform:uppercase;letter-spacing:.06em;}
+.task-import-example pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;line-height:1.5;color:var(--color-muted-strong);white-space:pre-wrap;word-break:break-word;}
 @media(max-width:700px){.task-import-preview-row{grid-template-columns:1fr;gap:4px}.task-import-preview-row.head{display:none;}}
 .smart-slot-panel{margin:8px 0 12px 34px;padding:11px 12px;border:1px solid rgba(43,124,106,.18);border-radius:12px;background:#F3FBF8;color:var(--color-text);}
 .task-card .smart-slot-panel{margin:9px 0 0 0;background:#F8FCFA;}
@@ -611,6 +615,16 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-bg);color
               <div class="field-label">Lista o CSV incollato</div>
               <textarea id="task-import-text" class="f-textarea" rows="6" placeholder="Chiamare cliente&#10;Preparare budget; domani; alta&#10;titolo,scadenza,priorita,note"></textarea>
               <div class="small-help">Formato rapido: una riga = un task. Con separatori ; , o tab puoi indicare titolo, scadenza, priorita e note.</div>
+              <div class="task-import-example">
+                <div class="task-import-example-head">
+                  <div class="task-import-example-title">Esempio CSV</div>
+                  <button class="btn-ghost" type="button" style="font-size:11px;padding:4px 9px;" onclick="fillTaskImportExample()">Usa esempio</button>
+                </div>
+                <pre>titolo,scadenza,priorita,note
+Chiamare cliente Rossi,oggi,alta,Confermare avanzamento proposta
+Preparare budget Q2,domani,urgente,Portare bozza alla review interna
+Fare backup documenti progetto,,bassa,Task senza scadenza</pre>
+              </div>
             </div>
             <div>
               <div class="field-label">File CSV</div>
@@ -3164,6 +3178,18 @@ function clearTaskImport(){
   if(text)text.value='';
   if(file)file.value='';
   clearTaskImportPreview();
+}
+function fillTaskImportExample(){
+  const text=document.getElementById('task-import-text');
+  if(!text)return;
+  text.value=[
+    'titolo,scadenza,priorita,note',
+    'Chiamare cliente Rossi,oggi,alta,Confermare avanzamento proposta',
+    'Preparare budget Q2,domani,urgente,Portare bozza alla review interna',
+    'Rispondere a email fornitore,2026-06-08,normale,Verificare tempi di consegna',
+    'Fare backup documenti progetto,,bassa,Task senza scadenza'
+  ].join('\n');
+  previewTaskImport();
 }
 function clearTaskImportPreview(){
   taskImportRows=[];
