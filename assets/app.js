@@ -1821,7 +1821,7 @@ const HELP_CONTENT={
   ricerca:{title:"Ricerca",intro:"Qui trovi rapidamente task, note e messaggi. È utile quando ricordi un nome, un cliente, un tema o una parola chiave ma non sai dove sia finita.",steps:["Digita una parola chiave.","Controlla i risultati divisi per area.","Apri la sezione giusta per agire sul contenuto."],tip:"Cerca parole concrete: nomi, clienti, budget, scadenze, progetti."},
   impostazioni:{title:"Impostazioni",intro:"Qui gestisci profilo, preferenze e statistiche leggere. È il posto per calibrare Filo, non per lavorare ogni giorno.",steps:["Controlla i dati profilo.","Attiva o disattiva check-in, memoria e suggerimenti AI.","Scegli il tema visivo più comodo."],tip:"Per il primo utilizzo lascia attivi check-in, memoria e suggerimenti AI: sono le parti che rendono Filo più personale."}
 };
-const HELP_FIRST_RUN=["Collega Google Calendar o inizia da un template.","Crea o importa almeno 3 task reali.","Fai il check-in energia.","Vai su Prossime azioni e premi Analizza."];
+const HELP_FIRST_RUN=["Fai il check-in energia quando apri Filo.","Collega Google Calendar e mailbox, oppure inizia da un template.","Crea o importa almeno 3 task reali.","Vai su Prossime azioni e premi Analizza."];
 function getActivePageId(){const active=document.querySelector('.page.active');return active?.id?.replace('page-','')||'suggerimenti';}
 function renderHelpPanel(){
   const id=getActivePageId();
