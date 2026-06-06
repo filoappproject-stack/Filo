@@ -201,7 +201,10 @@
           <div class="topbar-title" id="page-title">Buongiorno</div>
           <div class="topbar-sub" id="page-sub">Dimmi cosa hai oggi, penso io all'ordine</div>
         </div>
-        <div id="topbar-actions"></div>
+        <div class="topbar-tools">
+          <div id="topbar-actions"></div>
+          <button class="help-trigger" type="button" onclick="openHelpPanel()" aria-label="Apri aiuto contestuale">? Aiuto</button>
+        </div>
       </div>
     </div>
     <div class="content">
@@ -556,6 +559,19 @@ Fare backup documenti progetto,,bassa,Task senza scadenza</pre>
     <button class="btn-ghost" onclick="dismissTaskReminderToast()">Chiudi</button>
     <button class="btn-primary" onclick="openReminderTask()">Apri task</button>
   </div>
+</div>
+
+<div class="help-panel-overlay" id="help-panel-overlay" onclick="if(event.target===this)closeHelpPanel()">
+  <aside class="help-panel" role="dialog" aria-modal="true" aria-labelledby="help-panel-title">
+    <div class="help-panel-head">
+      <div>
+        <div class="help-kicker">Aiuto rapido</div>
+        <div class="help-title" id="help-panel-title">Come usare Filo</div>
+      </div>
+      <button class="btn-ghost" type="button" onclick="closeHelpPanel()">Chiudi</button>
+    </div>
+    <div class="help-body" id="help-panel-body"></div>
+  </aside>
 </div>
 
 <script src="assets/app.js"></script>
