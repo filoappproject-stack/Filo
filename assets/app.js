@@ -1822,6 +1822,8 @@ const HELP_CONTENT={
   impostazioni:{title:"Impostazioni",intro:"Qui gestisci profilo, preferenze e statistiche leggere. È il posto per calibrare Filo, non per lavorare ogni giorno.",steps:["Controlla i dati profilo.","Attiva o disattiva check-in, memoria e suggerimenti AI.","Scegli il tema visivo più comodo."],tip:"Per il primo utilizzo lascia attivi check-in, memoria e suggerimenti AI: sono le parti che rendono Filo più personale."}
 };
 const HELP_FIRST_RUN=["Fai il check-in energia quando apri Filo.","Collega Google Calendar e mailbox, oppure inizia da un template.","Crea o importa almeno 3 task reali.","Vai su Prossime azioni e premi Analizza."];
+const SUPPORT_EMAIL='filo.app.project@gmail.com';
+const SUPPORT_MAILTO=`mailto:${SUPPORT_EMAIL}?subject=Feedback%20su%20Filo`;
 function getActivePageId(){const active=document.querySelector('.page.active');return active?.id?.replace('page-','')||'suggerimenti';}
 function renderHelpPanel(){
   const id=getActivePageId();
@@ -1833,7 +1835,8 @@ function renderHelpPanel(){
   body.innerHTML=[
     `<section class="help-section"><div class="help-copy">${escapeHtml(data.intro)}</div><div class="help-list">${data.steps.map((step,idx)=>`<div class="help-item"><span class="help-num">${idx+1}</span><span>${escapeHtml(step)}</span></div>`).join('')}</div></section>`,
     `<section class="help-section"><div class="help-section-title">Percorso consigliato</div><div class="help-path">${HELP_FIRST_RUN.map((step,idx)=>`<div class="help-path-step"><span class="help-num">${idx+1}</span><span>${escapeHtml(step)}</span></div>`).join('')}</div></section>`,
-    `<section class="help-section"><div class="help-section-title">Da ricordare</div><div class="help-tip">${escapeHtml(data.tip)}</div></section>`
+    `<section class="help-section"><div class="help-section-title">Da ricordare</div><div class="help-tip">${escapeHtml(data.tip)}</div></section>`,
+    `<section class="help-section"><div class="help-section-title">Feedback e bug</div><div class="help-contact"><div>Hai un suggerimento o qualcosa non funziona?</div><a href="${SUPPORT_MAILTO}">${SUPPORT_EMAIL}</a><small>Se il link email non si apre, copia questo indirizzo e scrivimi direttamente.</small></div></section>`
   ].join('');
 }
 function openHelpPanel(){renderHelpPanel();const panel=document.getElementById('help-panel-overlay');if(panel)panel.classList.add('active');}
