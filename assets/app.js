@@ -3160,7 +3160,7 @@ function normalizeSuggestionSource(source){
 }
 function getSuggestionSourceLabel(source,{degraded=false,originalSource='unknown'}={}){
   const normalized=normalizeSuggestionSource(source);
-  if(normalized==='ai')return 'Fonte: IA (usa quota/costo)';
+  if(normalized==='ai')return 'Fonte: IA';
   if(normalized==='local-fallback')return 'Fonte: fallback locale (generazione gratuita)';
   if(normalized==='cache'){
     const original=normalizeSuggestionSource(originalSource);
