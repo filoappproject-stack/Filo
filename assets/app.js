@@ -954,9 +954,11 @@ const SUGGESTION_DISMISSALS_PREFIX='filo_suggestion_dismissals_';
 const SUGGESTIONS_CACHE_TTL_MS=72*60*60*1000;
 const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
 const DAY_ANALYSIS_DRAFT_PREFIX='filo_day_analysis_draft_';
+const FILO_LANDING_URL='https://filo-landing-gules.vercel.app/';
 const SMART_SLOT_ACCEPTED_PREFIX='filo_smart_slot_accepted_';
 const smartSlotState={};
 const smartSlotAccepted={};
+let currentDaySuggestionsForShare=[];
 
 function normalizeApiTask(task){
   const uiPriorityMap={low:'bassa',medium:'normale',high:'alta',urgent:'urgente'};
@@ -1086,6 +1088,38 @@ function refreshSuggestionTaskButtons(){
     const visible=container.querySelectorAll('.sugg-card').length;
     nb.textContent=String(visible);
     if(visible===0)container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';
+  }
+}
+function buildShareableDayPlan(suggestions=currentDaySuggestionsForShare){
+  const list=(Array.isArray(suggestions)?suggestions:[])
+    .map((s)=>String(s?.titolo||'').trim())
+    .filter(Boolean)
+    .slice(0,5);
+  if(!list.length)return '';
+  return [
+    'Oggi Filo mi suggerisce di concentrarmi su:',
+    '',
+    ...list.map((title,idx)=>`${idx+1}. ${title}`),
+    '',
+    'Generato con Filo',
+    FILO_LANDING_URL
+  ].join('\n');
+}
+async function copyDayPlan(button=null){
+  const text=buildShareableDayPlan();
+  if(!text)return;
+  const originalText=button?.textContent||'Copia piano';
+  try{
+    if(!navigator.clipboard?.writeText)throw new Error('Clipboard non disponibile');
+    await navigator.clipboard.writeText(text);
+    if(button){
+      button.textContent='✓ Piano copiato';
+      button.disabled=true;
+      setTimeout(()=>{button.textContent=originalText;button.disabled=false;},2200);
+    }
+  }catch(err){
+    window.prompt('Copia il piano da qui:',text);
+    if(button)button.textContent=originalText;
   }
 }
 
@@ -3236,9 +3270,11 @@ function renderDaySuggestions(suggestions,options={}){
   const nb=document.getElementById('nb-sugg');
   nb.textContent=enrichedSuggestions.length;
   nb.style.display='';
+  currentDaySuggestionsForShare=enrichedSuggestions;
   const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};
   const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
-  container.innerHTML=enrichedSuggestions.map((s,i)=>{
+  const sharePanel='<div class="share-plan-card"><div><div class="share-plan-title">Vuoi mostrare il valore di Filo?</div><div class="share-plan-copy">Copia il piano della giornata e condividilo con un collega o con il tuo team.</div></div><button class="btn-ghost share-plan-btn" type="button" onclick="copyDayPlan(this)">Copia piano</button></div>';
+  container.innerHTML=sharePanel+enrichedSuggestions.map((s,i)=>{
     const title=String(s.titolo||'Azione');
     const titleForHandler=title.replace(/'/g,"\\'");
     const added=isSuggestionTaskOpen(title);
