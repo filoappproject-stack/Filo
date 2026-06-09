@@ -3273,7 +3273,7 @@ function renderDaySuggestions(suggestions,options={}){
   currentDaySuggestionsForShare=enrichedSuggestions;
   const PBADGE={urgente:'b-urgente',alta:'b-alta',normale:'b-normale',bassa:'b-bassa'};
   const PLBL={urgente:'Urgente',alta:'Alta priorità',normale:'Normale',bassa:'Bassa'};
-  const sharePanel='<div class="share-plan-card"><div><div class="share-plan-title">Vuoi mostrare il valore di Filo?</div><div class="share-plan-copy">Copia il piano della giornata e condividilo con un collega o con il tuo team.</div></div><button class="btn-ghost share-plan-btn" type="button" onclick="copyDayPlan(this)">Copia piano</button></div>';
+  const sharePanel='<div class="share-plan-card"><div><div class="share-plan-title">Condividi il piano della giornata</div><div class="share-plan-copy">Copia il piano generato da Filo per inviarlo a un collega, al tuo team o tenerlo nei tuoi appunti.</div></div><button class="btn-ghost share-plan-btn" type="button" onclick="copyDayPlan(this)">Copia piano</button></div>';
   container.innerHTML=sharePanel+enrichedSuggestions.map((s,i)=>{
     const title=String(s.titolo||'Azione');
     const titleForHandler=title.replace(/'/g,"\\'");
