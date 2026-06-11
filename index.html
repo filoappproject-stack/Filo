@@ -171,6 +171,11 @@
       <span class="nav-badge nb-blue" id="nb-note">0</span>
     </div>
     <div class="nav-sec">Strumenti</div>
+    <div class="nav-item" onclick="showPage('quickcheck',this)">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M7.5 1.5l1.6 3.3 3.6.5-2.6 2.5.6 3.6-3.2-1.7-3.2 1.7.6-3.6-2.6-2.5 3.6-.5z"/><path d="M5.2 7.5l1.5 1.5 3.1-3.1"/></svg>
+      Quick Check
+      <span class="nav-badge nb-green">Free</span>
+    </div>
     <div class="nav-item" onclick="showPage('memoria',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7.5" cy="7.5" r="6"/><path d="M5 7.5h5M7.5 5v5"/><circle cx="7.5" cy="7.5" r="2"/></svg>
       Memoria
@@ -411,6 +416,92 @@ Fare backup documenti progetto,,bassa,Task senza scadenza</pre>
             <div style="margin-bottom:14px;"><div class="field-label">Contenuto</div><textarea id="note-edit-body" class="f-textarea" rows="8" placeholder="Scrivi qui le tue note..."></textarea></div>
             <div><div class="field-label">Tag (separati da virgola)</div><input id="note-edit-tags" class="f-input" placeholder="Es: Clienti, Budget..."></div>
           </div>
+        </div>
+      </div>
+
+      <!-- QUICK CHECK -->
+      <div id="page-quickcheck" class="page">
+        <div class="quickcheck-hero">
+          <div>
+            <div class="quickcheck-kicker">Gratuito · 2 minuti</div>
+            <h2 class="quickcheck-title">Scopri dove il tuo lavoro perde tempo e contesto.</h2>
+            <p class="quickcheck-lead">Rispondi a poche domande: Filo restituisce una diagnosi operativa, tre azioni prioritarie e il template più utile da cui partire.</p>
+          </div>
+          <div class="quickcheck-score-preview" aria-hidden="true">
+            <div class="quickcheck-score-ring"><span>0</span><small>/100</small></div>
+            <div class="quickcheck-score-copy">Indice dispersione</div>
+          </div>
+        </div>
+        <div class="quickcheck-layout">
+          <section class="card quickcheck-form-card">
+            <div class="sec-label">Filo Quick Check</div>
+            <div class="grid-2">
+              <div>
+                <div class="field-label">Che flusso vuoi diagnosticare?</div>
+                <select id="qc-process" class="f-select">
+                  <option value="giornata personale">Giornata personale</option>
+                  <option value="richieste clienti">Richieste clienti</option>
+                  <option value="follow-up commerciale">Follow-up commerciale</option>
+                  <option value="onboarding cliente">Onboarding cliente</option>
+                  <option value="attivita interne">Attivita interne</option>
+                  <option value="progetto">Progetto o consegna</option>
+                </select>
+              </div>
+              <div>
+                <div class="field-label">Quanti strumenti usi per seguirlo?</div>
+                <select id="qc-tools" class="f-select">
+                  <option value="1">1-2 strumenti</option>
+                  <option value="2">3-4 strumenti</option>
+                  <option value="3">5 o piu strumenti</option>
+                </select>
+              </div>
+              <div>
+                <div class="field-label">Dove capisci lo stato di avanzamento?</div>
+                <select id="qc-visibility" class="f-select">
+                  <option value="dashboard">Vista unica o dashboard</option>
+                  <option value="sheet">Foglio o documento condiviso</option>
+                  <option value="chat">Chat, email o memoria personale</option>
+                  <option value="unclear">Non e chiaro</option>
+                </select>
+              </div>
+              <div>
+                <div class="field-label">Come aggiorni le informazioni?</div>
+                <select id="qc-updates" class="f-select">
+                  <option value="automatico">In modo automatico o quasi</option>
+                  <option value="settimanale">Manuale, ogni tanto</option>
+                  <option value="giornaliero">Manuale, ogni giorno</option>
+                  <option value="irregolare">Quando qualcuno se ne ricorda</option>
+                </select>
+              </div>
+              <div>
+                <div class="field-label">Le responsabilita sono chiare?</div>
+                <select id="qc-ownership" class="f-select">
+                  <option value="chiaro">Si, c'e sempre un owner</option>
+                  <option value="parziale">Solo per alcune attivita</option>
+                  <option value="assente">Spesso non e chiaro</option>
+                </select>
+              </div>
+              <div>
+                <div class="field-label">Quanto follow-up richiede?</div>
+                <select id="qc-followup" class="f-select">
+                  <option value="basso">Poco: meno di 30 min/settimana</option>
+                  <option value="medio">Medio: 30-90 min/settimana</option>
+                  <option value="alto">Alto: piu di 90 min/settimana</option>
+                </select>
+              </div>
+            </div>
+            <div style="margin-top:14px;">
+              <div class="field-label">Descrivi il punto piu caotico, se vuoi</div>
+              <textarea id="qc-notes" class="f-textarea" rows="4" placeholder="Es: le richieste arrivano in email, poi finiscono in chat e non so sempre chi deve rispondere..."></textarea>
+            </div>
+            <div class="form-actions">
+              <button class="btn-primary" onclick="runQuickCheck()">Genera diagnosi</button>
+              <button class="btn-ghost" onclick="fillQuickCheckExample()">Usa esempio</button>
+              <button class="btn-ghost" onclick="resetQuickCheck()">Svuota</button>
+            </div>
+            <div class="small-help">La diagnosi gratuita usa regole locali: e immediata, stabile e non consuma quota AI.</div>
+          </section>
+          <section id="quickcheck-result" class="quickcheck-result"></section>
         </div>
       </div>
 
