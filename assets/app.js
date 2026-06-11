@@ -945,6 +945,7 @@ const API_BASES=buildApiBaseCandidates();
 const APP_BUILD_ID=window.__FILO_BUILD_ID__||'dev';
 const APP_BUILD_DATE=window.__FILO_BUILD_DATE__||new Date().toISOString().slice(0,10);
 const TASKS_CACHE_PREFIX='filo_tasks_cache_';
+const QUICKCHECK_CACHE_PREFIX='filo_quickcheck_cache_';
 const NOTES_CACHE_PREFIX='filo_notes_cache_';
 const NOTES_BACKFILL_DONE_PREFIX='filo_notes_backfill_done_';
 const INBOX_CACHE_PREFIX='filo_inbox_cache_';
@@ -1844,13 +1845,14 @@ function renderMemoryPage(){
 }
 
 // ── NAVIGAZIONE ───────────────────────────────────────────────────────────────
-const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox email","0 messaggi · 0 non letti · Slack previsto"],task:["Task",""],note:["Note",""],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
+const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox email","0 messaggi · 0 non letti · Slack previsto"],task:["Task",""],note:["Note",""],quickcheck:["Filo Quick Check","Diagnosi gratuita del tuo flusso operativo"],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
 const HELP_CONTENT={
   suggerimenti:{title:"Prossime azioni",intro:"Qui Filo trasforma agenda, sospesi, energia e vincoli in poche azioni ordinate. È il punto da cui partire quando non sai cosa fare per primo.",steps:["Compila agenda, sospesi, disponibilità e focus del giorno.","Premi Analizza la mia giornata.","Trasforma le azioni utili in task o avvia un focus sprint."],tip:"Più contesto dai, più Filo riesce a distinguere urgenze vere, lavoro profondo e attività rimandabili."},
   calendario:{title:"Calendario",intro:"Qui convivono gli eventi Google Calendar e i blocchi Filo. Gli eventi sono impegni reali; i blocchi Filo sono una struttura consigliata per usare meglio il tempo libero.",steps:["Collega Google Calendar per vedere gli eventi reali.","Scegli un template se vuoi dare un ritmo alla giornata o alla settimana.","Premi Applica blocchi per vedere il piano e Crea task per trasformarlo in azioni."],tip:"I template non modificano Google Calendar: servono a orientare la giornata e possono convivere con gli eventi importati."},
   inbox:{title:"Inbox email",intro:"Qui Filo raccoglie i messaggi collegati alla mailbox. L'obiettivo non è leggere tutto, ma capire quali comunicazioni richiedono una prossima azione.",steps:["Collega la mailbox.","Sincronizza quando vuoi aggiornare i messaggi.","Apri i messaggi rilevanti e trasformali mentalmente in task se richiedono follow-up."],tip:"Slack è previsto, ma per ora Filo mantiene la promessa operativa sulla mailbox collegata."},
   task:{title:"Task",intro:"Qui tieni le cose da fare in forma operativa. Lista e Board mostrano gli stessi task con due modi diversi di leggerli.",steps:["Usa Lista quando vuoi scorrere velocemente le attività.","Usa Board per distinguere Todo, In progress e Done.","Aggiungi promemoria e ricorrenze solo ai task che devono davvero tornare."],tip:"Un task utile dovrebbe iniziare con un verbo: chiamare, preparare, approvare, rivedere, inviare."},
   note:{title:"Note",intro:"Le note servono a catturare contesto, decisioni e materiali che non sono ancora task. Quando una nota implica un'azione, puoi trasformarla in task.",steps:["Crea una nota per riunioni, decisioni o idee.","Aggiungi tag se vuoi ritrovarla più facilmente.","Crea un task dalla nota quando emerge una prossima azione."],tip:"Tieni separate note e task: la nota conserva il contesto, il task dice cosa fare."},
+  quickcheck:{title:"Filo Quick Check",intro:"Quick Check e una diagnosi gratuita e immediata: individua dispersione, responsabilita poco chiare e follow-up costoso prima di proporre cosa fare.",steps:["Scegli il flusso che vuoi diagnosticare.","Compila le domande su strumenti, visibilita, aggiornamenti e responsabilita.","Genera la diagnosi e trasforma le azioni consigliate in task."],tip:"Usalo quando vuoi capire da dove partire: non sostituisce l'AI, ma ti da una mappa operativa stabile in due minuti."},
   memoria:{title:"Memoria adattiva",intro:"La memoria raccoglie check-in e pattern nel tempo. Serve a far diventare Filo meno generico e più aderente al tuo modo di lavorare.",steps:["Fai il check-in energia quando entri.","Completa o rimanda task normalmente.","Dopo qualche giorno guarda i pattern che emergono."],tip:"La memoria diventa utile con continuità: pochi dati sinceri ogni giorno valgono più di una configurazione perfetta."},
   ricerca:{title:"Ricerca",intro:"Qui trovi rapidamente task, note e messaggi. È utile quando ricordi un nome, un cliente, un tema o una parola chiave ma non sai dove sia finita.",steps:["Digita una parola chiave.","Controlla i risultati divisi per area.","Apri la sezione giusta per agire sul contenuto."],tip:"Cerca parole concrete: nomi, clienti, budget, scadenze, progetti."},
   impostazioni:{title:"Impostazioni",intro:"Qui gestisci profilo, preferenze e statistiche leggere. È il posto per calibrare Filo, non per lavorare ogni giorno.",steps:["Controlla i dati profilo.","Attiva o disattiva check-in, memoria e suggerimenti AI.","Scegli il tema visivo più comodo."],tip:"Per il primo utilizzo lascia attivi check-in, memoria e suggerimenti AI: sono le parti che rendono Filo più personale."}
@@ -1875,7 +1877,7 @@ function renderHelpPanel(){
 }
 function openHelpPanel(){renderHelpPanel();const panel=document.getElementById('help-panel-overlay');if(panel)panel.classList.add('active');}
 function closeHelpPanel(){const panel=document.getElementById('help-panel-overlay');if(panel)panel.classList.remove('active');}
-function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');if(el)el.classList.add('active');const m=PAGE_META[id];const firstName=currentUser?(currentUser.user_metadata?.full_name||currentUser.email).split(' ')[0]:'';document.getElementById('page-title').textContent=id==='suggerimenti'?'Buongiorno, '+firstName:m[0];document.getElementById('page-sub').textContent=m[1];document.getElementById('topbar-actions').innerHTML='';if(id==='task')updateTaskSubtitle();if(id==='note'){showNoteList();document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">＋ Nuova nota</button>';}if(id==='memoria')renderMemoryPage();if(id==='impostazioni')updateStatsPage();renderAll();renderHelpPanel();}
+function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');if(el)el.classList.add('active');const m=PAGE_META[id];const firstName=currentUser?(currentUser.user_metadata?.full_name||currentUser.email).split(' ')[0]:'';document.getElementById('page-title').textContent=id==='suggerimenti'?'Buongiorno, '+firstName:m[0];document.getElementById('page-sub').textContent=m[1];document.getElementById('topbar-actions').innerHTML='';if(id==='task')updateTaskSubtitle();if(id==='note'){showNoteList();document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">＋ Nuova nota</button>';}if(id==='quickcheck')renderQuickCheckPage();if(id==='memoria')renderMemoryPage();if(id==='impostazioni')updateStatsPage();renderAll();renderHelpPanel();}
 
 // â”€â”€ RENDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function tagBadge(tag,idx){const c=TAG_PALETTE[idx%TAG_PALETTE.length];return `<span style="font-size:10px;font-weight:500;padding:2px 7px;border-radius:8px;background:${c.bg};color:${c.tc};">${escapeHtml(tag)}</span>`;}
@@ -3643,6 +3645,108 @@ function buildAnalyzeInboxContext(){
 }
 
 // â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Quick Check gratuito: diagnosi stabile a regole, senza consumare quota AI.
+function getQuickCheckCacheKey(){return currentUser?.id?`${QUICKCHECK_CACHE_PREFIX}${currentUser.id}`:`${QUICKCHECK_CACHE_PREFIX}guest`;}
+function saveQuickCheckCache(payload){try{localStorage.setItem(getQuickCheckCacheKey(),JSON.stringify(payload));}catch(e){}}
+function loadQuickCheckCache(){try{return JSON.parse(localStorage.getItem(getQuickCheckCacheKey())||'null');}catch(e){return null;}}
+function getQuickCheckValue(id){return document.getElementById(id)?.value||'';}
+function setQuickCheckValue(id,value){const el=document.getElementById(id);if(el)el.value=value;}
+function collectQuickCheckInput(){return {process:getQuickCheckValue('qc-process'),tools:getQuickCheckValue('qc-tools'),visibility:getQuickCheckValue('qc-visibility'),updates:getQuickCheckValue('qc-updates'),ownership:getQuickCheckValue('qc-ownership'),followup:getQuickCheckValue('qc-followup'),notes:getQuickCheckValue('qc-notes').trim()};}
+function getQuickCheckLevel(score){
+  if(score<=25)return {label:'Dispersione bassa',tone:'Il flusso sembra gia leggibile: il valore di Filo e renderlo piu replicabile.'};
+  if(score<=50)return {label:'Dispersione media',tone:'Il flusso funziona, ma dipende ancora da passaggi manuali e memoria individuale.'};
+  if(score<=74)return {label:'Dispersione alta',tone:'Il processo regge, ma costa piu energia del necessario: informazioni e responsabilita sono distribuite.'};
+  return {label:'Dispersione critica',tone:'Il rischio principale non e solo perdere tempo, ma perdere contesto e controllo operativo.'};
+}
+function getQuickCheckTemplate(input,dominantKey){
+  const process=input.process||'giornata personale';
+  if(process.includes('clienti')||process.includes('richieste'))return {name:'Gestione richieste operative',sub:'Una vista unica per richiesta, owner, stato, priorita e prossima risposta.'};
+  if(process.includes('commerciale'))return {name:'Follow-up commerciale',sub:'Pipeline leggera per non perdere contatti, scadenze e prossime mosse.'};
+  if(process.includes('onboarding'))return {name:'Onboarding cliente',sub:'Checklist condivisa per passaggi, responsabilita e documenti mancanti.'};
+  if(process.includes('progetto'))return {name:'Hub progetto',sub:'Stato, blocchi, decisioni e prossime azioni in un punto solo.'};
+  if(dominantKey==='ownership')return {name:'Responsabilita e passaggi',sub:'Una mappa semplice di chi fa cosa, entro quando e con quale output.'};
+  if(dominantKey==='manual')return {name:'Rituale operativo settimanale',sub:'Routine minima per aggiornare stato, priorita e follow-up senza rincorrere tutto.'};
+  return {name:'Hub operativo personale',sub:'Una vista leggera per centralizzare agenda, sospesi, priorita e follow-up.'};
+}
+function buildQuickCheckProblems(input){
+  const problems=[];
+  const tools=Number(input.tools)||1;
+  if(tools>=2&&input.visibility!=='dashboard')problems.push({key:'scattered',weight:tools===3?30:22,title:'Informazioni disperse',why:'Il flusso attraversa piu strumenti, ma non ha ancora una vista unica abbastanza affidabile.'});
+  if(input.visibility==='chat'||input.visibility==='unclear')problems.push({key:'visibility',weight:input.visibility==='unclear'?28:22,title:'Stato poco visibile',why:'Per capire a che punto sei devi ricostruire il contesto da chat, email o memoria personale.'});
+  if(input.updates==='giornaliero'||input.updates==='irregolare'||input.followup==='alto')problems.push({key:'manual',weight:input.followup==='alto'?26:20,title:'Manutenzione manuale e follow-up',why:'Una parte rilevante dell energia va nel chiedere aggiornamenti o riallineare informazioni gia note.'});
+  if(input.ownership==='parziale'||input.ownership==='assente')problems.push({key:'ownership',weight:input.ownership==='assente'?27:19,title:'Responsabilita poco chiare',why:'Quando l owner non e evidente, il lavoro resta aperto piu a lungo e aumenta il rischio di rimbalzi.'});
+  const notes=(input.notes||'').toLowerCase();
+  if(notes.includes('priorit')||notes.includes('urgente')||notes.includes('tutto importante'))problems.push({key:'priority',weight:18,title:'Priorita non governate',why:'Le urgenze sembrano competere tra loro: serve un criterio visibile per decidere cosa viene prima.'});
+  if(!problems.length)problems.push({key:'clarity',weight:8,title:'Flusso abbastanza ordinato',why:'Non emergono blocchi forti: il passo utile e rendere il metodo piu esplicito e riusabile.'});
+  return problems.sort((a,b)=>b.weight-a.weight).slice(0,3);
+}
+function buildQuickCheckActions(problemKey,input){
+  const actionsByProblem={
+    scattered:['Crea una vista unica con richiesta, stato, owner e prossima azione.','Sposta nel flusso solo i dati che servono a decidere cosa fare dopo.','Definisci un punto di raccolta unico per nuovi input e aggiornamenti.'],
+    visibility:['Scegli una sola vista come fonte di verita dello stato.','Aggiungi tre stati semplici: da chiarire, in corso, bloccato.','Rivedi la vista ogni giorno per due minuti, non quando il caos esplode.'],
+    manual:['Trasforma il follow-up ricorrente in un task o promemoria fisso.','Prepara un riepilogo settimanale con aperti, blocchi e decisioni attese.','Automatizza solo dopo aver standardizzato cosa deve essere aggiornato.'],
+    ownership:['Assegna sempre un owner e una prossima azione a ogni elemento aperto.','Separa chi decide da chi esegue quando il passaggio non e evidente.','Crea un controllo rapido sugli elementi senza owner.'],
+    priority:['Definisci una regola di priorita basata su impatto, scadenza e blocchi generati.','Limita le priorita alte a massimo tre elementi visibili.','Rivedi cosa puo aspettare prima di aggiungere nuovo lavoro.'],
+    clarity:['Trasforma il flusso attuale in un template leggero.','Misura quali passaggi tornano ogni settimana.','Usa Filo per rendere replicabile il modo in cui gia lavori.']
+  };
+  if((input.process||'').includes('giornata'))return ['Porta agenda e sospesi nella stessa vista prima di iniziare.','Scegli una priorita del giorno e proteggi un blocco di focus.','Trasforma le interruzioni ricorrenti in task visibili.'];
+  return actionsByProblem[problemKey]||actionsByProblem.clarity;
+}
+function analyzeQuickCheck(input){
+  const scoreMap={tools:{'1':0,'2':13,'3':22},visibility:{dashboard:0,sheet:10,chat:20,unclear:24},updates:{automatico:0,settimanale:8,giornaliero:15,irregolare:20},ownership:{chiaro:0,parziale:12,assente:18},followup:{basso:0,medio:12,alto:18}};
+  let score=0;
+  score+=scoreMap.tools[input.tools]||0;score+=scoreMap.visibility[input.visibility]||0;score+=scoreMap.updates[input.updates]||0;score+=scoreMap.ownership[input.ownership]||0;score+=scoreMap.followup[input.followup]||0;
+  if((input.notes||'').length>120)score+=4;
+  score=Math.min(100,score);
+  const problems=buildQuickCheckProblems(input);
+  const dominant=problems[0];
+  return {score,level:getQuickCheckLevel(score),dominant,problems,actions:buildQuickCheckActions(dominant.key,input),template:getQuickCheckTemplate(input,dominant.key),createdAt:new Date().toISOString()};
+}
+function renderQuickCheckPage(){
+  const resultEl=document.getElementById('quickcheck-result');
+  if(!resultEl)return;
+  const cached=loadQuickCheckCache();
+  if(cached?.input)Object.entries(cached.input).forEach(([key,value])=>setQuickCheckValue(`qc-${key}`,value));
+  if(cached?.result)renderQuickCheckResult(cached.result);
+  else renderQuickCheckEmpty();
+}
+function renderQuickCheckEmpty(){
+  const resultEl=document.getElementById('quickcheck-result');
+  if(resultEl)resultEl.innerHTML='<div class="quickcheck-empty"><div class="quickcheck-empty-title">La diagnosi apparira qui</div><div class="quickcheck-copy">Compila il check: Filo ti restituisce punteggio, problema dominante, azioni e template consigliato.</div></div>';
+}
+function renderQuickCheckResult(result){
+  const resultEl=document.getElementById('quickcheck-result');
+  if(!resultEl)return;
+  const meter=Math.max(4,Math.min(100,result.score||0));
+  resultEl.innerHTML=`
+    <div class="quickcheck-report">
+      <div class="quickcheck-report-head"><div class="quickcheck-report-top"><div><div class="quickcheck-level">${escapeHtml(result.level.label)}</div><div class="quickcheck-level-sub">${escapeHtml(result.level.tone)}</div></div><div class="quickcheck-score">${result.score}<span>/100</span></div></div><div class="quickcheck-meter"><div class="quickcheck-meter-fill" style="width:${meter}%"></div></div></div>
+      <div class="quickcheck-block"><div class="quickcheck-block-title">Problema dominante</div><div class="quickcheck-dominant">${escapeHtml(result.dominant.title)}</div><div class="quickcheck-copy">${escapeHtml(result.dominant.why)}</div></div>
+      <div class="quickcheck-block"><div class="quickcheck-block-title">Segnali rilevati</div><div class="quickcheck-list">${result.problems.map((p,idx)=>`<div class="quickcheck-list-item"><span class="quickcheck-list-index">${idx+1}</span><span><strong>${escapeHtml(p.title)}</strong><br>${escapeHtml(p.why)}</span></div>`).join('')}</div></div>
+      <div class="quickcheck-block"><div class="quickcheck-block-title">Azioni consigliate</div><div class="quickcheck-list">${result.actions.map((a,idx)=>`<div class="quickcheck-list-item"><span class="quickcheck-list-index">${idx+1}</span><span>${escapeHtml(a)}</span></div>`).join('')}</div></div>
+      <div class="quickcheck-block"><div class="quickcheck-block-title">Template Filo consigliato</div><div class="quickcheck-template"><div><div class="quickcheck-template-name">${escapeHtml(result.template.name)}</div><div class="quickcheck-template-sub">${escapeHtml(result.template.sub)}</div></div><button class="btn-ghost" onclick="copyQuickCheckSummary()">Copia sintesi</button></div></div>
+      <div class="quickcheck-actions"><button class="btn-primary" onclick="createQuickCheckTasks()">Crea 3 task</button><button class="btn-ghost" onclick="openQuickCheckTasksPage()">Apri Task</button></div>
+      <div class="quickcheck-action-feedback" id="quickcheck-feedback"></div>
+    </div>`;
+}
+function runQuickCheck(){const input=collectQuickCheckInput();const result=analyzeQuickCheck(input);saveQuickCheckCache({input,result});renderQuickCheckResult(result);}
+function fillQuickCheckExample(){setQuickCheckValue('qc-process','richieste clienti');setQuickCheckValue('qc-tools','3');setQuickCheckValue('qc-visibility','chat');setQuickCheckValue('qc-updates','giornaliero');setQuickCheckValue('qc-ownership','parziale');setQuickCheckValue('qc-followup','alto');setQuickCheckValue('qc-notes','Le richieste arrivano in email, alcune finiscono in chat e spesso devo chiedere a che punto siamo o chi deve rispondere al cliente.');}
+function resetQuickCheck(){['qc-process','qc-tools','qc-visibility','qc-updates','qc-ownership','qc-followup','qc-notes'].forEach((id)=>{const el=document.getElementById(id);if(!el)return;if(id==='qc-notes')el.value='';else el.selectedIndex=0;});try{localStorage.removeItem(getQuickCheckCacheKey());}catch(e){}renderQuickCheckEmpty();}
+function getCurrentQuickCheckResult(){const cached=loadQuickCheckCache();return cached?.result||analyzeQuickCheck(collectQuickCheckInput());}
+function createQuickCheckTasks(){
+  const result=getCurrentQuickCheckResult();
+  const created=result.actions.slice(0,3).map((action,idx)=>({id:nextTaskId++,label:action,done:false,status:'todo',priorita:idx===0?'alta':'normale',scadenza:idx===0?'Oggi':'Questa settimana',dueDateIso:null,reminderAt:null,recurrence:'none',energyCost:3,stressImpact:idx===0?2:3}));
+  tasks.unshift(...created);saveTasksToCache();renderTasks();updateBadges();
+  const feedback=document.getElementById('quickcheck-feedback');if(feedback){feedback.textContent='Task creati: li trovi nella sezione Task.';feedback.classList.add('active');}
+}
+function openQuickCheckTasksPage(){const item=Array.from(document.querySelectorAll('.nav-item')).find((el)=>String(el.getAttribute('onclick')||'').includes("showPage('task'"));showPage('task',item||null);}
+function buildQuickCheckSummary(result){return [`Filo Quick Check - ${result.level.label} (${result.score}/100)`,`Problema dominante: ${result.dominant.title}`,`Template consigliato: ${result.template.name}`,'Azioni:',...result.actions.map((a,idx)=>`${idx+1}. ${a}`)].join('\n');}
+function copyQuickCheckSummary(){
+  const result=getCurrentQuickCheckResult();
+  const text=buildQuickCheckSummary(result);
+  navigator.clipboard?.writeText(text).then(()=>{const feedback=document.getElementById('quickcheck-feedback');if(feedback){feedback.textContent='Sintesi copiata negli appunti.';feedback.classList.add('active');}}).catch(()=>{const feedback=document.getElementById('quickcheck-feedback');if(feedback){feedback.textContent=text;feedback.classList.add('active');}});
+}
+
 async function init() {
   loadPrefs();
   renderPrefs();
