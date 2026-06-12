@@ -1852,7 +1852,7 @@ const HELP_CONTENT={
   inbox:{title:"Inbox email",intro:"Qui Filo raccoglie i messaggi collegati alla mailbox. L'obiettivo non è leggere tutto, ma capire quali comunicazioni richiedono una prossima azione.",steps:["Collega la mailbox.","Sincronizza quando vuoi aggiornare i messaggi.","Apri i messaggi rilevanti e trasformali mentalmente in task se richiedono follow-up."],tip:"Slack è previsto, ma per ora Filo mantiene la promessa operativa sulla mailbox collegata."},
   task:{title:"Task",intro:"Qui tieni le cose da fare in forma operativa. Lista e Board mostrano gli stessi task con due modi diversi di leggerli.",steps:["Usa Lista quando vuoi scorrere velocemente le attività.","Usa Board per distinguere Todo, In progress e Done.","Aggiungi promemoria e ricorrenze solo ai task che devono davvero tornare."],tip:"Un task utile dovrebbe iniziare con un verbo: chiamare, preparare, approvare, rivedere, inviare."},
   note:{title:"Note",intro:"Le note servono a catturare contesto, decisioni e materiali che non sono ancora task. Quando una nota implica un'azione, puoi trasformarla in task.",steps:["Crea una nota per riunioni, decisioni o idee.","Aggiungi tag se vuoi ritrovarla più facilmente.","Crea un task dalla nota quando emerge una prossima azione."],tip:"Tieni separate note e task: la nota conserva il contesto, il task dice cosa fare."},
-  quickcheck:{title:"Filo Quick Check",intro:"Quick Check e una diagnosi immediata: individua dispersione, responsabilita poco chiare e follow-up costoso prima di proporre cosa fare.",steps:["Scegli il flusso che vuoi diagnosticare.","Compila le domande su strumenti, visibilita, aggiornamenti e responsabilita.","Genera la diagnosi e trasforma le azioni consigliate in task."],tip:"Usalo quando vuoi capire da dove partire: non sostituisce l'AI, ma ti da una mappa operativa stabile in due minuti."},
+  quickcheck:{title:"Filo Quick Check",intro:"Quick Check è una diagnosi immediata: individua dispersione, responsabilità poco chiare e follow-up costoso prima di proporre cosa fare.",steps:["Scegli il flusso che vuoi diagnosticare.","Compila le domande su strumenti, visibilità, aggiornamenti e responsabilità.","Genera la diagnosi e trasforma le azioni consigliate in task."],tip:"Usalo quando vuoi capire da dove partire: non sostituisce l'AI, ma ti dà una mappa operativa stabile in due minuti."},
   memoria:{title:"Memoria adattiva",intro:"La memoria raccoglie check-in e pattern nel tempo. Serve a far diventare Filo meno generico e più aderente al tuo modo di lavorare.",steps:["Fai il check-in energia quando entri.","Completa o rimanda task normalmente.","Dopo qualche giorno guarda i pattern che emergono."],tip:"La memoria diventa utile con continuità: pochi dati sinceri ogni giorno valgono più di una configurazione perfetta."},
   ricerca:{title:"Ricerca",intro:"Qui trovi rapidamente task, note e messaggi. È utile quando ricordi un nome, un cliente, un tema o una parola chiave ma non sai dove sia finita.",steps:["Digita una parola chiave.","Controlla i risultati divisi per area.","Apri la sezione giusta per agire sul contenuto."],tip:"Cerca parole concrete: nomi, clienti, budget, scadenze, progetti."},
   impostazioni:{title:"Impostazioni",intro:"Qui gestisci profilo, preferenze e statistiche leggere. È il posto per calibrare Filo, non per lavorare ogni giorno.",steps:["Controlla i dati profilo.","Attiva o disattiva check-in, memoria e suggerimenti AI.","Scegli il tema visivo più comodo."],tip:"Per il primo utilizzo lascia attivi check-in, memoria e suggerimenti AI: sono le parti che rendono Filo più personale."}
@@ -3653,43 +3653,43 @@ function getQuickCheckValue(id){return document.getElementById(id)?.value||'';}
 function setQuickCheckValue(id,value){const el=document.getElementById(id);if(el)el.value=value;}
 function collectQuickCheckInput(){return {process:getQuickCheckValue('qc-process'),tools:getQuickCheckValue('qc-tools'),visibility:getQuickCheckValue('qc-visibility'),updates:getQuickCheckValue('qc-updates'),ownership:getQuickCheckValue('qc-ownership'),followup:getQuickCheckValue('qc-followup'),notes:getQuickCheckValue('qc-notes').trim()};}
 function getQuickCheckLevel(score){
-  if(score<=25)return {label:'Dispersione bassa',tone:'Il flusso sembra gia leggibile: il valore di Filo e renderlo piu replicabile.'};
+  if(score<=25)return {label:'Dispersione bassa',tone:'Il flusso sembra già leggibile: il valore di Filo è renderlo più replicabile.'};
   if(score<=50)return {label:'Dispersione media',tone:'Il flusso funziona, ma dipende ancora da passaggi manuali e memoria individuale.'};
-  if(score<=74)return {label:'Dispersione alta',tone:'Il processo regge, ma costa piu energia del necessario: informazioni e responsabilita sono distribuite.'};
-  return {label:'Dispersione critica',tone:'Il rischio principale non e solo perdere tempo, ma perdere contesto e controllo operativo.'};
+  if(score<=74)return {label:'Dispersione alta',tone:'Il processo regge, ma costa più energia del necessario: informazioni e responsabilità sono distribuite.'};
+  return {label:'Dispersione critica',tone:'Il rischio principale non è solo perdere tempo, ma perdere contesto e controllo operativo.'};
 }
 function getQuickCheckTemplate(input,dominantKey){
   const process=input.process||'giornata personale';
-  if(process.includes('clienti')||process.includes('richieste'))return {name:'Gestione richieste operative',sub:'Una vista unica per richiesta, owner, stato, priorita e prossima risposta.'};
+  if(process.includes('clienti')||process.includes('richieste'))return {name:'Gestione richieste operative',sub:'Una vista unica per richiesta, owner, stato, priorità e prossima risposta.'};
   if(process.includes('commerciale'))return {name:'Follow-up commerciale',sub:'Pipeline leggera per non perdere contatti, scadenze e prossime mosse.'};
-  if(process.includes('onboarding'))return {name:'Onboarding cliente',sub:'Checklist condivisa per passaggi, responsabilita e documenti mancanti.'};
+  if(process.includes('onboarding'))return {name:'Onboarding cliente',sub:'Checklist condivisa per passaggi, responsabilità e documenti mancanti.'};
   if(process.includes('progetto'))return {name:'Hub progetto',sub:'Stato, blocchi, decisioni e prossime azioni in un punto solo.'};
-  if(dominantKey==='ownership')return {name:'Responsabilita e passaggi',sub:'Una mappa semplice di chi fa cosa, entro quando e con quale output.'};
-  if(dominantKey==='manual')return {name:'Rituale operativo settimanale',sub:'Routine minima per aggiornare stato, priorita e follow-up senza rincorrere tutto.'};
-  return {name:'Hub operativo personale',sub:'Una vista leggera per centralizzare agenda, sospesi, priorita e follow-up.'};
+  if(dominantKey==='ownership')return {name:'Responsabilità e passaggi',sub:'Una mappa semplice di chi fa cosa, entro quando e con quale output.'};
+  if(dominantKey==='manual')return {name:'Rituale operativo settimanale',sub:'Routine minima per aggiornare stato, priorità e follow-up senza rincorrere tutto.'};
+  return {name:'Hub operativo personale',sub:'Una vista leggera per centralizzare agenda, sospesi, priorità e follow-up.'};
 }
 function buildQuickCheckProblems(input){
   const problems=[];
   const tools=Number(input.tools)||1;
-  if(tools>=2&&input.visibility!=='dashboard')problems.push({key:'scattered',weight:tools===3?30:22,title:'Informazioni disperse',why:'Il flusso attraversa piu strumenti, ma non ha ancora una vista unica abbastanza affidabile.'});
+  if(tools>=2&&input.visibility!=='dashboard')problems.push({key:'scattered',weight:tools===3?30:22,title:'Informazioni disperse',why:'Il flusso attraversa più strumenti, ma non ha ancora una vista unica abbastanza affidabile.'});
   if(input.visibility==='chat'||input.visibility==='unclear')problems.push({key:'visibility',weight:input.visibility==='unclear'?28:22,title:'Stato poco visibile',why:'Per capire a che punto sei devi ricostruire il contesto da chat, email o memoria personale.'});
-  if(input.updates==='giornaliero'||input.updates==='irregolare'||input.followup==='alto')problems.push({key:'manual',weight:input.followup==='alto'?26:20,title:'Manutenzione manuale e follow-up',why:'Una parte rilevante dell energia va nel chiedere aggiornamenti o riallineare informazioni gia note.'});
-  if(input.ownership==='parziale'||input.ownership==='assente')problems.push({key:'ownership',weight:input.ownership==='assente'?27:19,title:'Responsabilita poco chiare',why:'Quando l owner non e evidente, il lavoro resta aperto piu a lungo e aumenta il rischio di rimbalzi.'});
+  if(input.updates==='giornaliero'||input.updates==='irregolare'||input.followup==='alto')problems.push({key:'manual',weight:input.followup==='alto'?26:20,title:'Manutenzione manuale e follow-up',why:"Una parte rilevante dell'energia va nel chiedere aggiornamenti o riallineare informazioni già note."});
+  if(input.ownership==='parziale'||input.ownership==='assente')problems.push({key:'ownership',weight:input.ownership==='assente'?27:19,title:'Responsabilità poco chiare',why:"Quando l'owner non è evidente, il lavoro resta aperto più a lungo e aumenta il rischio di rimbalzi."});
   const notes=(input.notes||'').toLowerCase();
-  if(notes.includes('priorit')||notes.includes('urgente')||notes.includes('tutto importante'))problems.push({key:'priority',weight:18,title:'Priorita non governate',why:'Le urgenze sembrano competere tra loro: serve un criterio visibile per decidere cosa viene prima.'});
-  if(!problems.length)problems.push({key:'clarity',weight:8,title:'Flusso abbastanza ordinato',why:'Non emergono blocchi forti: il passo utile e rendere il metodo piu esplicito e riusabile.'});
+  if(notes.includes('priorit')||notes.includes('urgente')||notes.includes('tutto importante'))problems.push({key:'priority',weight:18,title:'Priorità non governate',why:'Le urgenze sembrano competere tra loro: serve un criterio visibile per decidere cosa viene prima.'});
+  if(!problems.length)problems.push({key:'clarity',weight:8,title:'Flusso abbastanza ordinato',why:'Non emergono blocchi forti: il passo utile è rendere il metodo più esplicito e riusabile.'});
   return problems.sort((a,b)=>b.weight-a.weight).slice(0,3);
 }
 function buildQuickCheckActions(problemKey,input){
   const actionsByProblem={
     scattered:['Crea una vista unica con richiesta, stato, owner e prossima azione.','Sposta nel flusso solo i dati che servono a decidere cosa fare dopo.','Definisci un punto di raccolta unico per nuovi input e aggiornamenti.'],
-    visibility:['Scegli una sola vista come fonte di verita dello stato.','Aggiungi tre stati semplici: da chiarire, in corso, bloccato.','Rivedi la vista ogni giorno per due minuti, non quando il caos esplode.'],
+    visibility:['Scegli una sola vista come fonte di verità dello stato.','Aggiungi tre stati semplici: da chiarire, in corso, bloccato.','Rivedi la vista ogni giorno per due minuti, non quando il caos esplode.'],
     manual:['Trasforma il follow-up ricorrente in un task o promemoria fisso.','Prepara un riepilogo settimanale con aperti, blocchi e decisioni attese.','Automatizza solo dopo aver standardizzato cosa deve essere aggiornato.'],
-    ownership:['Assegna sempre un owner e una prossima azione a ogni elemento aperto.','Separa chi decide da chi esegue quando il passaggio non e evidente.','Crea un controllo rapido sugli elementi senza owner.'],
-    priority:['Definisci una regola di priorita basata su impatto, scadenza e blocchi generati.','Limita le priorita alte a massimo tre elementi visibili.','Rivedi cosa puo aspettare prima di aggiungere nuovo lavoro.'],
-    clarity:['Trasforma il flusso attuale in un template leggero.','Misura quali passaggi tornano ogni settimana.','Usa Filo per rendere replicabile il modo in cui gia lavori.']
+    ownership:['Assegna sempre un owner e una prossima azione a ogni elemento aperto.','Separa chi decide da chi esegue quando il passaggio non è evidente.','Crea un controllo rapido sugli elementi senza owner.'],
+    priority:['Definisci una regola di priorità basata su impatto, scadenza e blocchi generati.','Limita le priorità alte a massimo tre elementi visibili.','Rivedi cosa può aspettare prima di aggiungere nuovo lavoro.'],
+    clarity:['Trasforma il flusso attuale in un template leggero.','Misura quali passaggi tornano ogni settimana.','Usa Filo per rendere replicabile il modo in cui già lavori.']
   };
-  if((input.process||'').includes('giornata'))return ['Porta agenda e sospesi nella stessa vista prima di iniziare.','Scegli una priorita del giorno e proteggi un blocco di focus.','Trasforma le interruzioni ricorrenti in task visibili.'];
+  if((input.process||'').includes('giornata'))return ['Porta agenda e sospesi nella stessa vista prima di iniziare.','Scegli una priorità del giorno e proteggi un blocco di focus.','Trasforma le interruzioni ricorrenti in task visibili.'];
   return actionsByProblem[problemKey]||actionsByProblem.clarity;
 }
 function analyzeQuickCheck(input){
