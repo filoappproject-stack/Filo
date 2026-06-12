@@ -3707,7 +3707,12 @@ function renderQuickCheckPage(){
   if(!resultEl)return;
   const cached=loadQuickCheckCache();
   if(cached?.input)Object.entries(cached.input).forEach(([key,value])=>setQuickCheckValue(`qc-${key}`,value));
-  if(cached?.result)renderQuickCheckResult(cached.result);
+  if(cached?.input){
+    const result=analyzeQuickCheck(cached.input);
+    saveQuickCheckCache({input:cached.input,result});
+    renderQuickCheckResult(result);
+  }
+  else if(cached?.result)renderQuickCheckResult(cached.result);
   else renderQuickCheckEmpty();
 }
 function renderQuickCheckEmpty(){
@@ -3732,7 +3737,7 @@ function renderQuickCheckResult(result){
 function runQuickCheck(){const input=collectQuickCheckInput();const result=analyzeQuickCheck(input);saveQuickCheckCache({input,result});renderQuickCheckResult(result);}
 function fillQuickCheckExample(){setQuickCheckValue('qc-process','richieste clienti');setQuickCheckValue('qc-tools','3');setQuickCheckValue('qc-visibility','chat');setQuickCheckValue('qc-updates','giornaliero');setQuickCheckValue('qc-ownership','parziale');setQuickCheckValue('qc-followup','alto');setQuickCheckValue('qc-notes','Le richieste arrivano in email, alcune finiscono in chat e spesso devo chiedere a che punto siamo o chi deve rispondere al cliente.');}
 function resetQuickCheck(){['qc-process','qc-tools','qc-visibility','qc-updates','qc-ownership','qc-followup','qc-notes'].forEach((id)=>{const el=document.getElementById(id);if(!el)return;if(id==='qc-notes')el.value='';else el.selectedIndex=0;});try{localStorage.removeItem(getQuickCheckCacheKey());}catch(e){}renderQuickCheckEmpty();}
-function getCurrentQuickCheckResult(){const cached=loadQuickCheckCache();return cached?.result||analyzeQuickCheck(collectQuickCheckInput());}
+function getCurrentQuickCheckResult(){const cached=loadQuickCheckCache();return cached?.input?analyzeQuickCheck(cached.input):(cached?.result||analyzeQuickCheck(collectQuickCheckInput()));}
 function createQuickCheckTasks(){
   const result=getCurrentQuickCheckResult();
   const created=result.actions.slice(0,3).map((action,idx)=>({id:nextTaskId++,label:action,done:false,status:'todo',priorita:idx===0?'alta':'normale',scadenza:idx===0?'Oggi':'Questa settimana',dueDateIso:null,reminderAt:null,recurrence:'none',energyCost:3,stressImpact:idx===0?2:3}));
