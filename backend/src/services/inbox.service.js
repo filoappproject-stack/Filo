@@ -985,17 +985,6 @@ export async function connectImapInboxAndSync({ userId, email, username, passwor
     throw new HttpError(500, 'Salvataggio configurazione mailbox non riuscito');
   }
 
-  let importedCount;
-  try {
-    importedCount = await syncImapInboxMessages({
-      ...account,
-      access_token: encryptSecret(password),
-      provider_config: config
-    });
-  } catch (error) {
-    throw toImapHttpError(error, config);
-  }
-
   return {
     account: {
       id: account.id,
@@ -1004,8 +993,8 @@ export async function connectImapInboxAndSync({ userId, email, username, passwor
       last_synced_at: account.last_synced_at
     },
     sync: {
-      importedCount,
-      window: 'latest_100'
+      importedCount: 0,
+      window: 'not_synced'
     }
   };
 }
