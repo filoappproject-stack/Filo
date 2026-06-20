@@ -2367,14 +2367,19 @@ function updateBadges(){
   const calendarBadge=document.getElementById('nb-calendar');
   if(calendarBadge){calendarBadge.textContent=calendarCount;calendarBadge.style.display='';}
   const inboxBadge=document.getElementById('nb-inbox');
-  if(inboxBadge){inboxBadge.textContent=inboxCount;inboxBadge.dataset.unread=String(unread);}
+  if(inboxBadge){
+    inboxBadge.textContent=unread;
+    inboxBadge.dataset.loaded=String(inboxCount);
+    inboxBadge.title=`${unread} email non lette`;
+    inboxBadge.setAttribute('aria-label',`${unread} email non lette`);
+  }
   document.getElementById('stat-inbox').textContent=unread;
   document.getElementById('stat-tasks').textContent=open;
   const dueToday=document.getElementById('stat-tasks-due-today');
   if(dueToday)dueToday.textContent=dueTodayLabel(tasks.filter(isTaskDueToday).length);
   updateInboxSubtitle();
 }
-function updateInboxSubtitle(){const inboxCount=mailboxConnected?INBOX.length:0;const unread=mailboxConnected?INBOX.filter(i=>i.unread).length:0;PAGE_META.inbox[1]=mailboxConnected?`${inboxCount} messaggi · ${unread} non letti`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
+function updateInboxSubtitle(){const inboxCount=mailboxConnected?INBOX.length:0;const unread=mailboxConnected?INBOX.filter(i=>i.unread).length:0;PAGE_META.inbox[1]=mailboxConnected?`${unread} email non lette · ${inboxCount} messaggi caricati`:'Mailbox non collegata';const sub=document.getElementById('page-sub');if(sub&&document.getElementById('page-inbox').classList.contains('active'))sub.textContent=PAGE_META.inbox[1];}
 function updateTaskSubtitle(){const todo=tasks.filter(t=>getTaskStatus(t)==='todo').length;const progress=tasks.filter(t=>getTaskStatus(t)==='in_progress').length;const done=tasks.filter(t=>getTaskStatus(t)==='done').length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${todo+progress} aperti · ${progress} in corso · ${done} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError(mailboxConnectionError);mailboxSyncInProgress=false;renderInboxControls();}}
