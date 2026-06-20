@@ -1586,7 +1586,7 @@ function collectOtherMailboxConfig(){
 
 async function requestOtherMailboxConnect(config){
   const payload={userId:currentUser.id,...config};
-  const res=await fetchApi('/api/v1/inbox/imap/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const res=await fetchApi('/api/v1/inbox/imap/connect',{singleAttempt:true,timeoutMs:25000,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   if(!res.ok){
     const detail=await readApiErrorMessage(res,'/api/v1/inbox/imap/connect');
     throw new Error(detail);
@@ -1641,22 +1641,24 @@ async function readApiErrorMessage(res,url){
 }
 
 async function fetchApi(path,options={}){
-  const { singleAttempt=false, disableAuthRetry=false, ...fetchOptions } = options||{};
+  const { singleAttempt=false, disableAuthRetry=false, timeoutMs=0, ...fetchOptions } = options||{};
   let lastError=null;
   const authHeaders=await buildApiAuthHeaders(fetchOptions.headers||{});
   let requestOptions={...fetchOptions,headers:authHeaders};
   const bases=singleAttempt?[API_BASES[0]].filter(Boolean):API_BASES;
   for(const base of bases){
+    const controller=timeoutMs>0?new AbortController():null;
+    const timeoutId=controller?setTimeout(()=>controller.abort(),timeoutMs):null;
     try{
       const url=base.replace(/\/$/,'')+path;
-      let res=await fetch(url,requestOptions);
+      let res=await fetch(url,controller?{...requestOptions,signal:controller.signal}:requestOptions);
       if(res.status===401&&!disableAuthRetry){
         const retryHeaders=await buildApiAuthHeaders(fetchOptions.headers||{});
         const oldAuth=(requestOptions.headers&&requestOptions.headers.Authorization)||'';
         const newAuth=retryHeaders.Authorization||'';
         if(newAuth&&newAuth!==oldAuth){
           requestOptions={...fetchOptions,headers:retryHeaders};
-          res=await fetch(url,requestOptions);
+          res=await fetch(url,controller?{...requestOptions,signal:controller.signal}:requestOptions);
         }
       }
       if(res.ok){
@@ -1675,7 +1677,8 @@ async function fetchApi(path,options={}){
       if(res.status<500)return res;
       const detail=await readApiErrorMessage(res,url);
       lastError=new Error(`HTTP ${res.status} su ${url}: ${detail}`);
-    }catch(err){lastError=err;}
+    }catch(err){lastError=err?.name==='AbortError'?new Error(`Timeout chiamata API dopo ${Math.round(timeoutMs/1000)}s`):err;}
+    finally{if(timeoutId)clearTimeout(timeoutId);}
   }
   throw lastError||new Error('API non raggiungibile');
 }
@@ -2309,7 +2312,7 @@ function updateInboxSubtitle(){const inboxCount=mailboxConnected?INBOX.length:0;
 function updateTaskSubtitle(){const todo=tasks.filter(t=>getTaskStatus(t)==='todo').length;const progress=tasks.filter(t=>getTaskStatus(t)==='in_progress').length;const done=tasks.filter(t=>getTaskStatus(t)==='done').length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${todo+progress} aperti · ${progress} in corso · ${done} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError(mailboxConnectionError);mailboxSyncInProgress=false;renderInboxControls();}}
-async function connectOtherMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;const config=collectOtherMailboxConfig();if(!config)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const payload=await requestOtherMailboxConnect(config);const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt,'imap_smtp');await loadInboxMessages();showSuccess('Mailbox collegata e sincronizzata.');}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento altra mailbox:',reason,err);mailboxConnectionError=`Connessione altra email non riuscita: ${reason}`;showError(mailboxConnectionError);}finally{mailboxSyncInProgress=false;renderAll();}}
+async function connectOtherMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;const config=collectOtherMailboxConfig();if(!config)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{await requestOtherMailboxConnect(config);setInboxConnectionState(true,null,'imap_smtp');clearInboxMessages();showSuccess('Mailbox collegata. Premi "Sincronizza" per importare i messaggi.');}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento altra mailbox:',reason,err);mailboxConnectionError=`Connessione altra email non riuscita: ${reason}`;showError(mailboxConnectionError);}finally{mailboxSyncInProgress=false;renderAll();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const endpoint=mailboxProvider==='imap_smtp'?'/api/v1/inbox/imap/sync':'/api/v1/inbox/google/sync';const res=await fetchApi(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST ${endpoint} fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt,mailboxProvider||'google');await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){if(isMailboxAuthExpiredError(err)){markMailboxReconnectRequired();}else{mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}}finally{mailboxSyncInProgress=false;renderAll();}}
 async function connectCalendar(){
   if(!currentUser?.id||calendarSyncInProgress)return;
