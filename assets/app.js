@@ -1586,8 +1586,8 @@ async function requestOtherMailboxConnect(config){
   const payload={userId:currentUser.id,...config};
   const res=await fetchApi('/api/v1/inbox/imap/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   if(!res.ok){
-    const txt=await res.text().catch(()=> '');
-    throw new Error(`POST /inbox/imap/connect fallita (${res.status}): ${txt}`);
+    const detail=await readApiErrorMessage(res,'/api/v1/inbox/imap/connect');
+    throw new Error(detail);
   }
   return res.json();
 }
@@ -1627,6 +1627,17 @@ async function requestCalendarConnectUrl(userId,state){
 }
 
 
+async function readApiErrorMessage(res,url){
+  const txt=await res.text().catch(()=> '');
+  if(!txt)return `HTTP ${res.status} su ${url}`;
+  try{
+    const parsed=JSON.parse(txt);
+    return parsed?.message||parsed?.error||txt;
+  }catch(e){
+    return txt;
+  }
+}
+
 async function fetchApi(path,options={}){
   const { singleAttempt=false, disableAuthRetry=false, ...fetchOptions } = options||{};
   let lastError=null;
@@ -1655,11 +1666,13 @@ async function fetchApi(path,options={}){
         return res;
       }
       if(res.status===404||res.status===405){
-        lastError=new Error(`HTTP ${res.status} su ${url}`);
+        const detail=await readApiErrorMessage(res,url);
+        lastError=new Error(`HTTP ${res.status} su ${url}: ${detail}`);
         continue;
       }
       if(res.status<500)return res;
-      lastError=new Error(`HTTP ${res.status} su ${url}`);
+      const detail=await readApiErrorMessage(res,url);
+      lastError=new Error(`HTTP ${res.status} su ${url}: ${detail}`);
     }catch(err){lastError=err;}
   }
   throw lastError||new Error('API non raggiungibile');
@@ -1872,7 +1885,7 @@ function renderMemoryPage(){
 }
 
 // ── NAVIGAZIONE ───────────────────────────────────────────────────────────────
-const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox email","0 messaggi · 0 non letti · Slack previsto"],task:["Task",""],note:["Note",""],quickcheck:["Filo Quick Check","Diagnosi del tuo flusso operativo"],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
+const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox email","0 messaggi · 0 non letti"],task:["Task",""],note:["Note",""],quickcheck:["Filo Quick Check","Diagnosi del tuo flusso operativo"],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
 const HELP_CONTENT={
   suggerimenti:{title:"Prossime azioni",intro:"Qui Filo trasforma agenda, sospesi, energia e vincoli in poche azioni ordinate. È il punto da cui partire quando non sai cosa fare per primo.",steps:["Compila agenda, sospesi, disponibilità e focus del giorno.","Premi Analizza la mia giornata.","Trasforma le azioni utili in task o avvia un focus sprint."],tip:"Più contesto dai, più Filo riesce a distinguere urgenze vere, lavoro profondo e attività rimandabili."},
   calendario:{title:"Calendario",intro:"Qui convivono gli eventi Google Calendar e i blocchi Filo. Gli eventi sono impegni reali; i blocchi Filo sono una struttura consigliata per usare meglio il tempo libero.",steps:["Collega Google Calendar per vedere gli eventi reali.","Scegli un template se vuoi dare un ritmo alla giornata o alla settimana.","Premi Applica blocchi per vedere il piano e Crea task per trasformarlo in azioni."],tip:"I template non modificano Google Calendar: servono a orientare la giornata e possono convivere con gli eventi importati."},

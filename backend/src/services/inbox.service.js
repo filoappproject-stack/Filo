@@ -10,6 +10,9 @@ const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1';
 const INBOX_PROVIDER_GOOGLE = 'google';
 const INBOX_PROVIDER_IMAP = 'imap_smtp';
 const IMAP_SCOPE = 'imap:read smtp:send';
+const IMAP_CONNECTION_TIMEOUT_MS = 12_000;
+const IMAP_GREETING_TIMEOUT_MS = 8_000;
+const IMAP_SOCKET_TIMEOUT_MS = 20_000;
 let inboxSchemaReady = false;
 
 function requireGoogleOauthEnv() {
@@ -352,6 +355,9 @@ function buildImapClientConfig(config, password) {
     host: config.imapHost,
     port: config.imapPort,
     secure: config.imapSecure,
+    connectionTimeout: IMAP_CONNECTION_TIMEOUT_MS,
+    greetingTimeout: IMAP_GREETING_TIMEOUT_MS,
+    socketTimeout: IMAP_SOCKET_TIMEOUT_MS,
     auth: {
       user: config.username || config.email,
       pass: password
@@ -402,6 +408,46 @@ async function verifyImapAccount(config, password) {
   } finally {
     await client.logout().catch(() => {});
   }
+}
+
+function toImapHttpError(error, config) {
+  if (error instanceof HttpError) {
+    return error;
+  }
+
+  const code = String(error?.code ?? '').toUpperCase();
+  const message = String(error?.message ?? '').toLowerCase();
+
+  if (error?.authenticationFailed || message.includes('authentication') || message.includes('invalid credentials')) {
+    return new HttpError(
+      401,
+      'Credenziali IMAP non valide. Per Libero usa come username l’indirizzo email completo e verifica che la password sia quella della casella o una password per app.'
+    );
+  }
+
+  if (
+    code.includes('TIMEOUT') ||
+    code === 'ETIMEDOUT' ||
+    message.includes('timeout') ||
+    code === 'ECONNREFUSED' ||
+    code === 'ECONNRESET' ||
+    code === 'EHOSTUNREACH' ||
+    code === 'ENOTFOUND'
+  ) {
+    return new HttpError(
+      503,
+      `Non riesco a raggiungere il server IMAP ${config.imapHost}:${config.imapPort}. Controlla host, porta, SSL/TLS o riprova più tardi.`
+    );
+  }
+
+  if (message.includes('certificate') || code.includes('CERT')) {
+    return new HttpError(
+      400,
+      `Certificato TLS non valido per ${config.imapHost}. Verifica di aver inserito il server IMAP corretto e SSL/TLS attivo.`
+    );
+  }
+
+  return new HttpError(400, `Connessione IMAP non riuscita: ${error?.message ?? 'errore sconosciuto'}`);
 }
 
 async function upsertImapAccount({ userId, config, password }) {
@@ -919,15 +965,33 @@ export async function connectImapInboxAndSync({ userId, email, username, passwor
     smtpSecure
   });
 
-  await verifyImapAccount(config, password);
+  try {
+    await verifyImapAccount(config, password);
+  } catch (error) {
+    throw toImapHttpError(error, config);
+  }
   await ensureUserExists(userId, resolveInternalUserEmail(userId));
 
-  const account = await upsertImapAccount({ userId, config, password });
-  const importedCount = await syncImapInboxMessages({
-    ...account,
-    access_token: encryptSecret(password),
-    provider_config: config
-  });
+  let account;
+  try {
+    account = await upsertImapAccount({ userId, config, password });
+  } catch (error) {
+    if (error instanceof HttpError) {
+      throw error;
+    }
+    throw new HttpError(500, 'Salvataggio configurazione mailbox non riuscito');
+  }
+
+  let importedCount;
+  try {
+    importedCount = await syncImapInboxMessages({
+      ...account,
+      access_token: encryptSecret(password),
+      provider_config: config
+    });
+  } catch (error) {
+    throw toImapHttpError(error, config);
+  }
 
   return {
     account: {
@@ -950,7 +1014,12 @@ export async function syncImapInbox(userId) {
     throw new HttpError(404, 'Nessun account email collegato');
   }
 
-  const importedCount = await syncImapInboxMessages(account);
+  let importedCount;
+  try {
+    importedCount = await syncImapInboxMessages(account);
+  } catch (error) {
+    throw toImapHttpError(error, resolveImapAccountConfig(account));
+  }
   const refreshed = await findImapAccountByUserId(userId);
   return {
     importedCount,
