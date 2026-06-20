@@ -606,6 +606,37 @@ Fare backup documenti progetto,,bassa,Task senza scadenza</pre>
   </div>
 </div>
 
+<div class="checkin-overlay" id="other-mailbox-modal" style="display:none;">
+  <div class="checkin-box mailbox-config-box">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px;">
+      <div>
+        <div style="font-size:18px;font-weight:600;margin-bottom:4px;">Collega altra email</div>
+        <div style="font-size:13px;color:var(--color-muted);">Inserisci i parametri IMAP/SMTP della tua casella.</div>
+      </div>
+      <button class="btn-ghost" type="button" onclick="cancelOtherMailboxConfig()">Chiudi</button>
+    </div>
+    <div class="mailbox-config-grid">
+      <label class="mailbox-field">Email<input id="other-mailbox-email" class="login-input" type="email" placeholder="nome@libero.it"></label>
+      <label class="mailbox-field">Username<input id="other-mailbox-username" class="login-input" type="text" placeholder="indirizzo email completo"></label>
+      <label class="mailbox-field mailbox-field-full">Password
+        <span class="password-toggle-wrap">
+          <input id="other-mailbox-password" class="login-input" type="password" autocomplete="new-password" spellcheck="false" placeholder="Password casella">
+          <button id="other-mailbox-toggle-password" class="password-eye-btn" type="button" onclick="toggleOtherMailboxPassword()" aria-label="Mostra password">👁</button>
+        </span>
+      </label>
+      <label class="mailbox-field">Server IMAP<input id="other-mailbox-imap-host" class="login-input" type="text" placeholder="imapmail.libero.it"></label>
+      <label class="mailbox-field">Porta IMAP<input id="other-mailbox-imap-port" class="login-input" type="number" min="1" max="65535" value="993"></label>
+      <label class="mailbox-field">Server SMTP<input id="other-mailbox-smtp-host" class="login-input" type="text" placeholder="smtp.libero.it"></label>
+      <label class="mailbox-field">Porta SMTP<input id="other-mailbox-smtp-port" class="login-input" type="number" min="1" max="65535" value="465"></label>
+    </div>
+    <div id="other-mailbox-config-error" class="mailbox-config-error"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;">
+      <button class="btn-ghost" type="button" onclick="cancelOtherMailboxConfig()">Annulla</button>
+      <button class="btn-primary" type="button" onclick="submitOtherMailboxConfig()">Collega</button>
+    </div>
+  </div>
+</div>
+
 <div class="checkin-overlay" id="calendar-event-modal" style="display:none;">
   <div class="checkin-box" style="max-width:700px;width:min(700px,92vw);padding:24px 24px;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
