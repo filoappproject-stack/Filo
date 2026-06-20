@@ -2,9 +2,12 @@ import { z } from 'zod';
 import { HttpError } from '../utils/httpError.js';
 import {
   buildGoogleAuthUrl,
+  connectImapInboxAndSync,
   exchangeGoogleCodeAndSync,
+  getInboxStatus,
   getGoogleInboxStatus,
   listInboxMessages,
+  syncImapInbox,
   syncGoogleInbox
 } from '../services/inbox.service.js';
 
@@ -27,6 +30,20 @@ const MessagesQuerySchema = z.object({
 });
 const SyncSchema = z.object({
   userId: z.string().uuid()
+});
+
+const ImapConnectSchema = z.object({
+  userId: z.string().uuid(),
+  email: z.string().email(),
+  username: z.string().min(1).max(320).optional(),
+  password: z.string().min(1).max(500),
+  imapHost: z.string().min(3).max(255),
+  imapPort: z.coerce.number().int().min(1).max(65535).default(993),
+  imapSecure: z.boolean().default(true),
+  imapMailbox: z.string().min(1).max(120).default('INBOX'),
+  smtpHost: z.string().min(3).max(255),
+  smtpPort: z.coerce.number().int().min(1).max(65535).default(465),
+  smtpSecure: z.boolean().default(true)
 });
 
 function getAuthenticatedEmail(req) {
@@ -95,13 +112,48 @@ export async function getGoogleInboxConnectionStatus(req, res) {
   res.json({ data: status });
 }
 
+export async function getInboxConnectionStatus(req, res) {
+  const parsed = z
+    .object({
+      userId: z.string().uuid()
+    })
+    .safeParse(req.query);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Query stato inbox non valida');
+  }
+
+  const status = await getInboxStatus(parsed.data.userId, getAuthenticatedEmail(req));
+  res.set('Cache-Control', 'no-store');
+  res.json({ data: status });
+}
+
+export async function postImapConnect(req, res) {
+  const parsed = ImapConnectSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Payload account email non valido');
+  }
+
+  const result = await connectImapInboxAndSync(parsed.data);
+  res.status(201).json({ data: result });
+}
+
+export async function postImapSync(req, res) {
+  const parsed = SyncSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Payload sync inbox non valido');
+  }
+
+  const result = await syncImapInbox(parsed.data.userId);
+  res.json({ data: result });
+}
+
 export async function postInboxSync(req, res) {
   const parsed = SyncSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(400, 'Payload sync inbox non valido');
   }
 
-  const result = await syncInboxForUser(parsed.data.userId);
+  const result = await syncImapInbox(parsed.data.userId);
   res.set('Cache-Control', 'no-store');
   res.json({ data: result });
 }

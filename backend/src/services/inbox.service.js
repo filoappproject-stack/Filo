@@ -1,11 +1,15 @@
 import { env } from '../config/env.js';
 import { query } from '../config/db.js';
 import { HttpError } from '../utils/httpError.js';
+import crypto from 'node:crypto';
 
 const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 const GOOGLE_AUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1';
+const INBOX_PROVIDER_GOOGLE = 'google';
+const INBOX_PROVIDER_IMAP = 'imap_smtp';
+const IMAP_SCOPE = 'imap:read smtp:send';
 let inboxSchemaReady = false;
 
 function requireGoogleOauthEnv() {
@@ -186,18 +190,25 @@ async function ensureInboxSchema() {
     CREATE TABLE IF NOT EXISTS inbox_accounts (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      provider TEXT NOT NULL CHECK (provider IN ('google')),
+      provider TEXT NOT NULL CHECK (provider IN ('google', 'imap_smtp')),
       provider_email TEXT NOT NULL,
       access_token TEXT NOT NULL,
       refresh_token TEXT,
       token_expires_at TIMESTAMPTZ,
       scope TEXT NOT NULL,
+      provider_config JSONB NOT NULL DEFAULT '{}'::jsonb,
       last_synced_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (user_id, provider)
     )
   `);
+
+  await query("ALTER TABLE inbox_accounts ADD COLUMN IF NOT EXISTS provider_config JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await query('ALTER TABLE inbox_accounts DROP CONSTRAINT IF EXISTS inbox_accounts_provider_check');
+  await query(
+    "ALTER TABLE inbox_accounts ADD CONSTRAINT inbox_accounts_provider_check CHECK (provider IN ('google', 'imap_smtp'))"
+  );
 
   await query(`
     CREATE TABLE IF NOT EXISTS inbox_messages (
@@ -276,6 +287,278 @@ function resolveInternalUserEmail(userId) {
 
 function normalizeEmail(email) {
   return typeof email === 'string' ? email.trim().toLowerCase() : '';
+}
+
+function normalizeHost(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function normalizeMailbox(value) {
+  const mailbox = typeof value === 'string' ? value.trim() : '';
+  return mailbox || 'INBOX';
+}
+
+function getCredentialsKey() {
+  const secret = env.INBOX_CREDENTIALS_SECRET;
+  if (!secret || secret.length < 16) {
+    throw new HttpError(500, 'Config cifratura mailbox mancante');
+  }
+
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
+function encryptSecret(value) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', getCredentialsKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
+  return JSON.stringify({
+    v: 1,
+    alg: 'aes-256-gcm',
+    iv: iv.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'),
+    data: encrypted.toString('base64')
+  });
+}
+
+function decryptSecret(payload) {
+  const parsed = JSON.parse(payload);
+  if (parsed?.v !== 1 || parsed?.alg !== 'aes-256-gcm') {
+    throw new HttpError(500, 'Formato credenziali mailbox non supportato');
+  }
+
+  const decipher = crypto.createDecipheriv(
+    'aes-256-gcm',
+    getCredentialsKey(),
+    Buffer.from(parsed.iv, 'base64')
+  );
+  decipher.setAuthTag(Buffer.from(parsed.tag, 'base64'));
+  return Buffer.concat([
+    decipher.update(Buffer.from(parsed.data, 'base64')),
+    decipher.final()
+  ]).toString('utf8');
+}
+
+async function loadImapFlow() {
+  try {
+    const module = await import('imapflow');
+    return module.ImapFlow;
+  } catch (error) {
+    throw new HttpError(500, 'Dipendenza IMAP non installata sul backend');
+  }
+}
+
+function buildImapClientConfig(config, password) {
+  return {
+    host: config.imapHost,
+    port: config.imapPort,
+    secure: config.imapSecure,
+    auth: {
+      user: config.username || config.email,
+      pass: password
+    }
+  };
+}
+
+function normalizeImapAccountInput(input) {
+  const email = normalizeEmail(input.email);
+  const imapHost = normalizeHost(input.imapHost);
+  const smtpHost = normalizeHost(input.smtpHost);
+  const username = typeof input.username === 'string' ? input.username.trim() : email;
+
+  if (!email || !imapHost || !smtpHost || !input.password) {
+    throw new HttpError(400, 'Configurazione email non valida');
+  }
+
+  return {
+    email,
+    username,
+    imapHost,
+    imapPort: Number(input.imapPort || 993),
+    imapSecure: input.imapSecure !== false,
+    imapMailbox: normalizeMailbox(input.imapMailbox),
+    smtpHost,
+    smtpPort: Number(input.smtpPort || 465),
+    smtpSecure: input.smtpSecure !== false
+  };
+}
+
+function stripMessageSource(source) {
+  const text = Buffer.isBuffer(source) ? source.toString('utf8') : String(source ?? '');
+  return text
+    .replace(/\r?\n/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 500);
+}
+
+async function verifyImapAccount(config, password) {
+  const ImapFlow = await loadImapFlow();
+  const client = new ImapFlow(buildImapClientConfig(config, password));
+  try {
+    await client.connect();
+    const lock = await client.getMailboxLock(config.imapMailbox);
+    lock.release();
+  } finally {
+    await client.logout().catch(() => {});
+  }
+}
+
+async function upsertImapAccount({ userId, config, password }) {
+  const encryptedPassword = encryptSecret(password);
+  const sql = `
+    INSERT INTO inbox_accounts (
+      user_id,
+      provider,
+      provider_email,
+      access_token,
+      refresh_token,
+      token_expires_at,
+      scope,
+      provider_config,
+      last_synced_at
+    )
+    VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6::jsonb, NULL)
+    ON CONFLICT (user_id, provider)
+    DO UPDATE SET
+      provider_email = EXCLUDED.provider_email,
+      access_token = EXCLUDED.access_token,
+      refresh_token = NULL,
+      token_expires_at = NULL,
+      scope = EXCLUDED.scope,
+      provider_config = EXCLUDED.provider_config,
+      updated_at = NOW()
+    RETURNING id, user_id, provider, provider_email, provider_config, last_synced_at
+  `;
+
+  const { rows } = await query(sql, [
+    userId,
+    INBOX_PROVIDER_IMAP,
+    config.email,
+    encryptedPassword,
+    IMAP_SCOPE,
+    JSON.stringify(config)
+  ]);
+
+  return rows[0];
+}
+
+async function findImapAccountByUserId(userId) {
+  const { rows } = await query(
+    `
+      SELECT id, user_id, provider, provider_email, access_token, provider_config, last_synced_at
+      FROM inbox_accounts
+      WHERE user_id = $1 AND provider = $2
+      LIMIT 1
+    `,
+    [userId, INBOX_PROVIDER_IMAP]
+  );
+  return rows[0] ?? null;
+}
+
+function resolveImapAccountConfig(account) {
+  const config =
+    typeof account.provider_config === 'string'
+      ? JSON.parse(account.provider_config)
+      : account.provider_config;
+  return normalizeImapAccountInput({
+    ...config,
+    password: 'placeholder'
+  });
+}
+
+async function syncImapInboxMessages(account) {
+  const config = resolveImapAccountConfig(account);
+  const password = decryptSecret(account.access_token);
+  const ImapFlow = await loadImapFlow();
+  const client = new ImapFlow(buildImapClientConfig(config, password));
+  const syncedInboxIds = [];
+
+  try {
+    await client.connect();
+    const lock = await client.getMailboxLock(config.imapMailbox);
+    try {
+      const exists = Number(client.mailbox?.exists || 0);
+      if (exists > 0) {
+        const fromSeq = Math.max(1, exists - 99);
+        for await (const message of client.fetch(`${fromSeq}:*`, {
+          uid: true,
+          envelope: true,
+          flags: true,
+          source: true
+        })) {
+          const providerMessageId = `${config.imapMailbox}:${message.uid}`;
+          const labels = ['INBOX'];
+          const flags = Array.from(message.flags ?? []).map(String);
+          if (!flags.includes('\\Seen')) labels.push('UNREAD');
+          const from = message.envelope?.from?.[0];
+          const sender = from
+            ? [from.name, from.address ? `<${from.address}>` : ''].filter(Boolean).join(' ')
+            : null;
+          const receivedAt =
+            message.envelope?.date && !Number.isNaN(new Date(message.envelope.date).getTime())
+              ? new Date(message.envelope.date).toISOString()
+              : null;
+
+          await query(
+            `
+              INSERT INTO inbox_messages (
+                account_id,
+                user_id,
+                provider_message_id,
+                provider_thread_id,
+                snippet,
+                subject,
+                sender,
+                received_at,
+                labels
+              )
+              VALUES ($1, $2, $3, NULL, $4, $5, $6, $7::timestamptz, $8::text[])
+              ON CONFLICT (account_id, provider_message_id)
+              DO UPDATE SET
+                snippet = EXCLUDED.snippet,
+                subject = EXCLUDED.subject,
+                sender = EXCLUDED.sender,
+                received_at = EXCLUDED.received_at,
+                labels = EXCLUDED.labels,
+                updated_at = NOW()
+            `,
+            [
+              account.id,
+              account.user_id,
+              providerMessageId,
+              stripMessageSource(message.source),
+              message.envelope?.subject ?? null,
+              sender,
+              receivedAt,
+              labels
+            ]
+          );
+          syncedInboxIds.push(providerMessageId);
+        }
+      }
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout().catch(() => {});
+  }
+
+  if (syncedInboxIds.length === 0) {
+    await query('DELETE FROM inbox_messages WHERE account_id = $1', [account.id]);
+  } else {
+    await query(
+      `
+        DELETE FROM inbox_messages
+        WHERE account_id = $1
+          AND provider_message_id != ALL($2::text[])
+      `,
+      [account.id, syncedInboxIds]
+    );
+  }
+
+  await markLastSynced(account.id);
+  return syncedInboxIds.length;
 }
 
 function isProviderEmailAllowedForUser(providerEmail, authEmail) {
@@ -605,18 +888,107 @@ export async function listInboxMessages(userId, limit, authEmail) {
       m.snippet,
       m.received_at,
       m.labels,
-      m.created_at
+      m.created_at,
+      a.provider
     FROM inbox_messages m
     JOIN inbox_accounts a ON a.id = m.account_id
     WHERE m.user_id = $1
-      AND LOWER(a.provider_email) = LOWER($3)
+      AND (a.provider = $4 OR LOWER(a.provider_email) = LOWER($3))
       AND 'INBOX' = ANY(m.labels)
     ORDER BY m.received_at DESC NULLS LAST, m.created_at DESC
     LIMIT $2
   `;
 
-  const { rows } = await query(sql, [userId, limit, authEmail]);
+  const { rows } = await query(sql, [userId, limit, authEmail, INBOX_PROVIDER_IMAP]);
   return rows;
+}
+
+export async function connectImapInboxAndSync({ userId, email, username, password, imapHost, imapPort, imapSecure, imapMailbox, smtpHost, smtpPort, smtpSecure }) {
+  await ensureInboxSchema();
+
+  const config = normalizeImapAccountInput({
+    email,
+    username,
+    password,
+    imapHost,
+    imapPort,
+    imapSecure,
+    imapMailbox,
+    smtpHost,
+    smtpPort,
+    smtpSecure
+  });
+
+  await verifyImapAccount(config, password);
+  await ensureUserExists(userId, resolveInternalUserEmail(userId));
+
+  const account = await upsertImapAccount({ userId, config, password });
+  const importedCount = await syncImapInboxMessages({
+    ...account,
+    access_token: encryptSecret(password),
+    provider_config: config
+  });
+
+  return {
+    account: {
+      id: account.id,
+      provider: account.provider,
+      provider_email: account.provider_email,
+      last_synced_at: account.last_synced_at
+    },
+    sync: {
+      importedCount,
+      window: 'latest_100'
+    }
+  };
+}
+
+export async function syncImapInbox(userId) {
+  await ensureInboxSchema();
+  const account = await findImapAccountByUserId(userId);
+  if (!account) {
+    throw new HttpError(404, 'Nessun account email collegato');
+  }
+
+  const importedCount = await syncImapInboxMessages(account);
+  const refreshed = await findImapAccountByUserId(userId);
+  return {
+    importedCount,
+    account: {
+      id: refreshed?.id ?? account.id,
+      provider_email: refreshed?.provider_email ?? account.provider_email,
+      last_synced_at: refreshed?.last_synced_at ?? new Date().toISOString()
+    }
+  };
+}
+
+export async function getInboxStatus(userId, authEmail) {
+  await ensureInboxSchema();
+
+  const googleStatus = await getGoogleInboxStatus(userId, authEmail);
+  if (googleStatus.connected) {
+    return {
+      ...googleStatus,
+      provider: INBOX_PROVIDER_GOOGLE
+    };
+  }
+
+  const imapAccount = await findImapAccountByUserId(userId);
+  if (!imapAccount) {
+    return {
+      connected: false,
+      provider: null,
+      provider_email: null,
+      last_synced_at: null
+    };
+  }
+
+  return {
+    connected: true,
+    provider: INBOX_PROVIDER_IMAP,
+    provider_email: imapAccount.provider_email,
+    last_synced_at: imapAccount.last_synced_at
+  };
 }
 
 export async function syncGoogleInbox(userId, authEmail) {
