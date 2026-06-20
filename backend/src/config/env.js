@@ -16,6 +16,7 @@ const EnvSchema = z.object({
   GOOGLE_LOGIN_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().url().optional(),
   GOOGLE_OAUTH_TEST_USERS: z.string().optional().default(''),
+  INBOX_CREDENTIALS_SECRET: z.string().optional().default(''),
   AI_ENABLED: z.preprocess((value) => {
     if (typeof value === 'string') {
       const normalized = value.trim().toLowerCase();
