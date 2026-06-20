@@ -878,6 +878,7 @@ let mailboxSyncInProgress=false;
 let mailboxBackgroundSyncInProgress=false;
 let mailboxConnectionError='';
 let mailboxOauthJustConnected=false;
+let otherMailboxConfigResolver=null;
 let calendarOauthJustConnected=false;
 let calendarConnected=false;
 let calendarLastSync=null;
@@ -1566,22 +1567,87 @@ async function requestMailboxConnectUrl(userId,state){
   throw new Error(fatalDetail||lastDetail||'Endpoint mailbox connect non raggiungibile');
 }
 
+function getMailboxHostSuggestions(email){
+  const domain=String(email||'').split('@')[1]?.toLowerCase()||'';
+  return{
+    imapHost:domain==='libero.it'?'imapmail.libero.it':(domain?`imap.${domain}`:''),
+    smtpHost:domain==='libero.it'?'smtp.libero.it':(domain?`smtp.${domain}`:'')
+  };
+}
+function setOtherMailboxConfigError(message){
+  const el=document.getElementById('other-mailbox-config-error');
+  if(!el)return;
+  el.textContent=message||'';
+  el.classList.toggle('active',!!message);
+}
+function fillOtherMailboxDefaults(email){
+  const normalized=String(email||'').trim();
+  const username=document.getElementById('other-mailbox-username');
+  const imapHost=document.getElementById('other-mailbox-imap-host');
+  const smtpHost=document.getElementById('other-mailbox-smtp-host');
+  const suggestions=getMailboxHostSuggestions(normalized);
+  if(username&&!username.value.trim())username.value=normalized;
+  if(imapHost&&(!imapHost.value.trim()||imapHost.dataset.autofilled==='1')){imapHost.value=suggestions.imapHost;imapHost.dataset.autofilled='1';}
+  if(smtpHost&&(!smtpHost.value.trim()||smtpHost.dataset.autofilled==='1')){smtpHost.value=suggestions.smtpHost;smtpHost.dataset.autofilled='1';}
+}
 function collectOtherMailboxConfig(){
-  const email=window.prompt('Email da collegare (es. nome@libero.it)',currentUser?.email||'');
-  if(!email)return null;
-  const username=window.prompt('Username IMAP/SMTP',email)||email;
-  const password=window.prompt('Password o password per app')||'';
-  if(!password)return null;
-  const domain=String(email).split('@')[1]?.toLowerCase()||'';
-  const suggestedImapHost=domain==='libero.it'?'imapmail.libero.it':(domain?`imap.${domain}`:'');
-  const suggestedSmtpHost=domain==='libero.it'?'smtp.libero.it':(domain?`smtp.${domain}`:'');
-  const imapHost=window.prompt('Server IMAP',suggestedImapHost)||'';
-  if(!imapHost)return null;
-  const smtpHost=window.prompt('Server SMTP',suggestedSmtpHost)||'';
-  if(!smtpHost)return null;
-  const imapPort=Number(window.prompt('Porta IMAP','993')||993);
-  const smtpPort=Number(window.prompt('Porta SMTP','465')||465);
-  return{email,username,password,imapHost,imapPort,imapSecure:true,imapMailbox:'INBOX',smtpHost,smtpPort,smtpSecure:true};
+  const modal=document.getElementById('other-mailbox-modal');
+  const email=document.getElementById('other-mailbox-email');
+  const username=document.getElementById('other-mailbox-username');
+  const password=document.getElementById('other-mailbox-password');
+  const imapHost=document.getElementById('other-mailbox-imap-host');
+  const imapPort=document.getElementById('other-mailbox-imap-port');
+  const smtpHost=document.getElementById('other-mailbox-smtp-host');
+  const smtpPort=document.getElementById('other-mailbox-smtp-port');
+  if(!modal||!email||!username||!password||!imapHost||!imapPort||!smtpHost||!smtpPort)return Promise.resolve(null);
+  email.value=currentUser?.email||'';
+  username.value=email.value;
+  password.value='';
+  imapPort.value='993';
+  smtpPort.value='465';
+  imapHost.dataset.autofilled='1';
+  smtpHost.dataset.autofilled='1';
+  fillOtherMailboxDefaults(email.value);
+  setOtherMailboxConfigError('');
+  password.type='password';
+  const toggle=document.getElementById('other-mailbox-toggle-password');
+  if(toggle)toggle.setAttribute('aria-label','Mostra password');
+  modal.style.display='flex';
+  setTimeout(()=>email.focus(),0);
+  email.oninput=()=>fillOtherMailboxDefaults(email.value);
+  imapHost.oninput=()=>{imapHost.dataset.autofilled='0';};
+  smtpHost.oninput=()=>{smtpHost.dataset.autofilled='0';};
+  return new Promise((resolve)=>{otherMailboxConfigResolver=resolve;});
+}
+function resolveOtherMailboxConfig(value){
+  const modal=document.getElementById('other-mailbox-modal');
+  if(modal)modal.style.display='none';
+  const resolver=otherMailboxConfigResolver;
+  otherMailboxConfigResolver=null;
+  if(resolver)resolver(value);
+}
+function cancelOtherMailboxConfig(){resolveOtherMailboxConfig(null);}
+function submitOtherMailboxConfig(){
+  const email=document.getElementById('other-mailbox-email')?.value.trim()||'';
+  const username=document.getElementById('other-mailbox-username')?.value.trim()||email;
+  const password=document.getElementById('other-mailbox-password')?.value||'';
+  const imapHost=document.getElementById('other-mailbox-imap-host')?.value.trim()||'';
+  const smtpHost=document.getElementById('other-mailbox-smtp-host')?.value.trim()||'';
+  const imapPort=Number(document.getElementById('other-mailbox-imap-port')?.value||993);
+  const smtpPort=Number(document.getElementById('other-mailbox-smtp-port')?.value||465);
+  if(!email||!username||!password||!imapHost||!smtpHost){
+    setOtherMailboxConfigError('Compila email, username, password e server IMAP/SMTP.');
+    return;
+  }
+  resolveOtherMailboxConfig({email,username,password,imapHost,imapPort,imapSecure:true,imapMailbox:'INBOX',smtpHost,smtpPort,smtpSecure:true});
+}
+function toggleOtherMailboxPassword(){
+  const input=document.getElementById('other-mailbox-password');
+  const btn=document.getElementById('other-mailbox-toggle-password');
+  if(!input)return;
+  const show=input.type==='password';
+  input.type=show?'text':'password';
+  if(btn)btn.setAttribute('aria-label',show?'Nascondi password':'Mostra password');
 }
 
 async function requestOtherMailboxConnect(config){
@@ -2301,7 +2367,7 @@ function updateBadges(){
   const calendarBadge=document.getElementById('nb-calendar');
   if(calendarBadge){calendarBadge.textContent=calendarCount;calendarBadge.style.display='';}
   const inboxBadge=document.getElementById('nb-inbox');
-  if(inboxBadge){inboxBadge.textContent=unread;inboxBadge.dataset.count=String(inboxCount);}
+  if(inboxBadge){inboxBadge.textContent=inboxCount;inboxBadge.dataset.unread=String(unread);}
   document.getElementById('stat-inbox').textContent=unread;
   document.getElementById('stat-tasks').textContent=open;
   const dueToday=document.getElementById('stat-tasks-due-today');
@@ -2312,7 +2378,7 @@ function updateInboxSubtitle(){const inboxCount=mailboxConnected?INBOX.length:0;
 function updateTaskSubtitle(){const todo=tasks.filter(t=>getTaskStatus(t)==='todo').length;const progress=tasks.filter(t=>getTaskStatus(t)==='in_progress').length;const done=tasks.filter(t=>getTaskStatus(t)==='done').length;const el=document.getElementById('page-sub');if(el&&document.getElementById('page-task').classList.contains('active'))el.textContent=`${todo+progress} aperti · ${progress} in corso · ${done} completati`;}
 function updateStatsPage(){document.getElementById('stat-total-tasks').textContent=tasks.length;document.getElementById('stat-total-notes').textContent=notes.length;document.getElementById('stat-checkins').textContent=(mem_get('checkins')||[]).length;}
 async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError(mailboxConnectionError);mailboxSyncInProgress=false;renderInboxControls();}}
-async function connectOtherMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;const config=collectOtherMailboxConfig();if(!config)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{await requestOtherMailboxConnect(config);setInboxConnectionState(true,null,'imap_smtp');clearInboxMessages();showSuccess('Mailbox collegata. Premi "Sincronizza" per importare i messaggi.');}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento altra mailbox:',reason,err);mailboxConnectionError=`Connessione altra email non riuscita: ${reason}`;showError(mailboxConnectionError);}finally{mailboxSyncInProgress=false;renderAll();}}
+async function connectOtherMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;const config=await collectOtherMailboxConfig();if(!config)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{await requestOtherMailboxConnect(config);setInboxConnectionState(true,null,'imap_smtp');clearInboxMessages();showSuccess('Mailbox collegata. Premi "Sincronizza" per importare i messaggi.');}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento altra mailbox:',reason,err);mailboxConnectionError=`Connessione altra email non riuscita: ${reason}`;showError(mailboxConnectionError);}finally{mailboxSyncInProgress=false;renderAll();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const endpoint=mailboxProvider==='imap_smtp'?'/api/v1/inbox/imap/sync':'/api/v1/inbox/google/sync';const res=await fetchApi(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST ${endpoint} fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt,mailboxProvider||'google');await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){if(isMailboxAuthExpiredError(err)){markMailboxReconnectRequired();}else{mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}}finally{mailboxSyncInProgress=false;renderAll();}}
 async function connectCalendar(){
   if(!currentUser?.id||calendarSyncInProgress)return;
