@@ -302,9 +302,12 @@ function normalizeMailbox(value) {
 }
 
 function getCredentialsKey() {
-  const secret = env.INBOX_CREDENTIALS_SECRET;
+  const secret = env.INBOX_CREDENTIALS_SECRET || env.DATABASE_URL;
   if (!secret || secret.length < 16) {
-    throw new HttpError(500, 'Config cifratura mailbox mancante');
+    throw new HttpError(
+      500,
+      'Config cifratura mailbox mancante: imposta INBOX_CREDENTIALS_SECRET oppure DATABASE_URL'
+    );
   }
 
   return crypto.createHash('sha256').update(secret).digest();
