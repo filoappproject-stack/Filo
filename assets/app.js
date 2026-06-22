@@ -1103,17 +1103,21 @@ async function completeSuggestionTitle(title,button=null){
   if(!suggestionTitle)return;
   dismissSuggestionTitle(suggestionTitle);
   await persistSuggestionState(suggestionTitle,'completed');
+  const card=button?.closest?.('.sugg-card');
+  const actionButtons=Array.from(card?.querySelectorAll?.('.sugg-actions button')||[]);
+  const visibleDoneButton=button||actionButtons.find((candidate)=>candidate.dataset.suggestionDoneTitle===suggestionTitle)||actionButtons.find((candidate)=>candidate.dataset.suggestionTaskTitle===suggestionTitle)||null;
+  actionButtons.forEach((candidate)=>{
+    if(candidate!==visibleDoneButton)candidate.style.display='none';
+  });
   if(button){
     button.textContent='✓ Fatto';
     button.disabled=true;
     button.setAttribute('aria-pressed','true');
   }
-  const card=button?.closest?.('.sugg-card');
-  const addButton=card?.querySelector?.('[data-suggestion-task-title]');
-  if(addButton){
-    addButton.textContent='✓ Fatto';
-    addButton.disabled=true;
-    addButton.setAttribute('aria-pressed','true');
+  if(visibleDoneButton&&!button){
+    visibleDoneButton.textContent='✓ Fatto';
+    visibleDoneButton.disabled=true;
+    visibleDoneButton.setAttribute('aria-pressed','true');
   }
 }
 async function completeSuggestionFromButton(title,button=null){
