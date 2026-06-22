@@ -2098,8 +2098,18 @@ function renderTemplates(){
 function selectTemplate(id){
   selectedTemplateId=id;
   const fb=document.getElementById('template-feedback');
-  if(fb)fb.textContent='';
+  if(fb){fb.textContent='';fb.className='template-feedback';}
   renderTemplates();
+}
+function setTemplateFeedback(message,tone='info',actionHtml=''){
+  const fb=document.getElementById('template-feedback');
+  if(!fb)return;
+  fb.className=`template-feedback ${tone}`;
+  fb.innerHTML=`<span>${escapeHtml(message)}</span>${actionHtml}`;
+}
+function openTemplateTasksPage(){
+  const item=Array.from(document.querySelectorAll('.nav-item')).find((el)=>String(el.getAttribute('onclick')||'').includes("showPage('task'"));
+  showPage('task',item||null);
 }
 function applySelectedTemplate(){
   const tpl=getEnergyAwareTemplate();
@@ -2112,8 +2122,11 @@ function applySelectedTemplate(){
     week:tpl.id==='week',
     hl:false
   }));
-  const fb=document.getElementById('template-feedback');
-  if(fb)fb.textContent=todayEnergy&&todayEnergy<=2&&selectedTemplateId!=='light'?'Energia bassa: ho usato la giornata leggera.':`${tpl.name} applicato al calendario.`;
+  const adjusted=todayEnergy&&todayEnergy<=2&&selectedTemplateId!=='light';
+  const message=adjusted
+    ? 'Energia bassa: ho usato la giornata leggera. I blocchi sono una preview locale nel calendario di Filo.'
+    : `${tpl.name} applicato come preview nel calendario di Filo. Google Calendar non e stato modificato.`;
+  setTemplateFeedback(message,'info');
   renderCalendar();
 }
 async function createTemplateTask(label,priority='normale',dueInput='Oggi'){
@@ -2136,13 +2149,23 @@ async function createTasksFromTemplate(){
   const tpl=getEnergyAwareTemplate();
   const existing=new Set(tasks.map(t=>String(t.label||'').trim().toLowerCase()));
   const items=tpl.tasks.filter(label=>!existing.has(label.toLowerCase()));
-  const fb=document.getElementById('template-feedback');
-  if(!items.length){if(fb)fb.textContent='Task gia presenti.';return;}
-  for(const label of items)await createTemplateTask(label,tpl.id==='focus'?'alta':'normale',tpl.id==='week'?'Questa settimana':'Oggi');
-  saveTasksToCache();
-  renderTasks();
-  updateBadges();
-  if(fb)fb.textContent=`${items.length} task creati da ${tpl.name}.`;
+  const btn=document.getElementById('template-create-tasks-btn');
+  const openTasksAction='<button class="btn-ghost template-feedback-action" onclick="openTemplateTasksPage()">Apri Task</button>';
+  if(!items.length){
+    setTemplateFeedback(`Nessun nuovo task creato: i task di ${tpl.name} sono gia nella sezione Task.`,'warn',openTasksAction);
+    return;
+  }
+  if(btn){btn.disabled=true;btn.textContent='Creo task...';}
+  try{
+    for(const label of items)await createTemplateTask(label,tpl.id==='focus'?'alta':'normale',tpl.id==='week'?'Questa settimana':'Oggi');
+    saveTasksToCache();
+    renderTasks();
+    updateBadges();
+    const noun=items.length===1?'task creato':'task creati';
+    setTemplateFeedback(`${items.length} ${noun} da ${tpl.name}. Li trovi nella sezione Task.`,'success',openTasksAction);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Crea task';}
+  }
 }
 function renderCalendar(){
   const el=document.getElementById('cal-events');if(!el)return;
