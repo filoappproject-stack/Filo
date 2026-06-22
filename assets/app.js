@@ -1971,7 +1971,7 @@ function renderMemoryPage(){
 const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox email","0 messaggi · 0 non letti"],task:["Task",""],note:["Note",""],quickcheck:["Filo Quick Check","Diagnosi del tuo flusso operativo"],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
 const HELP_CONTENT={
   suggerimenti:{title:"Prossime azioni",intro:"Qui Filo trasforma agenda, sospesi, energia e vincoli in poche azioni ordinate. È il punto da cui partire quando non sai cosa fare per primo.",steps:["Compila agenda, sospesi, disponibilità e focus del giorno.","Premi Analizza la mia giornata.","Trasforma le azioni utili in task o avvia un focus sprint."],tip:"Più contesto dai, più Filo riesce a distinguere urgenze vere, lavoro profondo e attività rimandabili."},
-  calendario:{title:"Calendario",intro:"Qui convivono gli eventi Google Calendar e i blocchi Filo. Gli eventi sono impegni reali; i blocchi Filo sono una struttura consigliata per usare meglio il tempo libero.",steps:["Collega Google Calendar per vedere gli eventi reali.","Scegli un template se vuoi dare un ritmo alla giornata o alla settimana.","Premi Applica blocchi per vedere il piano e Crea task per trasformarlo in azioni."],tip:"I template non modificano Google Calendar: servono a orientare la giornata e possono convivere con gli eventi importati."},
+  calendario:{title:"Calendario",intro:"Qui convivono gli eventi Google Calendar e i blocchi Filo. Gli eventi sono impegni reali; i blocchi Filo sono una struttura consigliata per usare meglio il tempo libero.",steps:["Collega Google Calendar per vedere gli eventi reali.","Scegli un template se vuoi dare un ritmo alla giornata o alla settimana.","Premi Applica blocchi per vedere il piano e Crea task di partenza per aggiungere le azioni consigliate alla sezione Task."],tip:"I template non modificano Google Calendar: servono a orientare la giornata e possono convivere con gli eventi importati."},
   inbox:{title:"Inbox email",intro:"Qui Filo raccoglie i messaggi collegati alla mailbox. L'obiettivo non è leggere tutto, ma capire quali comunicazioni richiedono una prossima azione.",steps:["Collega la mailbox.","Sincronizza quando vuoi aggiornare i messaggi.","Apri i messaggi rilevanti e trasformali mentalmente in task se richiedono follow-up."],tip:"Slack è previsto, ma per ora Filo mantiene la promessa operativa sulla mailbox collegata."},
   task:{title:"Task",intro:"Qui tieni le cose da fare in forma operativa. Lista e Board mostrano gli stessi task con due modi diversi di leggerli.",steps:["Usa Lista quando vuoi scorrere velocemente le attività.","Usa Board per distinguere Todo, In progress e Done.","Aggiungi promemoria e ricorrenze solo ai task che devono davvero tornare."],tip:"Un task utile dovrebbe iniziare con un verbo: chiamare, preparare, approvare, rivedere, inviare."},
   note:{title:"Note",intro:"Le note servono a catturare contesto, decisioni e materiali che non sono ancora task. Quando una nota implica un'azione, puoi trasformarla in task.",steps:["Crea una nota per riunioni, decisioni o idee.","Aggiungi tag se vuoi ritrovarla più facilmente.","Crea un task dalla nota quando emerge una prossima azione."],tip:"Tieni separate note e task: la nota conserva il contesto, il task dice cosa fare."},
@@ -2125,7 +2125,7 @@ function applySelectedTemplate(){
   const adjusted=todayEnergy&&todayEnergy<=2&&selectedTemplateId!=='light';
   const message=adjusted
     ? 'Energia bassa: ho usato la giornata leggera. I blocchi sono una preview locale nel calendario di Filo.'
-    : `${tpl.name} applicato come preview nel calendario di Filo. Google Calendar non e stato modificato.`;
+    : `${tpl.name} applicato come preview nel calendario di Filo. Google Calendar non è stato modificato.`;
   setTemplateFeedback(message,'info');
   renderCalendar();
 }
@@ -2152,7 +2152,7 @@ async function createTasksFromTemplate(){
   const btn=document.getElementById('template-create-tasks-btn');
   const openTasksAction='<button class="btn-ghost template-feedback-action" onclick="openTemplateTasksPage()">Apri Task</button>';
   if(!items.length){
-    setTemplateFeedback(`Nessun nuovo task creato: i task di ${tpl.name} sono gia nella sezione Task.`,'warn',openTasksAction);
+    setTemplateFeedback(`Nessun nuovo task creato: i ${tpl.tasks.length} task di partenza di ${tpl.name} sono già nella sezione Task. I blocchi orari restano una preview nel calendario.`,'warn',openTasksAction);
     return;
   }
   if(btn){btn.disabled=true;btn.textContent='Creo task...';}
@@ -2162,9 +2162,9 @@ async function createTasksFromTemplate(){
     renderTasks();
     updateBadges();
     const noun=items.length===1?'task creato':'task creati';
-    setTemplateFeedback(`${items.length} ${noun} da ${tpl.name}. Li trovi nella sezione Task.`,'success',openTasksAction);
+    setTemplateFeedback(`${items.length} ${noun} di partenza da ${tpl.name}. I blocchi orari restano una preview nel calendario.`,'success',openTasksAction);
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='Crea task';}
+    if(btn){btn.disabled=false;btn.textContent='Crea task di partenza';}
   }
 }
 function renderCalendar(){
