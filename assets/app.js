@@ -2094,12 +2094,25 @@ function renderTemplates(){
   const el=document.getElementById('template-grid');
   if(!el)return;
   el.innerHTML=DAY_TEMPLATES.map(t=>`<button class="template-card ${t.id===selectedTemplateId?'active':''}" onclick="selectTemplate('${t.id}')"><div class="template-title">${escapeHtml(t.name)}</div><div class="template-sub">${escapeHtml(t.sub)}</div></button>`).join('');
+  updateTemplateTaskActionButton();
 }
 function selectTemplate(id){
   selectedTemplateId=id;
   const fb=document.getElementById('template-feedback');
   if(fb){fb.textContent='';fb.className='template-feedback';}
   renderTemplates();
+}
+function getMissingTemplateTaskLabels(tpl){
+  const existing=new Set(tasks.map(t=>String(t.label||'').trim().toLowerCase()));
+  return tpl.tasks.filter(label=>!existing.has(label.toLowerCase()));
+}
+function updateTemplateTaskActionButton(){
+  const btn=document.getElementById('template-create-tasks-btn');
+  if(!btn)return;
+  const tpl=getEnergyAwareTemplate();
+  const missing=getMissingTemplateTaskLabels(tpl);
+  btn.dataset.mode=missing.length?'create':'open';
+  btn.textContent=missing.length?'Crea task di partenza':'Apri task di partenza';
 }
 function setTemplateFeedback(message,tone='info',actionHtml=''){
   const fb=document.getElementById('template-feedback');
@@ -2147,12 +2160,11 @@ async function createTemplateTask(label,priority='normale',dueInput='Oggi'){
 }
 async function createTasksFromTemplate(){
   const tpl=getEnergyAwareTemplate();
-  const existing=new Set(tasks.map(t=>String(t.label||'').trim().toLowerCase()));
-  const items=tpl.tasks.filter(label=>!existing.has(label.toLowerCase()));
+  const items=getMissingTemplateTaskLabels(tpl);
   const btn=document.getElementById('template-create-tasks-btn');
   const openTasksAction='<button class="btn-ghost template-feedback-action" onclick="openTemplateTasksPage()">Apri Task</button>';
   if(!items.length){
-    setTemplateFeedback(`Nessun nuovo task creato: i ${tpl.tasks.length} task di partenza di ${tpl.name} sono già nella sezione Task. I blocchi orari restano una preview nel calendario.`,'warn',openTasksAction);
+    openTemplateTasksPage();
     return;
   }
   if(btn){btn.disabled=true;btn.textContent='Creo task...';}
@@ -2163,8 +2175,9 @@ async function createTasksFromTemplate(){
     updateBadges();
     const noun=items.length===1?'task creato':'task creati';
     setTemplateFeedback(`${items.length} ${noun} di partenza da ${tpl.name}. I blocchi orari restano una preview nel calendario.`,'success',openTasksAction);
+    updateTemplateTaskActionButton();
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='Crea task di partenza';}
+    if(btn){btn.disabled=false;updateTemplateTaskActionButton();}
   }
 }
 function renderCalendar(){
