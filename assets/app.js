@@ -795,6 +795,7 @@ async function loginSuccess(user) {
   }
   await loadTasksFromApi();
   await loadNotesFromApi();
+  await loadSuggestionStatesFromApi();
   // Evita fetch check-in da API al boot (in deploy degradati generava 500 a freddo).
   // Manteniamo solo recupero profilo/cache locale.
   if(!hasCheckinForDate(formatLocalDate()))hydrateLatestCheckinFromSupabaseProfile();
@@ -966,6 +967,7 @@ const INBOX_CACHE_PREFIX='filo_inbox_cache_';
 const CALENDAR_CACHE_PREFIX='filo_calendar_cache_';
 const SUGGESTIONS_CACHE_PREFIX='filo_suggestions_cache_';
 const SUGGESTION_DISMISSALS_PREFIX='filo_suggestion_dismissals_';
+const SUGGESTION_STATES_PREFIX='filo_suggestion_states_';
 const SUGGESTIONS_CACHE_TTL_MS=72*60*60*1000;
 const POST_OAUTH_PAGE_KEY='filo_after_oauth_page';
 const DAY_ANALYSIS_DRAFT_PREFIX='filo_day_analysis_draft_';
@@ -973,6 +975,7 @@ const FILO_LANDING_URL='https://filo-landing-gules.vercel.app/';
 const SMART_SLOT_ACCEPTED_PREFIX='filo_smart_slot_accepted_';
 const smartSlotState={};
 const smartSlotAccepted={};
+let suggestionStatesByKey={};
 let currentDaySuggestionsForShare=[];
 
 function normalizeApiTask(task){
@@ -990,7 +993,7 @@ function normalizeApiTask(task){
     recurrence:task?.recurrence||'none',
     energyCost:Number(task?.energy_cost??task?.energyCost??3)||3,
     stressImpact:Number(task?.stress_impact??task?.stressImpact??3)||3,
-    suggestionTitle:task?.suggestionTitle||task?.sourceSuggestionTitle||'',
+    suggestionTitle:task?.suggestionTitle||task?.sourceSuggestionTitle||task?.source_suggestion_title||'',
     sourceNoteId:task?.sourceNoteId||task?.source_note_id||''
   };
 }
@@ -1029,6 +1032,72 @@ function setTaskViewMode(mode){taskViewMode=mode==='board'?'board':'list';render
 function taskStatusLabel(status){return {todo:'Da fare',in_progress:'In corso',done:'Completati'}[status]||'Da fare';}
 
 function normalizeSuggestionTaskTitle(title){return String(title||'').trim().replace(/\s+/g,' ').toLowerCase();}
+function getSuggestionStateKey(title){return normalizeSuggestionTaskTitle(title).slice(0,220);}
+function getSuggestionState(title){const key=getSuggestionStateKey(title);return key?suggestionStatesByKey[key]||null:null;}
+function setSuggestionStateLocal(title,status){
+  const key=getSuggestionStateKey(title);
+  const suggestionTitle=String(title||'').trim();
+  if(!key||!suggestionTitle)return null;
+  const state={suggestionKey:key,suggestionTitle,status,updatedAt:new Date().toISOString()};
+  suggestionStatesByKey={...suggestionStatesByKey,[key]:state};
+  saveSuggestionStatesToCache();
+  return state;
+}
+async function loadSuggestionStatesFromApi(){
+  suggestionStatesByKey=loadSuggestionStatesFromCache();
+  if(!currentUser?.id)return;
+  try{
+    const dayKey=getCurrentLocalDayKey();
+    const res=await fetchApi(`/api/v1/suggestion-states?userId=${encodeURIComponent(currentUser.id)}&dayKey=${encodeURIComponent(dayKey)}`);
+    if(!res.ok)throw new Error(`GET /suggestion-states fallita (${res.status})`);
+    const payload=await res.json();
+    const rows=Array.isArray(payload?.data)?payload.data:[];
+    const next={};
+    rows.forEach((row)=>{
+      const key=String(row?.suggestion_key||row?.suggestionKey||'').trim();
+      const status=String(row?.status||'');
+      if(key&&['added','completed','dismissed'].includes(status)){
+        next[key]={suggestionKey:key,suggestionTitle:String(row?.suggestion_title||row?.suggestionTitle||''),status,updatedAt:row?.updated_at||row?.updatedAt||''};
+      }
+    });
+    suggestionStatesByKey={...suggestionStatesByKey,...next};
+    saveSuggestionStatesToCache();
+  }catch(err){
+    console.warn('Impossibile caricare stati suggerimenti, uso cache locale:',err);
+  }
+}
+async function persistSuggestionState(title,status){
+  const state=setSuggestionStateLocal(title,status);
+  if(!state||!currentUser?.id)return state;
+  try{
+    const res=await fetchApi('/api/v1/suggestion-states',{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        userId:currentUser.id,
+        dayKey:getCurrentLocalDayKey(),
+        suggestionKey:state.suggestionKey,
+        suggestionTitle:state.suggestionTitle,
+        status
+      })
+    });
+    if(!res.ok)throw new Error(`PUT /suggestion-states fallita (${res.status})`);
+    const payload=await res.json();
+    const saved=payload?.data;
+    if(saved?.suggestion_key){
+      suggestionStatesByKey={...suggestionStatesByKey,[saved.suggestion_key]:{suggestionKey:saved.suggestion_key,suggestionTitle:saved.suggestion_title||state.suggestionTitle,status:saved.status||status,updatedAt:saved.updated_at||state.updatedAt}};
+      saveSuggestionStatesToCache();
+    }
+  }catch(err){
+    console.warn('Stato suggerimento salvato solo localmente:',err);
+  }
+  return state;
+}
+function isSuggestionCompletedOrDismissed(title){
+  const status=getSuggestionState(title)?.status;
+  return status==='completed'||status==='dismissed'||isSuggestionDismissed(title);
+}
+function isSuggestionAdded(title){return getSuggestionState(title)?.status==='added'||isSuggestionTaskOpen(title);}
 function getTaskSuggestionTitle(task){
   const explicit=String(task?.suggestionTitle||task?.sourceSuggestionTitle||'').trim();
   if(explicit)return explicit;
@@ -1048,6 +1117,12 @@ function getTaskSuggestionTitle(task){
   const review=label.match(/^Review fine giornata:\s*(.+?)\s*$/i);
   if(review?.[1])return review[1].trim();
   return label;
+}
+function shouldSyncTaskSuggestionState(task){
+  const explicit=String(task?.suggestionTitle||task?.sourceSuggestionTitle||'').trim();
+  if(explicit)return true;
+  const title=getTaskSuggestionTitle(task);
+  return !!(getSuggestionState(title)||isSuggestionDismissed(title));
 }
 function isSuggestionTaskOpen(title){
   const normalized=normalizeSuggestionTaskTitle(title);
@@ -1091,11 +1166,11 @@ function setSuggestionTaskButtonState(button,added){
 function refreshSuggestionTaskButtons(){
   document.querySelectorAll('[data-suggestion-task-title]').forEach((button)=>{
     const title=button.getAttribute('data-suggestion-task-title')||'';
-    if(isSuggestionDismissed(title)){
+    if(isSuggestionCompletedOrDismissed(title)){
       button.closest('.sugg-card')?.remove();
       return;
     }
-    setSuggestionTaskButtonState(button,isSuggestionTaskOpen(title));
+    setSuggestionTaskButtonState(button,isSuggestionAdded(title));
   });
   const container=document.getElementById('suggestions-container');
   const nb=document.getElementById('nb-sugg');
@@ -1206,6 +1281,20 @@ function clearInboxMessages(){INBOX.length=0;inboxSelectedId=null;}
 function getCalendarCacheKey(userIdOverride=null){const uid=userIdOverride||currentUser?.id;return uid?`${CALENDAR_CACHE_PREFIX}${uid}`:null;}
 function getSuggestionsCacheKey(){return currentUser?.id?`${SUGGESTIONS_CACHE_PREFIX}${currentUser.id}`:null;}
 function getSuggestionDismissalsCacheKey(){return currentUser?.id?`${SUGGESTION_DISMISSALS_PREFIX}${currentUser.id}_${getCurrentLocalDayKey()}`:null;}
+function getSuggestionStatesCacheKey(){return currentUser?.id?`${SUGGESTION_STATES_PREFIX}${currentUser.id}_${getCurrentLocalDayKey()}`:null;}
+function saveSuggestionStatesToCache(){
+  const key=getSuggestionStatesCacheKey();
+  if(!key)return;
+  try{localStorage.setItem(key,JSON.stringify(suggestionStatesByKey));}catch(e){}
+}
+function loadSuggestionStatesFromCache(){
+  const key=getSuggestionStatesCacheKey();
+  if(!key)return {};
+  try{
+    const parsed=JSON.parse(localStorage.getItem(key)||'{}');
+    return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:{};
+  }catch(e){return {};}
+}
 function saveCalendarToCache(userIdOverride=null){
   const key=getCalendarCacheKey(userIdOverride);
   if(!key)return;
@@ -2623,12 +2712,17 @@ async function moveTaskStatus(id,status){
   const previousStatus=getTaskStatus(t);
   if(previousStatus===status)return;
   const shouldCreateRecurrence=status==='done'&&previousStatus!=='done';
+  const shouldSyncSuggestionState=shouldSyncTaskSuggestionState(t);
   setTaskStatusLocal(t,status);
   if(shouldCreateRecurrence){
-    dismissSuggestionTitle(getTaskSuggestionTitle(t));
+    if(shouldSyncSuggestionState){
+      dismissSuggestionTitle(getTaskSuggestionTitle(t));
+      await persistSuggestionState(getTaskSuggestionTitle(t),'completed');
+    }
     recordTaskCompleted(t);
-  }else if(status!=='done'&&previousStatus==='done'){
+  }else if(status!=='done'&&previousStatus==='done'&&shouldSyncSuggestionState){
     restoreSuggestionTitle(getTaskSuggestionTitle(t));
+    await persistSuggestionState(getTaskSuggestionTitle(t),'added');
   }
   saveTasksToCache();
   renderTasks();
@@ -3060,16 +3154,38 @@ function hasOpenTaskForNote(note){
   const title=String(note?.title||'').trim();
   return tasks.some(t=>getTaskStatus(t)!=='done'&&(String(t?.sourceNoteId||'')===noteId||String(t?.label||'').trim()===title));
 }
-function addTaskFromSuggestion(titolo,button=null,sourceTitle=null){
+async function addTaskFromSuggestion(titolo,button=null,sourceTitle=null){
   const label=String(titolo||'Azione').trim()||'Azione';
   const suggestionTitle=String(sourceTitle||button?.getAttribute?.('data-suggestion-task-title')||label).trim()||label;
   restoreSuggestionTitle(suggestionTitle);
+  await persistSuggestionState(suggestionTitle,'added');
   if(!isSuggestionTaskOpen(suggestionTitle)){
-    tasks.push({id:nextTaskId++,label,done:false,status:'todo',priorita:'urgente',scadenza:'Oggi',dueDateIso:new Date().toISOString(),reminderAt:null,recurrence:'none',energyCost:3,stressImpact:3,suggestionTitle});
+    const fallbackTask={id:nextTaskId++,label,done:false,status:'todo',priorita:'urgente',scadenza:'Oggi',dueDateIso:new Date().toISOString(),reminderAt:null,recurrence:'none',energyCost:3,stressImpact:3,suggestionTitle};
+    try{
+      if(currentUser?.id){
+        const res=await fetchApi('/api/v1/tasks',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({userId:currentUser.id,title:label,priority:'urgent',dueDate:fallbackTask.dueDateIso,reminderAt:null,recurrence:'none',sourceSuggestionTitle:suggestionTitle})
+        });
+        if(res.ok){
+          const payload=await res.json();
+          tasks.push(payload?.data?normalizeApiTask(payload.data):fallbackTask);
+        }else{
+          throw new Error(`POST /tasks fallita (${res.status})`);
+        }
+      }else{
+        tasks.push(fallbackTask);
+      }
+    }catch(err){
+      console.warn('Task da suggerimento salvato solo localmente:',err);
+      tasks.push(fallbackTask);
+    }
     saveTasksToCache();
   }
   renderTasks();
   if(button)setSuggestionTaskButtonState(button,true);
+  refreshSuggestionTaskButtons();
   showPage('task',document.querySelectorAll('.nav-item')[3]);
 }
 async function toggleTask(id){
@@ -3084,7 +3200,11 @@ async function deleteTask(id){
   const removed=tasks.find(t=>String(t.id)===idKey);
   const removedSuggestionTitle=removed?getTaskSuggestionTitle(removed):'';
   const wasSuggestionDismissed=removed?isSuggestionDismissed(removedSuggestionTitle):false;
-  if(removed)dismissSuggestionTitle(removedSuggestionTitle);
+  const shouldSyncRemovedSuggestionState=removed&&shouldSyncTaskSuggestionState(removed);
+  if(shouldSyncRemovedSuggestionState){
+    dismissSuggestionTitle(removedSuggestionTitle);
+    await persistSuggestionState(removedSuggestionTitle,'dismissed');
+  }
   tasks=tasks.filter(t=>String(t.id)!==idKey);
   saveTasksToCache();
   renderTasks();
@@ -3102,13 +3222,15 @@ async function deleteTask(id){
     const txt=await res.text().catch(()=> '');
     console.warn(`DELETE /tasks/${idKey} fallita (${res.status}):`,txt);
     tasks=previous;
-    if(removed&&!wasSuggestionDismissed)restoreSuggestionTitle(removedSuggestionTitle);
+    if(shouldSyncRemovedSuggestionState&&!wasSuggestionDismissed)restoreSuggestionTitle(removedSuggestionTitle);
+    if(shouldSyncRemovedSuggestionState)await persistSuggestionState(removedSuggestionTitle,getTaskStatus(removed)==='done'?'completed':'added');
     saveTasksToCache();
     renderTasks();
   }catch(err){
     console.warn('Errore delete task su backend:',err);
     tasks=previous;
-    if(removed&&!wasSuggestionDismissed)restoreSuggestionTitle(removedSuggestionTitle);
+    if(shouldSyncRemovedSuggestionState&&!wasSuggestionDismissed)restoreSuggestionTitle(removedSuggestionTitle);
+    if(shouldSyncRemovedSuggestionState)await persistSuggestionState(removedSuggestionTitle,getTaskStatus(removed)==='done'?'completed':'added');
     saveTasksToCache();
     renderTasks();
   }
@@ -3473,7 +3595,7 @@ function renderDaySuggestions(suggestions,options={}){
   const degraded=Boolean(options?.degraded)||source==='local-fallback';
   const degradedReason=options?.degradedReason||'';
   const degradedHint=options?.degradedHint||'';
-  const enrichedSuggestions=ensureCelebrationSuggestion(suggestions).filter(s=>!isSuggestionDismissed(s?.titolo));
+  const enrichedSuggestions=ensureCelebrationSuggestion(suggestions).filter(s=>!isSuggestionCompletedOrDismissed(s?.titolo));
   const container=document.getElementById('suggestions-container');
   if(!container)return;
   if(!Array.isArray(enrichedSuggestions)||!enrichedSuggestions.length){
@@ -3494,7 +3616,7 @@ function renderDaySuggestions(suggestions,options={}){
   container.innerHTML=sharePanel+enrichedSuggestions.map((s,i)=>{
     const title=String(s.titolo||'Azione');
     const titleForHandler=title.replace(/'/g,"\\'");
-    const added=isSuggestionTaskOpen(title);
+    const added=isSuggestionAdded(title);
     return `<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(title)}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${titleForHandler}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'var(--color-primary)':'transparent'};color:${j===0?'#fff':'var(--color-muted-strong)'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button data-suggestion-task-title="${escapeHtml(title)}" aria-pressed="${added?'true':'false'}" onclick="addTaskFromSuggestion('${titleForHandler}',this)" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:${added?'#0E6B4A':'#6F6A61'};cursor:pointer;">${added?'✓ Aggiunto':'+ Aggiungi ai task'}</button></div></div>`;
   }).join('');
   const shouldPersist=options?.persist!==false;

@@ -15,7 +15,8 @@ const CreateTaskSchema = z.object({
   reminderAt: z.string().datetime().optional().nullable(),
   recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']).default('none'),
   energyCost: z.coerce.number().int().min(1).max(5).default(3),
-  stressImpact: z.coerce.number().int().min(1).max(5).default(3)
+  stressImpact: z.coerce.number().int().min(1).max(5).default(3),
+  sourceSuggestionTitle: z.string().trim().max(200).optional().default('')
 });
 
 const ImportTasksSchema = z.object({
@@ -29,7 +30,8 @@ const ImportTasksSchema = z.object({
       reminderAt: z.string().datetime().optional().nullable(),
       recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']).default('none'),
       energyCost: z.coerce.number().int().min(1).max(5).default(3),
-      stressImpact: z.coerce.number().int().min(1).max(5).default(3)
+      stressImpact: z.coerce.number().int().min(1).max(5).default(3),
+      sourceSuggestionTitle: z.string().trim().max(200).optional().default('')
     })
   ).min(1).max(100)
 });
