@@ -1,5 +1,14 @@
 import { query } from '../config/db.js';
 
+let taskSuggestionSchemaReady = false;
+
+async function ensureTaskSuggestionSchema() {
+  if (taskSuggestionSchemaReady) return;
+  await query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS source_suggestion_title TEXT NOT NULL DEFAULT ''");
+  await query("CREATE INDEX IF NOT EXISTS idx_tasks_user_suggestion ON tasks(user_id, source_suggestion_title) WHERE source_suggestion_title <> ''");
+  taskSuggestionSchemaReady = true;
+}
+
 const TASK_RETURNING_COLUMNS = `
   id,
   user_id,
@@ -12,11 +21,13 @@ const TASK_RETURNING_COLUMNS = `
   recurrence,
   energy_cost,
   stress_impact,
+  source_suggestion_title,
   created_at,
   updated_at
 `;
 
 export async function listTasks(userId) {
+  await ensureTaskSuggestionSchema();
   const sql = `
     SELECT ${TASK_RETURNING_COLUMNS}
     FROM tasks
@@ -29,6 +40,7 @@ export async function listTasks(userId) {
 }
 
 export async function getTaskById(taskId, userId) {
+  await ensureTaskSuggestionSchema();
   const sql = `
     SELECT ${TASK_RETURNING_COLUMNS}
     FROM tasks
@@ -41,9 +53,10 @@ export async function getTaskById(taskId, userId) {
 }
 
 export async function createTask(input) {
+  await ensureTaskSuggestionSchema();
   const sql = `
-    INSERT INTO tasks (user_id, title, description, status, priority, due_date, reminder_at, recurrence, energy_cost, stress_impact)
-    VALUES ($1, $2, $3, 'todo', $4, $5, $6, $7, $8, $9)
+    INSERT INTO tasks (user_id, title, description, status, priority, due_date, reminder_at, recurrence, energy_cost, stress_impact, source_suggestion_title)
+    VALUES ($1, $2, $3, 'todo', $4, $5, $6, $7, $8, $9, $10)
     RETURNING ${TASK_RETURNING_COLUMNS}
   `;
 
@@ -56,7 +69,8 @@ export async function createTask(input) {
     input.reminderAt,
     input.recurrence,
     input.energyCost,
-    input.stressImpact
+    input.stressImpact,
+    input.sourceSuggestionTitle || ''
   ];
 
   const { rows } = await query(sql, values);
@@ -70,6 +84,7 @@ function normalizeDedupKey(title, dueDate) {
 }
 
 export async function importTasks(userId, items) {
+  await ensureTaskSuggestionSchema();
   const safeItems = Array.isArray(items) ? items : [];
   const existingSql = `
     SELECT title, due_date
@@ -98,7 +113,8 @@ export async function importTasks(userId, items) {
       reminderAt: item.reminderAt ?? null,
       recurrence: item.recurrence || 'none',
       energyCost: item.energyCost ?? 3,
-      stressImpact: item.stressImpact ?? 3
+      stressImpact: item.stressImpact ?? 3,
+      sourceSuggestionTitle: item.sourceSuggestionTitle || ''
     });
     created.push(task);
   }
@@ -107,6 +123,7 @@ export async function importTasks(userId, items) {
 }
 
 export async function updateTaskStatus(taskId, userId, status) {
+  await ensureTaskSuggestionSchema();
   const sql = `
     UPDATE tasks
     SET status = $3, updated_at = NOW()
@@ -119,8 +136,11 @@ export async function updateTaskStatus(taskId, userId, status) {
       status,
       priority,
       due_date,
+      reminder_at,
+      recurrence,
       energy_cost,
       stress_impact,
+      source_suggestion_title,
       created_at,
       updated_at
   `;
@@ -130,6 +150,7 @@ export async function updateTaskStatus(taskId, userId, status) {
 }
 
 export async function deleteTask(taskId, userId) {
+  await ensureTaskSuggestionSchema();
   const sql = `
     DELETE FROM tasks
     WHERE id = $1 AND user_id = $2

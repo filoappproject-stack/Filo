@@ -12,6 +12,7 @@ import healthRoutes from './routes/health.routes.js';
 import inboxRoutes from './routes/inbox.routes.js';
 import notesRoutes from './routes/notes.routes.js';
 import schedulingRoutes from './routes/scheduling.routes.js';
+import suggestionStatesRoutes from './routes/suggestionStates.routes.js';
 import tasksRoutes from './routes/tasks.routes.js';
 
 export const app = express();
@@ -35,6 +36,7 @@ app.use('/api/v1', requireAuth);
 app.use('/api/v1/tasks', tasksRoutes);
 app.use('/api/v1/notes', notesRoutes);
 app.use('/api/v1/scheduling', schedulingRoutes);
+app.use('/api/v1/suggestion-states', suggestionStatesRoutes);
 app.use('/api/v1/checkins', checkinsRoutes);
 app.use('/api/v1/inbox', inboxRoutes);
 app.use('/api/v1/calendar', calendarRoutes);
