@@ -1098,6 +1098,27 @@ function isSuggestionCompletedOrDismissed(title){
   return status==='completed'||status==='dismissed'||isSuggestionDismissed(title);
 }
 function isSuggestionAdded(title){return getSuggestionState(title)?.status==='added'||isSuggestionTaskOpen(title);}
+async function completeSuggestionTitle(title,button=null){
+  const suggestionTitle=String(title||'').trim();
+  if(!suggestionTitle)return;
+  dismissSuggestionTitle(suggestionTitle);
+  await persistSuggestionState(suggestionTitle,'completed');
+  if(button){
+    button.textContent='✓ Fatto';
+    button.disabled=true;
+    button.setAttribute('aria-pressed','true');
+  }
+  const card=button?.closest?.('.sugg-card');
+  const addButton=card?.querySelector?.('[data-suggestion-task-title]');
+  if(addButton){
+    addButton.textContent='✓ Fatto';
+    addButton.disabled=true;
+    addButton.setAttribute('aria-pressed','true');
+  }
+}
+async function completeSuggestionFromButton(title,button=null){
+  await completeSuggestionTitle(title,button);
+}
 function getTaskSuggestionTitle(task){
   const explicit=String(task?.suggestionTitle||task?.sourceSuggestionTitle||'').trim();
   if(explicit)return explicit;
@@ -1179,6 +1200,22 @@ function refreshSuggestionTaskButtons(){
     nb.textContent=String(visible);
     if(visible===0)container.innerHTML='<div class="empty-state"><div class="empty-title">Nessun suggerimento</div></div>';
   }
+}
+function addSuggestionCompletionButtons(container){
+  if(!container)return;
+  container.querySelectorAll('[data-suggestion-task-title]').forEach((addButton)=>{
+    const title=addButton.getAttribute('data-suggestion-task-title')||'';
+    const alreadyDoneButton=Array.from(addButton.parentElement?.querySelectorAll?.('[data-suggestion-done-title]')||[]).some((button)=>button.dataset.suggestionDoneTitle===title);
+    if(!title||alreadyDoneButton)return;
+    const doneButton=document.createElement('button');
+    doneButton.type='button';
+    doneButton.textContent='✓ Fatto';
+    doneButton.dataset.suggestionDoneTitle=title;
+    doneButton.setAttribute('aria-label',`Segna come fatto: ${title}`);
+    doneButton.style.cssText='font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(14,107,74,0.28);background:#E4F4EE;color:#0E6B4A;cursor:pointer;';
+    doneButton.addEventListener('click',()=>completeSuggestionFromButton(title,doneButton));
+    addButton.insertAdjacentElement('afterend',doneButton);
+  });
 }
 function buildShareableDayPlan(suggestions=currentDaySuggestionsForShare){
   const list=(Array.isArray(suggestions)?suggestions:[])
@@ -3416,7 +3453,7 @@ function postponeFocusSession(){
   addTaskFromSuggestion(`${focusSessionTitle} (riprogrammare pomeriggio)`);
   cancelFocusSession(false);
 }
-function handleSuggestionAction(actionLabel,suggestionTitle,btn){
+async function handleSuggestionAction(actionLabel,suggestionTitle,btn){
   const action=(actionLabel||'').trim().toLowerCase();
   if(action.startsWith('inizia ora')){
     if(btn){
@@ -3470,7 +3507,7 @@ function handleSuggestionAction(actionLabel,suggestionTitle,btn){
     if(btn){btn.textContent='Attività spostate';btn.disabled=true;}
     return;
   }
-  if(btn){btn.textContent='✓';btn.disabled=true;}
+  await completeSuggestionTitle(suggestionTitle,btn);
 }
 function splitLocalItems(raw){
   return String(raw||'').split(/[\n,;]+/).map(v=>v.trim()).filter(Boolean).slice(0,8);
@@ -3619,6 +3656,7 @@ function renderDaySuggestions(suggestions,options={}){
     const added=isSuggestionAdded(title);
     return `<div class="sugg-card ${s.priorita||'normale'}" style="animation-delay:${i*0.1}s"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;"><div class="sugg-title">${escapeHtml(title)}</div><span class="badge ${PBADGE[s.priorita]||'b-normale'}">${PLBL[s.priorita]||s.priorita}</span></div><div class="sugg-why">${escapeHtml(s.perche||'')}</div><div class="sugg-actions">${(Array.isArray(s.azioni)?s.azioni:[]).map((a,j)=>`<button onclick="handleSuggestionAction('${String(a||'').replace(/'/g,"\\'")}','${titleForHandler}',this)" style="font-family:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:${j===0?'none':'1px solid rgba(0,0,0,0.12)'};background:${j===0?'var(--color-primary)':'transparent'};color:${j===0?'#fff':'var(--color-muted-strong)'};cursor:pointer;">${escapeHtml(a)}</button>`).join('')}<button data-suggestion-task-title="${escapeHtml(title)}" aria-pressed="${added?'true':'false'}" onclick="addTaskFromSuggestion('${titleForHandler}',this)" style="margin-left:auto;font-family:inherit;font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:${added?'#0E6B4A':'#6F6A61'};cursor:pointer;">${added?'✓ Aggiunto':'+ Aggiungi ai task'}</button></div></div>`;
   }).join('');
+  addSuggestionCompletionButtons(container);
   const shouldPersist=options?.persist!==false;
   if(shouldPersist)saveSuggestionsToCache(suggestions,{source,degraded,degradedReason,degradedHint});
   setSuggestionsUpdatedAtLabel(options?.updatedAt||(shouldPersist?new Date().toISOString():null),source,{degraded,originalSource:options?.originalSource,degradedReason,degradedHint});
