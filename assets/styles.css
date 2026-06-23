@@ -44,7 +44,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-bg);color
 .beta-benefit-text{font-size:12px;color:var(--color-muted);line-height:1.45;}
 .beta-note{font-size:12px;color:var(--color-muted-strong);line-height:1.5;border-left:3px solid var(--color-primary);padding-left:12px;}
 .login-box{background:var(--color-surface);border-radius:20px;padding:48px 44px;width:400px;max-width:92vw;box-shadow:0 4px 40px rgba(0,0,0,0.08);text-align:center;}
-.login-logo-mark{width:64px;height:64px;background:var(--color-primary);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;}
+.login-logo-mark{width:min(260px,100%);height:130px;background:transparent;border-radius:0;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+.login-logo-img{width:100%;height:100%;object-fit:contain;display:block;}
 .login-name{font-size:32px;font-weight:600;letter-spacing:-0.5px;color:var(--color-text);margin-bottom:6px;}
 .login-tagline{font-size:14px;color:var(--color-muted);margin-bottom:36px;line-height:1.5;}
 .login-divider{display:flex;align-items:center;gap:12px;margin:20px 0;}
@@ -79,7 +80,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-bg);color
 .shell.active{display:flex;min-height:100vh;}
 .sidebar{width:220px;min-width:220px;background:var(--color-surface);border-right:1px solid rgba(0,0,0,0.07);padding:24px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;}
 .logo{display:flex;align-items:center;gap:9px;margin-bottom:28px;}
-.logo-mark{width:30px;height:30px;background:var(--color-primary);border-radius:8px;display:flex;align-items:center;justify-content:center;}
+.logo-mark{width:32px;height:32px;background:transparent;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;}
+.logo-mark-img{width:100%;height:100%;object-fit:contain;display:block;}
 .logo-name{font-size:18px;font-weight:600;letter-spacing:-0.3px;}
 .nav-sec{font-size:10px;font-weight:500;color:var(--color-muted);letter-spacing:0.1em;text-transform:uppercase;padding:0 10px;margin:16px 0 4px;}
 .nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--color-muted-strong);margin-bottom:3px;transition:background 0.12s;}
