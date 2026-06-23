@@ -178,6 +178,12 @@ function getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, nowMs) {
   };
 }
 
+function refundInMemory(actorKey, dayKey, allowedLimit, nowMs) {
+  const usage = ensureActorUsage(actorKey, dayKey);
+  usage.count = Math.max(Number(usage.count || 0) - 1, 0);
+  return getInMemoryQuotaStatus(actorKey, dayKey, allowedLimit, nowMs);
+}
+
 async function getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, nowIso) {
   const nowMs = Date.parse(nowIso);
   const res = await pool.query(
@@ -202,6 +208,18 @@ async function getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, nowIso) {
   };
 }
 
+async function refundInDatabase(actorKey, dayKey, allowedLimit, nowIso) {
+  await pool.query(
+    `UPDATE ai_usage_limits
+     SET used_count = GREATEST(used_count - 1, 0),
+         updated_at = NOW()
+     WHERE actor_key = $1 AND day_key = $2::date`,
+    [actorKey, dayKey]
+  );
+
+  return getDatabaseQuotaStatus(actorKey, dayKey, allowedLimit, nowIso);
+}
+
 export async function consumeAnalysisQuota(req, payload) {
   const now = new Date();
   const dayKey = getDayKey(now);
@@ -217,6 +235,24 @@ export async function consumeAnalysisQuota(req, payload) {
   } catch (error) {
     console.warn('Quota DB non disponibile, fallback in-memory attivato:', error?.message || error);
     return consumeInMemory(actorKey, dayKey, allowedLimit, now.getTime());
+  }
+}
+
+export async function refundAnalysisQuota(req, payload) {
+  const now = new Date();
+  const dayKey = getDayKey(now);
+  const actorKey = buildActorKey(req, payload);
+  const allowedLimit = allowedLimitFor(payload);
+
+  if (!pool || !env.DATABASE_URL) {
+    return refundInMemory(actorKey, dayKey, allowedLimit, now.getTime());
+  }
+
+  try {
+    return refundInDatabase(actorKey, dayKey, allowedLimit, now.toISOString());
+  } catch (error) {
+    console.warn('Rimborso quota DB non disponibile, fallback in-memory attivato:', error?.message || error);
+    return refundInMemory(actorKey, dayKey, allowedLimit, now.getTime());
   }
 }
 
