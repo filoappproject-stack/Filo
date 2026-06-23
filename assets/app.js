@@ -3596,7 +3596,7 @@ function getSuggestionFallbackReasonLabel({degradedReason='',degradedHint=''}={}
     AI_PROVIDER_AUTH_ERROR:'Chiave API Anthropic non valida o non autorizzata: aggiorna ANTHROPIC_API_KEY nell’ambiente di deploy e ridistribuisci.',
     AI_PROVIDER_MODEL_UNAVAILABLE:'Il modello Anthropic configurato non risulta disponibile: verifica ANTHROPIC_MODEL o usa il modello predefinito.',
     AI_PROVIDER_RATE_LIMITED:'Il provider IA ha limitato temporaneamente le richieste: riprova più tardi o verifica quota e billing del provider.',
-    AI_PROVIDER_SERVER_ERROR:'Il provider IA ha risposto con errore temporaneo: riprova tra qualche minuto.',
+    AI_PROVIDER_SERVER_ERROR:'Il provider IA è temporaneamente sovraccarico o non disponibile. Filo mostra suggerimenti locali: riprova tra qualche minuto.',
     AI_RESPONSE_PARSE_FAILED:'Il provider IA ha risposto, ma il contenuto non era nel formato JSON atteso.',
     AI_PROVIDER_UNAVAILABLE:'Il provider IA non è raggiungibile o non ha completato la richiesta: controlla rete, configurazione provider e log backend.',
     FRONTEND_LOCAL_FALLBACK:'Il frontend ha generato suggerimenti locali perché il servizio analisi non era disponibile.'
