@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { analyzeDay, buildFallbackSuggestions, getAiAttemptCounter } from '../services/assistant.service.js';
 import { listCalendarEvents } from '../services/calendar.service.js';
-import { consumeAnalysisQuota, getAnalysisQuotaStatus } from '../services/quota.service.js';
+import { consumeAnalysisQuota, getAnalysisQuotaStatus, refundAnalysisQuota } from '../services/quota.service.js';
 import { HttpError } from '../utils/httpError.js';
 
 const AnalyzeDaySchema = z.object({
@@ -41,6 +41,7 @@ export async function postDayAnalysis(req, res) {
   }
 
   let quota = null;
+  let quotaRefunded = false;
   let failureStage = 'quota';
 
   try {
@@ -78,6 +79,11 @@ export async function postDayAnalysis(req, res) {
     });
     const analysis = await analyzeDay({ ...data, calendarContext });
 
+    if (shouldRefundAnalysisQuota(analysis, quota)) {
+      quota = await refundAnalysisQuota(req, data);
+      quotaRefunded = true;
+    }
+
     return res.json({
       data: {
         suggerimenti: analysis.suggestions,
@@ -93,7 +99,8 @@ export async function postDayAnalysis(req, res) {
           dayKey: quota.dayKey
         },
         diagnostics: {
-          aiAttemptCounter: getAiAttemptCounter()
+          aiAttemptCounter: getAiAttemptCounter(),
+          quotaRefunded
         }
       }
     });
@@ -104,10 +111,19 @@ export async function postDayAnalysis(req, res) {
     const suggerimenti = buildFallbackSuggestions(data);
     const degradedReason = buildDegradedReason(failureStage, error);
 
+    if (shouldRefundCaughtFailureQuota(failureStage, quota)) {
+      try {
+        quota = await refundAnalysisQuota(req, data);
+        quotaRefunded = true;
+      } catch (refundError) {
+        console.warn('Impossibile rimborsare quota analisi dopo fallback:', refundError?.message || refundError);
+      }
+    }
+
     return res.status(200).json({
       data: {
         suggerimenti,
-        quota: quota?.ok
+        quota: quota
           ? {
               limit: quota.limit,
               used: quota.used,
@@ -122,7 +138,8 @@ export async function postDayAnalysis(req, res) {
         diagnosticId,
         source: 'local-fallback',
         diagnostics: {
-          aiAttemptCounter: getAiAttemptCounter()
+          aiAttemptCounter: getAiAttemptCounter(),
+          quotaRefunded
         }
       },
       message: 'Analisi AI temporaneamente non disponibile: mostrati suggerimenti locali.'
@@ -233,6 +250,17 @@ function buildDegradedReason(stage, error) {
     code: 'AI_PROVIDER_UNAVAILABLE',
     hint: error?.message || 'Errore temporaneo del provider AI.'
   };
+}
+
+function shouldRefundAnalysisQuota(analysis, quota) {
+  if (!quota?.ok) return false;
+  if (analysis?.source !== 'local-fallback') return false;
+  if (analysis?.degradedStage && analysis.degradedStage !== 'analysis') return false;
+  return String(analysis?.degradedReason || '').startsWith('AI_');
+}
+
+function shouldRefundCaughtFailureQuota(stage, quota) {
+  return stage === 'analysis' && Boolean(quota?.ok);
 }
 
 function logAssistantFailure(req, diagnosticId, error, input, stage) {
