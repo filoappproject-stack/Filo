@@ -1,52 +1,46 @@
 <svg width="300" height="300" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
-  <!-- Anelli ornamentali -->
-  <circle cx="150" cy="150" r="140" fill="none" stroke="#3B6FE8" stroke-width="0.8" opacity="0.12"/>
-  <circle cx="150" cy="150" r="132" fill="none" stroke="#3B6FE8" stroke-width="0.6" opacity="0.07"/>
+  <circle cx="150" cy="150" r="140" fill="none" stroke="#3B6FE8" stroke-width="1.2" opacity="0.35"/>
+  <circle cx="150" cy="150" r="132" fill="none" stroke="#3B6FE8" stroke-width="0.7" opacity="0.18"/>
+  <circle cx="150" cy="150" r="124" fill="#D6E4FF" opacity="0.85"/>
 
-  <!-- Sfondo icona -->
-  <circle cx="150" cy="150" r="124" fill="#EDF2FF" opacity="0.55"/>
+  <line x1="150" y1="118" x2="150" y2="62"  stroke="#1A4FCC" stroke-width="3.5"/>
+  <line x1="182" y1="150" x2="238" y2="150" stroke="#1A8C62" stroke-width="3.5"/>
+  <line x1="150" y1="182" x2="150" y2="238" stroke="#1A6AAF" stroke-width="3.5"/>
+  <line x1="118" y1="150" x2="62"  y2="150" stroke="#1A4FCC" stroke-width="3.5"/>
 
-  <!-- Raggi -->
-  <line x1="150" y1="118" x2="150" y2="62" stroke="#3B6FE8" stroke-width="2" opacity="0.35"/>
-  <line x1="182" y1="150" x2="238" y2="150" stroke="#6DB89A" stroke-width="2" opacity="0.35"/>
-  <line x1="150" y1="182" x2="150" y2="238" stroke="#5B9BD5" stroke-width="2" opacity="0.35"/>
-  <line x1="118" y1="150" x2="62" y2="150" stroke="#3B6FE8" stroke-width="2" opacity="0.35"/>
+  <line x1="146" y1="90"  x2="154" y2="90"  stroke="#1A4FCC" stroke-width="2"/>
+  <line x1="210" y1="146" x2="210" y2="154" stroke="#1A8C62" stroke-width="2"/>
+  <line x1="146" y1="210" x2="154" y2="210" stroke="#1A6AAF" stroke-width="2"/>
+  <line x1="90"  y1="146" x2="90"  y2="154" stroke="#1A4FCC" stroke-width="2"/>
 
-  <!-- Tacche razzi -->
-  <line x1="146" y1="90" x2="154" y2="90" stroke="#3B6FE8" stroke-width="1.2" opacity="0.25"/>
-  <line x1="210" y1="146" x2="210" y2="154" stroke="#6DB89A" stroke-width="1.2" opacity="0.25"/>
-  <line x1="146" y1="210" x2="154" y2="210" stroke="#5B9BD5" stroke-width="1.2" opacity="0.25"/>
-  <line x1="90" y1="146" x2="90" y2="154" stroke="#3B6FE8" stroke-width="1.2" opacity="0.25"/>
-
-  <!-- Gomitolo centrale -->
-  <circle cx="150" cy="150" r="28" fill="#ffffff" stroke="#3B6FE8" stroke-width="2"/>
-  <circle cx="150" cy="150" r="20" fill="none" stroke="#3B6FE8" stroke-width="1.6" opacity="0.45"/>
-  <circle cx="150" cy="150" r="11" fill="none" stroke="#6DB89A" stroke-width="1.6" opacity="0.6"/>
-  <circle cx="150" cy="150" r="4" fill="#3B6FE8"/>
+  <circle cx="150" cy="150" r="28" fill="#ffffff" stroke="#1A4FCC" stroke-width="3"/>
+  <circle cx="150" cy="150" r="20" fill="none" stroke="#1A4FCC" stroke-width="2.2"/>
+  <circle cx="150" cy="150" r="11" fill="none" stroke="#1A8C62" stroke-width="2.2"/>
+  <circle cx="150" cy="150" r="5"  fill="#1A4FCC"/>
 
   <!-- NORD: Calendar -->
-  <circle cx="150" cy="42" r="34" fill="#ffffff" stroke="#3B6FE8" stroke-width="2.2"/>
-  <rect x="135" y="30" width="30" height="24" rx="4" fill="#EDF2FF" stroke="#3B6FE8" stroke-width="1.5"/>
-  <line x1="140" y1="30" x2="140" y2="25" stroke="#3B6FE8" stroke-width="2.2" stroke-linecap="round"/>
-  <line x1="160" y1="30" x2="160" y2="25" stroke="#3B6FE8" stroke-width="2.2" stroke-linecap="round"/>
-  <line x1="135" y1="38" x2="165" y2="38" stroke="#3B6FE8" stroke-width="1.2"/>
-  <rect x="140" y="42" width="6" height="6" rx="1.5" fill="#3B6FE8" opacity="0.7"/>
-  <rect x="150" y="42" width="6" height="6" rx="1.5" fill="#3B6FE8" opacity="0.4"/>
+  <circle cx="150" cy="42" r="34" fill="#1A4FCC" stroke="#0F3599" stroke-width="2"/>
+  <rect x="135" y="29" width="30" height="25" rx="4" fill="#ffffff"/>
+  <line x1="140" y1="29" x2="140" y2="24" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="160" y1="29" x2="160" y2="24" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="135" y1="37" x2="165" y2="37" stroke="#1A4FCC" stroke-width="1.5"/>
+  <rect x="139" y="41" width="7" height="7" rx="1.5" fill="#1A4FCC"/>
+  <rect x="150" y="41" width="7" height="7" rx="1.5" fill="#1A4FCC" opacity="0.5"/>
 
   <!-- EST: Task -->
-  <circle cx="258" cy="150" r="34" fill="#ffffff" stroke="#6DB89A" stroke-width="2.2"/>
-  <rect x="243" y="135" width="26" height="26" rx="4" fill="#EAF7F1" stroke="#6DB89A" stroke-width="1.5"/>
-  <path d="M249 148 L255 155 L268 141" fill="none" stroke="#6DB89A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="258" cy="150" r="34" fill="#1A8C62" stroke="#0F6045" stroke-width="2"/>
+  <rect x="243" y="135" width="26" height="26" rx="4" fill="#ffffff"/>
+  <path d="M249 148 L255 155 L268 141" fill="none" stroke="#1A8C62" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 
   <!-- SUD: Note -->
-  <circle cx="150" cy="258" r="34" fill="#ffffff" stroke="#5B9BD5" stroke-width="2.2"/>
-  <rect x="135" y="244" width="24" height="28" rx="4" fill="#EAF3FF" stroke="#5B9BD5" stroke-width="1.5"/>
-  <line x1="140" y1="253" x2="154" y2="253" stroke="#5B9BD5" stroke-width="1.5" stroke-linecap="round"/>
-  <line x1="140" y1="260" x2="154" y2="260" stroke="#5B9BD5" stroke-width="1.5" stroke-linecap="round"/>
-  <line x1="140" y1="267" x2="148" y2="267" stroke="#5B9BD5" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="150" cy="258" r="34" fill="#1A6AAF" stroke="#0F4A82" stroke-width="2"/>
+  <rect x="135" y="244" width="24" height="28" rx="4" fill="#ffffff"/>
+  <line x1="140" y1="253" x2="154" y2="253" stroke="#1A6AAF" stroke-width="2" stroke-linecap="round"/>
+  <line x1="140" y1="260" x2="154" y2="260" stroke="#1A6AAF" stroke-width="2" stroke-linecap="round"/>
+  <line x1="140" y1="267" x2="148" y2="267" stroke="#1A6AAF" stroke-width="2" stroke-linecap="round"/>
 
   <!-- OVEST: Mail -->
-  <circle cx="42" cy="150" r="34" fill="#ffffff" stroke="#3B6FE8" stroke-width="2.2"/>
-  <rect x="25" y="138" width="36" height="24" rx="4" fill="#EDF2FF" stroke="#3B6FE8" stroke-width="1.5"/>
-  <path d="M25 141 L43 152 L61 141" fill="none" stroke="#3B6FE8" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="42" cy="150" r="34" fill="#1A4FCC" stroke="#0F3599" stroke-width="2"/>
+  <rect x="25" y="138" width="36" height="24" rx="4" fill="#ffffff"/>
+  <path d="M25 141 L43 152 L61 141" fill="none" stroke="#1A4FCC" stroke-width="2.5" stroke-linecap="round"/>
 </svg>
