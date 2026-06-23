@@ -51,14 +51,22 @@ function sendGoogleLoginCallbackPage(res, payload) {
   body[data-color-set="salvia"]{--color-bg:#F4F3EE;--color-surface:#fff;--color-text:#1B1A17;--color-muted:#566158;--color-primary:#2D7D68;}
   body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--color-bg);color:var(--color-text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
   .box{background:var(--color-surface);border:1px solid rgba(0,0,0,.08);border-radius:20px;padding:32px 36px;box-shadow:0 10px 40px rgba(0,0,0,.08);text-align:center;max-width:360px;}
-  .mark{width:56px;height:56px;border-radius:16px;background:var(--color-primary);color:#fff;display:grid;place-items:center;margin:0 auto 18px;font-size:26px;font-weight:700;}
+  .mark{width:64px;height:64px;display:grid;place-items:center;margin:0 auto 18px;}
+  .mark svg{width:64px;height:64px;display:block;}
   .title{font-size:22px;font-weight:650;margin-bottom:8px;letter-spacing:-.3px;}
   .sub{font-size:14px;color:var(--color-muted);line-height:1.5;}
 </style>
 </head>
 <body data-color-set="${payload.colorSet === 'salvia' ? 'salvia' : 'classic'}">
   <div class="box" role="status" aria-live="polite">
-    <div class="mark">F</div>
+    <div class="mark" aria-label="Filo">
+      <svg viewBox="0 0 64 64" role="img" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+        <rect width="64" height="64" rx="16" fill="var(--color-primary)"/>
+        <circle cx="32" cy="32" r="18" fill="#ffffff"/>
+        <circle cx="32" cy="32" r="11" fill="none" stroke="var(--color-primary)" stroke-width="4"/>
+        <circle cx="32" cy="32" r="4" fill="#6DB89A"/>
+      </svg>
+    </div>
     <div class="title">Accesso a Filo...</div>
     <div class="sub">Sto completando il login con Google. Ci vuole solo un istante.</div>
   </div>
