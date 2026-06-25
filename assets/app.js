@@ -2150,8 +2150,10 @@ function renderInboxControls(){
   const connectBtn=document.getElementById('inbox-connect-btn');
   const imapBtn=document.getElementById('inbox-imap-connect-btn');
   const syncBtn=document.getElementById('inbox-sync-btn');
+  const disconnectBtn=document.getElementById('inbox-disconnect-btn');
   if(!state||!connectBtn||!syncBtn)return;
   if(!mailboxConnected){
+    if(disconnectBtn)disconnectBtn.style.display='none';
     if(mailboxBackgroundSyncInProgress){
       state.textContent='Sincronizzazione mailbox in corso... potrebbe richiedere alcuni minuti.';
       state.style.color='var(--color-primary-strong)';
@@ -2184,6 +2186,11 @@ function renderInboxControls(){
   connectBtn.style.display='none';
   if(imapBtn)imapBtn.style.display='none';
   syncBtn.style.display='';
+  if(disconnectBtn){
+    disconnectBtn.style.display='';
+    disconnectBtn.disabled=mailboxSyncInProgress||mailboxBackgroundSyncInProgress;
+    disconnectBtn.textContent='Scollega';
+  }
   if(mailboxBackgroundSyncInProgress){
     state.style.color='var(--color-primary-strong)';
     state.textContent=`Mailbox ${providerLabel} collegata · aggiornamento in corso...`;
@@ -2613,6 +2620,7 @@ function updateStatsPage(){document.getElementById('stat-total-tasks').textConte
 async function connectMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const state=`${getInboxStatePrefix()}${currentUser.id}:${Date.now()}`;sessionStorage.setItem('filo_inbox_oauth_state',state);sessionStorage.setItem(POST_OAUTH_PAGE_KEY,'inbox');saveNotesToCache();const mailboxAuth=await requestMailboxConnectUrl(currentUser.id,state);const authUrl=typeof mailboxAuth==='string'?mailboxAuth:mailboxAuth?.authUrl;const redirectUri=typeof mailboxAuth==='object'&&mailboxAuth?.redirectUri?mailboxAuth.redirectUri:getInboxConnectRedirectUri();if(!authUrl)throw new Error('URL autorizzazione mailbox non disponibile');sessionStorage.setItem(MAILBOX_REDIRECT_URI_KEY,redirectUri);window.location.assign(authUrl);}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento mailbox:',reason,err);mailboxConnectionError=`Connessione mailbox non riuscita: ${reason}`;showError(mailboxConnectionError);mailboxSyncInProgress=false;renderInboxControls();}}
 async function connectOtherMailbox(){if(!currentUser?.id||mailboxSyncInProgress)return;const config=await collectOtherMailboxConfig();if(!config)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{await requestOtherMailboxConnect(config);setInboxConnectionState(true,null,'imap_smtp');clearInboxMessages();showSuccess('Mailbox collegata. Premi "Sincronizza" per importare i messaggi.');}catch(err){const reason=err?.message?String(err.message):'errore sconosciuto';console.warn('Errore collegamento altra mailbox:',reason,err);mailboxConnectionError=`Connessione altra email non riuscita: ${reason}`;showError(mailboxConnectionError);}finally{mailboxSyncInProgress=false;renderAll();}}
 async function syncMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress)return;mailboxSyncInProgress=true;renderInboxControls();try{const endpoint=mailboxProvider==='imap_smtp'?'/api/v1/inbox/imap/sync':'/api/v1/inbox/google/sync';const res=await fetchApi(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`POST ${endpoint} fallita (${res.status}): ${txt}`);}const payload=await res.json();const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();setInboxConnectionState(true,syncedAt,mailboxProvider||'google');await loadInboxMessages();}catch(err){console.warn('Errore sync mailbox:',err);if(currentUser?.id){if(isMailboxAuthExpiredError(err)){markMailboxReconnectRequired();}else{mailboxConnectionError='Sincronizzazione mailbox non riuscita.';}}}finally{mailboxSyncInProgress=false;renderAll();}}
+async function disconnectMailbox(){if(!currentUser?.id||!mailboxConnected||mailboxSyncInProgress||mailboxBackgroundSyncInProgress)return;const ok=window.confirm('Vuoi scollegare questa mailbox da Filo? Le credenziali e i messaggi sincronizzati verranno eliminati per rispettare la tua privacy.');if(!ok)return;mailboxConnectionError='';mailboxSyncInProgress=true;renderInboxControls();try{const res=await fetchApi('/api/v1/inbox/account',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})});if(!res.ok){const txt=await res.text();throw new Error(`DELETE /inbox/account fallita (${res.status}): ${txt}`);}setInboxConnectionState(false,null);closeInboxMessage();showSuccess('Mailbox scollegata. Messaggi sincronizzati eliminati da Filo.');}catch(err){console.warn('Errore scollegamento mailbox:',err);mailboxConnectionError='Scollegamento mailbox non riuscito. Riprova.';showError(mailboxConnectionError);}finally{mailboxSyncInProgress=false;renderAll();}}
 async function connectCalendar(){
   if(!currentUser?.id||calendarSyncInProgress)return;
   if(!isUuid(currentUser.id)){

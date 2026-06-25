@@ -1052,6 +1052,34 @@ export async function getInboxStatus(userId, authEmail) {
   };
 }
 
+export async function disconnectInboxAccount(userId) {
+  await ensureInboxSchema();
+
+  const { rows: messageRows } = await query(
+    `
+      SELECT COUNT(*)::int AS count
+      FROM inbox_messages m
+      JOIN inbox_accounts a ON a.id = m.account_id
+      WHERE a.user_id = $1
+    `,
+    [userId]
+  );
+
+  const { rowCount } = await query(
+    `
+      DELETE FROM inbox_accounts
+      WHERE user_id = $1
+    `,
+    [userId]
+  );
+
+  return {
+    disconnected: rowCount > 0,
+    deletedAccounts: rowCount,
+    deletedMessages: messageRows[0]?.count ?? 0
+  };
+}
+
 export async function syncGoogleInbox(userId, authEmail) {
   await ensureInboxSchema();
 
