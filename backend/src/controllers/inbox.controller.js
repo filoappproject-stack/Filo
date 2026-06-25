@@ -3,6 +3,7 @@ import { HttpError } from '../utils/httpError.js';
 import {
   buildGoogleAuthUrl,
   connectImapInboxAndSync,
+  disconnectInboxAccount,
   exchangeGoogleCodeAndSync,
   getInboxStatus,
   getGoogleInboxStatus,
@@ -125,6 +126,17 @@ export async function getInboxConnectionStatus(req, res) {
   const status = await getInboxStatus(parsed.data.userId, getAuthenticatedEmail(req));
   res.set('Cache-Control', 'no-store');
   res.json({ data: status });
+}
+
+export async function deleteInboxConnection(req, res) {
+  const parsed = SyncSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Payload scollegamento inbox non valido');
+  }
+
+  const result = await disconnectInboxAccount(parsed.data.userId);
+  res.set('Cache-Control', 'no-store');
+  res.json({ data: result });
 }
 
 export async function postImapConnect(req, res) {

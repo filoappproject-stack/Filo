@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  deleteInboxConnection,
   getGoogleConnectUrl,
   getGoogleInboxConnectionStatus,
   getInboxConnectionStatus,
@@ -22,5 +23,6 @@ router.post('/imap/connect', asyncHandler(postImapConnect));
 router.post('/imap/sync', asyncHandler(postImapSync));
 router.get('/status', asyncHandler(getInboxConnectionStatus));
 router.get('/messages', asyncHandler(getInboxMessages));
+router.delete('/account', asyncHandler(deleteInboxConnection));
 
 export default router;
