@@ -2108,10 +2108,10 @@ function renderMemoryPage(){
 }
 
 // ── NAVIGAZIONE ───────────────────────────────────────────────────────────────
-const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],settimana:["Settimana","Quanto e piena la mia settimana?"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox email","0 messaggi · 0 non letti"],task:["Task",""],note:["Note",""],quickcheck:["Filo Quick Check","Diagnosi del tuo flusso operativo"],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
+const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],settimana:["Settimana","Quanto sono pieni i prossimi 7 giorni?"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox email","0 messaggi · 0 non letti"],task:["Task",""],note:["Note",""],quickcheck:["Filo Quick Check","Diagnosi del tuo flusso operativo"],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
 const HELP_CONTENT={
   suggerimenti:{title:"Prossime azioni",intro:"Qui Filo trasforma agenda, sospesi, energia e vincoli in poche azioni ordinate. È il punto da cui partire quando non sai cosa fare per primo.",steps:["Compila agenda, sospesi, disponibilità e focus del giorno.","Premi Analizza la mia giornata.","Trasforma le azioni utili in task o avvia un focus sprint."],tip:"Più contesto dai, più Filo riesce a distinguere urgenze vere, lavoro profondo e attività rimandabili."},
-  settimana:{title:"Settimana",intro:"Qui Filo legge il carico dei prossimi giorni e ti mostra quanto spazio resta tra eventi, riunioni e finestre libere.",steps:["Collega Google Calendar se non e ancora attivo.","Apri Settimana per caricare gli eventi da lunedi a domenica.","Usa giorni pesanti e leggeri per decidere dove proteggere focus o recupero."],tip:"La vista stima il carico dagli eventi con orario. Gli eventi all-day contano come contesto, ma non consumano ore occupate."},
+  settimana:{title:"Settimana",intro:"Qui Filo legge il carico dei prossimi 7 giorni e ti mostra quanto spazio resta tra eventi, riunioni e finestre libere.",steps:["Collega Google Calendar se non e ancora attivo.","Apri Settimana per caricare gli eventi da oggi ai prossimi 7 giorni.","Usa giorni pesanti e leggeri per decidere dove proteggere focus o recupero."],tip:"La vista stima il carico dagli eventi con orario. Gli eventi all-day contano come contesto, ma non consumano ore occupate."},
   calendario:{title:"Calendario",intro:"Qui convivono gli eventi Google Calendar e i blocchi Filo. Gli eventi sono impegni reali; i blocchi Filo sono una struttura consigliata per usare meglio il tempo libero.",steps:["Collega Google Calendar per vedere gli eventi reali.","Scegli un template se vuoi dare un ritmo alla giornata o alla settimana.","Premi Applica blocchi per vedere il piano e Crea task di partenza per aggiungere le azioni consigliate alla sezione Task."],tip:"I template non modificano Google Calendar: servono a orientare la giornata e possono convivere con gli eventi importati."},
   inbox:{title:"Inbox email",intro:"Qui Filo raccoglie i messaggi collegati alla mailbox. L'obiettivo non è leggere tutto, ma capire quali comunicazioni richiedono una prossima azione.",steps:["Collega la mailbox.","Sincronizza quando vuoi aggiornare i messaggi.","Apri i messaggi rilevanti e trasformali mentalmente in task se richiedono follow-up."],tip:"Slack è previsto, ma per ora Filo mantiene la promessa operativa sulla mailbox collegata."},
   task:{title:"Task",intro:"Qui tieni le cose da fare in forma operativa. Lista e Board mostrano gli stessi task con due modi diversi di leggerli.",steps:["Usa Lista quando vuoi scorrere velocemente le attività.","Usa Board per distinguere Todo, In progress e Done.","Aggiungi promemoria e ricorrenze solo ai task che devono davvero tornare."],tip:"Un task utile dovrebbe iniziare con un verbo: chiamare, preparare, approvare, rivedere, inviare."},
@@ -2356,11 +2356,8 @@ function renderCalendar(){
     document.getElementById('page-sub').textContent=PAGE_META.calendario[1];
   }
 }
-function getWeekStart(date=new Date()){
+function getNextSevenDaysStart(date=new Date()){
   const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());
-  const day=d.getDay();
-  const diff=day===0?-6:1-day;
-  d.setDate(d.getDate()+diff);
   return d;
 }
 function formatWeekDayLabel(date){
@@ -2384,7 +2381,7 @@ function getWeekEventBusyMs(ev,dayStart){
   return Math.max(0,clippedEnd-clippedStart);
 }
 function buildWeekLoadModel(){
-  const start=getWeekStart();
+  const start=getNextSevenDaysStart();
   const days=Array.from({length:7},(_,idx)=>{
     const date=new Date(start.getTime()+idx*24*60*60*1000);
     return {date,label:formatWeekDayLabel(date),events:[],allDay:0,busyMs:0};
@@ -2399,7 +2396,7 @@ function buildWeekLoadModel(){
     days.forEach(day=>{
       const dayEnd=new Date(day.date.getTime()+24*60*60*1000);
       const overlaps=ev.allDay
-        ? evStart<dayEnd&&(evEnd||evStart)>=day.date
+        ? evStart<dayEnd&&(evEnd||evStart)>day.date
         : getWeekEventBusyMs(ev,day.date)>0;
       if(!overlaps)return;
       day.events.push(ev);
@@ -2425,11 +2422,11 @@ function renderWeekControls(){
   const refresh=document.getElementById('week-refresh-btn');
   const sub=document.getElementById('week-load-sub');
   if(connect)connect.style.display=calendarConnected?'none':'';
-  if(refresh){refresh.style.display=calendarConnected?'':'';refresh.disabled=weekEventsLoading;refresh.textContent=weekEventsLoading?'Aggiorno...':'Aggiorna settimana';}
+  if(refresh){refresh.style.display=calendarConnected?'':'';refresh.disabled=weekEventsLoading;refresh.textContent=weekEventsLoading?'Aggiorno...':'Aggiorna 7 giorni';}
   if(sub){
-    if(weekEventsLoading)sub.textContent='Sto leggendo gli eventi Google Calendar di questa settimana.';
+    if(weekEventsLoading)sub.textContent='Sto leggendo gli eventi Google Calendar dei prossimi 7 giorni.';
     else if(weekEventsError)sub.textContent=weekEventsError;
-    else sub.textContent=calendarConnected?'Una lettura rapida di eventi, finestre libere e giorni piu carichi.':'Collega Google Calendar per vedere il carico reale della settimana.';
+    else sub.textContent=calendarConnected?'Una lettura rapida di eventi, finestre libere e giorni piu carichi.':'Collega Google Calendar per vedere il carico reale dei prossimi 7 giorni.';
   }
 }
 function renderWeekOverview(){
@@ -2440,13 +2437,13 @@ function renderWeekOverview(){
   if(!summary||!grid||!insights)return;
   if(!calendarConnected){
     summary.innerHTML='';
-    grid.innerHTML='<div class="empty-state week-empty"><div class="empty-title">Google Calendar non collegato</div><div class="empty-sub">La vista Settimana usa gli eventi collegati per stimare giorni pieni, leggeri e finestre libere.</div></div>';
+    grid.innerHTML='<div class="empty-state week-empty"><div class="empty-title">Google Calendar non collegato</div><div class="empty-sub">La vista Settimana usa gli eventi collegati per stimare giorni pieni, leggeri e finestre libere nei prossimi 7 giorni.</div></div>';
     insights.innerHTML='<div class="empty-sub">Appena colleghi il calendario, Filo mostrera il giorno piu pieno, il giorno piu leggero e il tempo gia occupato.</div>';
     return;
   }
   if(weekEventsLoading){
     summary.innerHTML='';
-    grid.innerHTML='<div class="empty-state week-empty"><div class="empty-title">Carico la settimana...</div><div class="empty-sub">Recupero gli eventi da Google Calendar.</div></div>';
+    grid.innerHTML='<div class="empty-state week-empty"><div class="empty-title">Carico i prossimi 7 giorni...</div><div class="empty-sub">Recupero gli eventi da Google Calendar.</div></div>';
     insights.innerHTML='';
     return;
   }
@@ -2463,7 +2460,7 @@ function renderWeekOverview(){
   const freeWindows=model.days.filter(day=>day.freeHours>=2).length;
   summary.innerHTML=[
     ['Ore occupate',formatWeekHours(totalHours),'su una base di 8h al giorno'],
-    ['Eventi',String(totalEvents),'in questa settimana'],
+    ['Eventi',String(totalEvents),'nei prossimi 7 giorni'],
     ['Giorni pesanti',String(heavyDays),'sopra 6h occupate'],
     ['Giorni leggeri',String(freeWindows),'almeno 2h libere']
   ].map(([label,value,delta])=>`<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div><div class="stat-delta">${delta}</div></div>`).join('');
@@ -2501,9 +2498,9 @@ async function loadWeekEvents(force=false){
   weekEventsError='';
   renderWeekOverview();
   try{
-    const from=getWeekStart();
+    const from=getNextSevenDaysStart();
     const to=new Date(from.getTime()+7*24*60*60*1000);
-    weekEvents=await fetchCalendarEventsRange(from,to,300);
+    weekEvents=await fetchCalendarEventsRange(from,to,250);
   }catch(err){
     console.warn('Errore caricamento settimana:',err);
     weekEventsError='Non riesco a caricare la settimana. Prova a sincronizzare il calendario.';
