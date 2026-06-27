@@ -154,7 +154,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-bg);color
 .week-load-sub{font-size:12px;color:var(--color-muted-strong);line-height:1.45;}
 .week-load-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
 .week-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px;}
-.week-load-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin-bottom:14px;}
+.week-load-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;}
 .week-day-card{background:var(--color-surface);border:1px solid rgba(0,0,0,0.07);border-radius:12px;padding:12px;min-height:230px;display:flex;flex-direction:column;gap:8px;}
 .week-day-card.heavy{border-color:rgba(230,126,34,0.34);}.week-day-card.free{background:#FCFBF7;}
 .week-day-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-height:24px;}
