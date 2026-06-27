@@ -2382,6 +2382,28 @@ function isWeekendDate(date){
   const day=date.getDay();
   return day===0||day===6;
 }
+function getLocalDateKey(date){
+  if(!(date instanceof Date)||Number.isNaN(date.getTime()))return '';
+  const y=date.getFullYear();
+  const m=String(date.getMonth()+1).padStart(2,'0');
+  const d=String(date.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
+function getAllDayBoundaryKey(value){
+  if(!value)return '';
+  const raw=String(value);
+  const match=raw.match(/^\d{4}-\d{2}-\d{2}/);
+  if(match)return match[0];
+  return getLocalDateKey(new Date(raw));
+}
+function allDayEventIncludesDay(ev,dayDate){
+  const dayKey=getLocalDateKey(dayDate);
+  const startKey=getAllDayBoundaryKey(ev?.startsAt);
+  const endKey=getAllDayBoundaryKey(ev?.endsAt);
+  if(!dayKey||!startKey)return false;
+  if(!endKey)return dayKey===startKey;
+  return dayKey>=startKey&&dayKey<endKey;
+}
 function formatWeekDayLabel(date){
   return date.toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'2-digit'});
 }
@@ -2416,9 +2438,8 @@ function buildWeekLoadModel(){
     if(evEnd&&evEnd<start)continue;
     if(evStart>=end)continue;
     days.forEach(day=>{
-      const dayEnd=new Date(day.date.getTime()+24*60*60*1000);
       const overlaps=ev.allDay
-        ? evStart<dayEnd&&(evEnd||evStart)>day.date
+        ? allDayEventIncludesDay(ev,day.date)
         : getWeekEventBusyMs(ev,day.date)>0;
       if(!overlaps)return;
       day.events.push(ev);
@@ -2496,7 +2517,9 @@ function renderWeekOverview(){
   grid.innerHTML=model.days.map(day=>{
     const [level,levelClass]=weekLoadLevel(day);
     const height=Math.max(8,Math.round(day.loadRatio*100));
-    const topEvents=day.events.slice(0,3).map(ev=>escapeHtml(ev.title||'(Senza titolo)')).join(', ');
+    const visibleEvents=day.events.slice(0,4).map(ev=>escapeHtml(ev.title||'(Senza titolo)'));
+    const hiddenEvents=day.events.length-visibleEvents.length;
+    const topEvents=[...visibleEvents,hiddenEvents>0?escapeHtml(`+${hiddenEvents} altri`):''].filter(Boolean).join(', ');
     return `<div class="week-day-card ${levelClass}">
       <div class="week-day-head"><div class="week-day-label">${escapeHtml(day.label)}</div><span class="badge ${levelClass==='heavy'?'b-alta':levelClass==='medium'?'b-normale':levelClass==='light'?'b-green':'b-bassa'}">${level}</span></div>
       <div class="week-meter" aria-label="${escapeHtml(day.label)} ${escapeHtml(formatWeekHours(day.busyHours))} occupate"><div class="week-meter-fill" style="height:${height}%"></div></div>
