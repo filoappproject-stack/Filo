@@ -912,7 +912,7 @@ let notes=[];
 let nextNoteId=100;
 let currentNoteId=null;
 let inboxSelectedId=null;
-let prefs={checkin:true,memoria:true,ai:true,celebrations:true,colorSet:'classic'};
+let prefs={checkin:true,memoria:true,ai:true,celebrations:true,weekends:true,colorSet:'classic'};
 let todayEnergy=null,todaySleep=null,todayStress=3;
 let activeSessionUserId=null;
 const ANALYZE_MIN_INTERVAL_MS=60000;
@@ -2360,6 +2360,28 @@ function getNextSevenDaysStart(date=new Date()){
   const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());
   return d;
 }
+function shouldShowWeekends(){
+  return prefs?.weekends!==false;
+}
+function getWeekViewCopy(){
+  return shouldShowWeekends()
+    ? {
+        title:'Quanto sono pieni i prossimi 7 giorni?',
+        sub:'Una lettura rapida di eventi, finestre libere e giorni più carichi.',
+        empty:'La vista Settimana usa gli eventi collegati per stimare giorni pieni, leggeri e finestre libere nei prossimi 7 giorni.',
+        eventDelta:'nei prossimi 7 giorni'
+      }
+    : {
+        title:'Quanto sono pieni i prossimi giorni lavorativi?',
+        sub:'Sabato e domenica sono nascosti: qui vedi solo il carico lunedì-venerdì.',
+        empty:'La vista Settimana usa gli eventi collegati per stimare giorni pieni, leggeri e finestre libere nei prossimi giorni lavorativi.',
+        eventDelta:'nei giorni lavorativi visibili'
+      };
+}
+function isWeekendDate(date){
+  const day=date.getDay();
+  return day===0||day===6;
+}
 function formatWeekDayLabel(date){
   return date.toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'2-digit'});
 }
@@ -2385,7 +2407,7 @@ function buildWeekLoadModel(){
   const days=Array.from({length:7},(_,idx)=>{
     const date=new Date(start.getTime()+idx*24*60*60*1000);
     return {date,label:formatWeekDayLabel(date),events:[],allDay:0,busyMs:0};
-  });
+  }).filter(day=>shouldShowWeekends()||!isWeekendDate(day.date));
   const end=new Date(start.getTime()+7*24*60*60*1000);
   for(const ev of weekEvents){
     const evStart=ev?.startsAt?new Date(ev.startsAt):null;
@@ -2421,23 +2443,30 @@ function renderWeekControls(){
   const connect=document.getElementById('week-connect-btn');
   const refresh=document.getElementById('week-refresh-btn');
   const sub=document.getElementById('week-load-sub');
+  const title=document.querySelector('#page-settimana .week-load-title');
+  const copy=getWeekViewCopy();
+  if(title)title.textContent=copy.title;
   if(connect)connect.style.display=calendarConnected?'none':'';
   if(refresh){refresh.style.display=calendarConnected?'':'';refresh.disabled=weekEventsLoading;refresh.textContent=weekEventsLoading?'Aggiorno...':'Aggiorna 7 giorni';}
   if(sub){
     if(weekEventsLoading)sub.textContent='Sto leggendo gli eventi Google Calendar dei prossimi 7 giorni.';
     else if(weekEventsError)sub.textContent=weekEventsError;
-    else sub.textContent=calendarConnected?'Una lettura rapida di eventi, finestre libere e giorni più carichi.':'Collega Google Calendar per vedere il carico reale dei prossimi 7 giorni.';
+    else sub.textContent=calendarConnected?copy.sub:'Collega Google Calendar per vedere il carico reale dei prossimi giorni.';
   }
 }
 function renderWeekOverview(){
   renderWeekControls();
+  const copy=getWeekViewCopy();
   const summary=document.getElementById('week-summary-grid');
   const grid=document.getElementById('week-load-grid');
   const insights=document.getElementById('week-insights');
   if(!summary||!grid||!insights)return;
+  if(document.getElementById('page-settimana')?.classList.contains('active')){
+    document.getElementById('page-sub').textContent=copy.title;
+  }
   if(!calendarConnected){
     summary.innerHTML='';
-    grid.innerHTML='<div class="empty-state week-empty"><div class="empty-title">Google Calendar non collegato</div><div class="empty-sub">La vista Settimana usa gli eventi collegati per stimare giorni pieni, leggeri e finestre libere nei prossimi 7 giorni.</div></div>';
+    grid.innerHTML=`<div class="empty-state week-empty"><div class="empty-title">Google Calendar non collegato</div><div class="empty-sub">${escapeHtml(copy.empty)}</div></div>`;
     insights.innerHTML='<div class="empty-sub">Appena colleghi il calendario, Filo mostrerà il giorno più pieno, il giorno più leggero e il tempo già occupato.</div>';
     return;
   }
@@ -2460,7 +2489,7 @@ function renderWeekOverview(){
   const freeWindows=model.days.filter(day=>day.freeHours>=2).length;
   summary.innerHTML=[
     ['Ore occupate',formatWeekHours(totalHours),'su una base di 8h al giorno'],
-    ['Eventi',String(totalEvents),'nei prossimi 7 giorni'],
+    ['Eventi',String(totalEvents),copy.eventDelta],
     ['Giorni pesanti',String(heavyDays),'sopra 6h occupate'],
     ['Giorni leggeri',String(freeWindows),'almeno 2h libere']
   ].map(([label,value,delta])=>`<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div><div class="stat-delta">${delta}</div></div>`).join('');
@@ -3468,7 +3497,7 @@ function doSearch(q){const el=document.getElementById('search-results');if(!q.tr
 // â”€â”€ IMPOSTAZIONI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function toggleEditProfile(){const v=document.getElementById('profile-view');const f=document.getElementById('profile-form');const b=document.getElementById('edit-profile-btn');const editing=f.style.display!=='none';v.style.display=editing?'':'none';f.style.display=editing?'none':'';b.textContent=editing?'Modifica':'Annulla';}
 function saveProfile(){const name=document.getElementById('pf-name').value.trim();document.getElementById('pv-name').textContent=name;document.getElementById('profile-name-disp').textContent=name;const ini=name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();document.getElementById('profile-av-big').textContent=ini;document.getElementById('sidebar-initials').textContent=ini;document.getElementById('sidebar-name').textContent=name;toggleEditProfile();}
-function togglePref(key){prefs[key]=!prefs[key];const on=prefs[key];document.getElementById('toggle-'+key).style.background=on?'var(--color-primary)':'#D0CCC6';document.getElementById('knob-'+key).style.left=on?'19px':'3px';savePrefs();}
+function togglePref(key){prefs[key]=!prefs[key];const on=prefs[key];document.getElementById('toggle-'+key).style.background=on?'var(--color-primary)':'#D0CCC6';document.getElementById('knob-'+key).style.left=on?'19px':'3px';savePrefs();if(key==='weekends')renderWeekOverview();}
 
 function savePrefs(){try{localStorage.setItem('filo_prefs',JSON.stringify(prefs));}catch(e){}}
 function normalizeColorSet(value){return value==='salvia'?'salvia':'classic';}
