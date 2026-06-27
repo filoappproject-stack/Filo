@@ -146,6 +146,10 @@
       Prossime azioni
       <span class="nav-badge nb-green" id="nb-sugg" style="display:none">0</span>
     </div>
+    <div class="nav-item" onclick="showPage('settimana',this)">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2" width="12" height="11.5" rx="2"/><line x1="1.5" y1="5.2" x2="13.5" y2="5.2"/><path d="M4.2 8.5v2.5M7.5 7.2V11M10.8 9.4V11"/></svg>
+      Settimana
+    </div>
     <div class="nav-sec">Fonti</div>
     <div class="nav-item" onclick="showPage('calendario',this)">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="2" width="13" height="12" rx="2"/><line x1="1" y1="6" x2="14" y2="6"/><line x1="5" y1="1" x2="5" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/></svg>
@@ -284,6 +288,26 @@
             <div class="empty-title">Nessun suggerimento ancora</div>
             <div class="empty-sub">Scrivi cosa hai oggi: Filo ti restituisce 3-5 azioni prioritarie con il perché.</div>
           </div>
+        </div>
+      </div>
+
+      <!-- SETTIMANA -->
+      <div id="page-settimana" class="page">
+        <div class="week-load-card">
+          <div>
+            <div class="week-load-title">Quanto e piena la mia settimana?</div>
+            <div class="week-load-sub" id="week-load-sub">Una lettura rapida di eventi, finestre libere e giorni piu carichi.</div>
+          </div>
+          <div class="week-load-actions">
+            <button class="btn-ghost" id="week-connect-btn" onclick="connectCalendar()">Collega Google Calendar</button>
+            <button class="btn-primary" id="week-refresh-btn" onclick="loadWeekEvents(true)" style="display:none;">Aggiorna settimana</button>
+          </div>
+        </div>
+        <div class="week-summary-grid" id="week-summary-grid"></div>
+        <div class="week-load-grid" id="week-load-grid"></div>
+        <div class="card" id="week-insights-card">
+          <div class="sec-label">Insight</div>
+          <div id="week-insights"></div>
         </div>
       </div>
 
