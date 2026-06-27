@@ -636,6 +636,8 @@ async function tryHandleCalendarOauthCallback() {
     setCalendarDiagnostic('OK','account collegato');
     try{
       await loadCalendarEvents();
+      weekEvents=[];
+      if(document.getElementById('page-settimana')?.classList.contains('active'))loadWeekEvents(true);
     }catch(loadErr){
       console.warn('Exchange calendario completato ma fetch eventi fallito:',loadErr);
       setCalendarDiagnostic('OK','collegato (fetch eventi non riuscito)');
@@ -899,6 +901,9 @@ let calendarLastSync=null;
 let calendarSyncInProgress=false;
 let calendarConnectionError='';
 let calendarEvents=[];
+let weekEvents=[];
+let weekEventsLoading=false;
+let weekEventsError='';
 let templateEvents=[];
 let selectedTemplateId='focus';
 let calendarDiagnosticStatus='--';
@@ -1516,7 +1521,7 @@ function markCalendarReconnectRequired(userIdOverride=null){
 async function loadInboxMessages(limit=50){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/messages?userId=${encodeURIComponent(currentUser.id)}&limit=${limit}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/messages fallita (${res.status}): ${txt}`);}const payload=await res.json();const messages=Array.isArray(payload?.data)?payload.data:[];INBOX.length=0;messages.forEach(msg=>INBOX.push(mapInboxMessageToUi(msg)));saveInboxToCache();}
 async function loadInboxStatus(){if(!currentUser?.id)return;const res=await fetchApi(`/api/v1/inbox/status?userId=${encodeURIComponent(currentUser.id)}`);if(!res.ok){const txt=await res.text();throw new Error(`GET /inbox/status fallita (${res.status}): ${txt}`);}const payload=await res.json();const data=payload?.data||{};setInboxConnectionState(!!data.connected,data.last_synced_at||null,data.provider||null,data.provider_email||null);}
 function setInboxConnectionState(connected,lastSyncedAt,provider=null,providerEmail=null){mailboxConnected=!!connected;mailboxProvider=connected?provider:null;mailboxProviderEmail=connected&&providerEmail?String(providerEmail).trim():null;mailboxLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected){mailboxConnectionError='';return;}mailboxProviderEmail=null;clearInboxMessages();removeInboxFromCache();}
-function setCalendarConnectionState(connected,lastSyncedAt){calendarConnected=!!connected;calendarLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)calendarConnectionError='';saveCalendarToCache();}
+function setCalendarConnectionState(connected,lastSyncedAt){calendarConnected=!!connected;calendarLastSync=lastSyncedAt?new Date(lastSyncedAt).getTime():null;if(connected)calendarConnectionError='';else{weekEvents=[];weekEventsError='';weekEventsLoading=false;}saveCalendarToCache();}
 function mapCalendarEventToUi(item){
   const startRaw=item?.starts_at||item?.start;
   const endRaw=item?.ends_at||item?.end;
@@ -1576,17 +1581,21 @@ function openCalendarEventModal(id){
   }
   modal.style.display='flex';
 }
-async function loadCalendarEvents(limit=100){
+async function fetchCalendarEventsRange(from,to,limit=100){
   if(!currentUser?.id)return;
-  const now=new Date();
-  const from=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  const to=new Date(from.getTime()+24*60*60*1000);
   const qs=new URLSearchParams({userId:currentUser.id,from:from.toISOString(),to:to.toISOString(),limit:String(limit)});
   const res=await fetchApi(`/api/v1/calendar/events?${qs.toString()}`);
   if(!res.ok){const txt=await res.text().catch(()=> '');throw new Error(`GET /calendar/events fallita (${res.status}): ${txt}`);}
   const payload=await res.json();
   const events=Array.isArray(payload?.data)?payload.data:[];
-  calendarEvents=events.map(mapCalendarEventToUi);
+  return events.map(mapCalendarEventToUi);
+}
+async function loadCalendarEvents(limit=100){
+  if(!currentUser?.id)return;
+  const now=new Date();
+  const from=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const to=new Date(from.getTime()+24*60*60*1000);
+  calendarEvents=await fetchCalendarEventsRange(from,to,limit);
   saveCalendarToCache();
 }
 async function fetchCalendarApiWithFallback(paths,options={},behavior={}){
@@ -2099,9 +2108,10 @@ function renderMemoryPage(){
 }
 
 // ── NAVIGAZIONE ───────────────────────────────────────────────────────────────
-const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox email","0 messaggi · 0 non letti"],task:["Task",""],note:["Note",""],quickcheck:["Filo Quick Check","Diagnosi del tuo flusso operativo"],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
+const PAGE_META={suggerimenti:["","Dimmi cosa hai oggi, penso io all'ordine"],settimana:["Settimana","Quanto e piena la mia settimana?"],calendario:["Calendario","Collega Google Calendar per importare i tuoi eventi"],inbox:["Inbox email","0 messaggi · 0 non letti"],task:["Task",""],note:["Note",""],quickcheck:["Filo Quick Check","Diagnosi del tuo flusso operativo"],memoria:["Memoria adattiva","Pattern e storico"],ricerca:["Ricerca","Cerca in task, note e inbox"],impostazioni:["Impostazioni","Profilo e preferenze"]};
 const HELP_CONTENT={
   suggerimenti:{title:"Prossime azioni",intro:"Qui Filo trasforma agenda, sospesi, energia e vincoli in poche azioni ordinate. È il punto da cui partire quando non sai cosa fare per primo.",steps:["Compila agenda, sospesi, disponibilità e focus del giorno.","Premi Analizza la mia giornata.","Trasforma le azioni utili in task o avvia un focus sprint."],tip:"Più contesto dai, più Filo riesce a distinguere urgenze vere, lavoro profondo e attività rimandabili."},
+  settimana:{title:"Settimana",intro:"Qui Filo legge il carico dei prossimi giorni e ti mostra quanto spazio resta tra eventi, riunioni e finestre libere.",steps:["Collega Google Calendar se non e ancora attivo.","Apri Settimana per caricare gli eventi da lunedi a domenica.","Usa giorni pesanti e leggeri per decidere dove proteggere focus o recupero."],tip:"La vista stima il carico dagli eventi con orario. Gli eventi all-day contano come contesto, ma non consumano ore occupate."},
   calendario:{title:"Calendario",intro:"Qui convivono gli eventi Google Calendar e i blocchi Filo. Gli eventi sono impegni reali; i blocchi Filo sono una struttura consigliata per usare meglio il tempo libero.",steps:["Collega Google Calendar per vedere gli eventi reali.","Scegli un template se vuoi dare un ritmo alla giornata o alla settimana.","Premi Applica blocchi per vedere il piano e Crea task di partenza per aggiungere le azioni consigliate alla sezione Task."],tip:"I template non modificano Google Calendar: servono a orientare la giornata e possono convivere con gli eventi importati."},
   inbox:{title:"Inbox email",intro:"Qui Filo raccoglie i messaggi collegati alla mailbox. L'obiettivo non è leggere tutto, ma capire quali comunicazioni richiedono una prossima azione.",steps:["Collega la mailbox.","Sincronizza quando vuoi aggiornare i messaggi.","Apri i messaggi rilevanti e trasformali mentalmente in task se richiedono follow-up."],tip:"Slack è previsto, ma per ora Filo mantiene la promessa operativa sulla mailbox collegata."},
   task:{title:"Task",intro:"Qui tieni le cose da fare in forma operativa. Lista e Board mostrano gli stessi task con due modi diversi di leggerli.",steps:["Usa Lista quando vuoi scorrere velocemente le attività.","Usa Board per distinguere Todo, In progress e Done.","Aggiungi promemoria e ricorrenze solo ai task che devono davvero tornare."],tip:"Un task utile dovrebbe iniziare con un verbo: chiamare, preparare, approvare, rivedere, inviare."},
@@ -2131,7 +2141,7 @@ function renderHelpPanel(){
 }
 function openHelpPanel(){renderHelpPanel();const panel=document.getElementById('help-panel-overlay');if(panel)panel.classList.add('active');}
 function closeHelpPanel(){const panel=document.getElementById('help-panel-overlay');if(panel)panel.classList.remove('active');}
-function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');if(el)el.classList.add('active');const m=PAGE_META[id];const firstName=currentUser?(currentUser.user_metadata?.full_name||currentUser.email).split(' ')[0]:'';document.getElementById('page-title').textContent=id==='suggerimenti'?'Buongiorno, '+firstName:m[0];document.getElementById('page-sub').textContent=m[1];document.getElementById('topbar-actions').innerHTML='';if(id==='task')updateTaskSubtitle();if(id==='note'){showNoteList();document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">＋ Nuova nota</button>';}if(id==='quickcheck')renderQuickCheckPage();if(id==='memoria')renderMemoryPage();if(id==='impostazioni')updateStatsPage();renderAll();renderHelpPanel();}
+function showPage(id,el){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');if(el)el.classList.add('active');const m=PAGE_META[id];const firstName=currentUser?(currentUser.user_metadata?.full_name||currentUser.email).split(' ')[0]:'';document.getElementById('page-title').textContent=id==='suggerimenti'?'Buongiorno, '+firstName:m[0];document.getElementById('page-sub').textContent=m[1];document.getElementById('topbar-actions').innerHTML='';if(id==='settimana')loadWeekEvents(false);if(id==='task')updateTaskSubtitle();if(id==='note'){showNoteList();document.getElementById('topbar-actions').innerHTML='<button class="btn-primary" onclick="openNoteEditor(null)">＋ Nuova nota</button>';}if(id==='quickcheck')renderQuickCheckPage();if(id==='memoria')renderMemoryPage();if(id==='impostazioni')updateStatsPage();renderAll();renderHelpPanel();}
 
 // â”€â”€ RENDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function tagBadge(tag,idx){const c=TAG_PALETTE[idx%TAG_PALETTE.length];return `<span style="font-size:10px;font-weight:500;padding:2px 7px;border-radius:8px;background:${c.bg};color:${c.tc};">${escapeHtml(tag)}</span>`;}
@@ -2143,7 +2153,7 @@ function ensureSingleSuggestionsContextNote(){
   if(notes.length<=1)return;
   notes.forEach((note,idx)=>{if(idx>0)note.remove();});
 }
-function renderAll(){ensureSingleSuggestionsContextNote();renderInboxControls();renderInbox();renderCalendarControls();renderTemplates();renderCalendar();renderTasks();renderNotes();updateBadges();}
+function renderAll(){ensureSingleSuggestionsContextNote();renderInboxControls();renderInbox();renderCalendarControls();renderTemplates();renderCalendar();renderWeekOverview();renderTasks();renderNotes();updateBadges();}
 function openInboxMessage(id){inboxSelectedId=id;const item=INBOX.find(i=>i.id===id);if(!item)return;if(item.unread){item.unread=false;saveInboxToCache();}const modal=document.getElementById('inbox-message-modal');const fromEl=document.getElementById('inbox-modal-from');const subjEl=document.getElementById('inbox-modal-subj');const timeEl=document.getElementById('inbox-modal-time');const bodyEl=document.getElementById('inbox-modal-body');if(fromEl)fromEl.textContent=`Da: ${item.from}`;if(subjEl)subjEl.textContent=item.subj||'(Senza oggetto)';if(timeEl)timeEl.textContent=`Ricevuta alle ${item.time||'--:--'}`;if(bodyEl)bodyEl.textContent=item.prev||'(Nessun contenuto disponibile)';if(modal)modal.style.display='flex';updateBadges();renderInbox();}
 function closeInboxMessage(){const modal=document.getElementById('inbox-message-modal');if(modal)modal.style.display='none';inboxSelectedId=null;renderInbox();}
 function renderInboxControls(){
@@ -2263,6 +2273,10 @@ function openTemplateTasksPage(){
   const item=Array.from(document.querySelectorAll('.nav-item')).find((el)=>String(el.getAttribute('onclick')||'').includes("showPage('task'"));
   showPage('task',item||null);
 }
+function openTaskPage(){
+  const item=Array.from(document.querySelectorAll('.nav-item')).find((el)=>String(el.getAttribute('onclick')||'').includes("showPage('task'"));
+  showPage('task',item||null);
+}
 function applySelectedTemplate(){
   const tpl=getEnergyAwareTemplate();
   templateEvents=tpl.blocks.map((block,idx)=>({
@@ -2340,6 +2354,162 @@ function renderCalendar(){
     const templateCount=templateEvents.length;
     PAGE_META.calendario[1]=calendarConnected?`${eventCount} eventi Google Calendar oggi${templateCount?` · ${templateCount} blocchi Filo`:''}`:(templateCount?`${templateCount} blocchi Filo applicati`:'Collega Google Calendar per importare i tuoi eventi');
     document.getElementById('page-sub').textContent=PAGE_META.calendario[1];
+  }
+}
+function getWeekStart(date=new Date()){
+  const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());
+  const day=d.getDay();
+  const diff=day===0?-6:1-day;
+  d.setDate(d.getDate()+diff);
+  return d;
+}
+function formatWeekDayLabel(date){
+  return date.toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'2-digit'});
+}
+function formatWeekHours(hours){
+  if(!Number.isFinite(hours)||hours<=0)return '0h';
+  const whole=Math.floor(hours);
+  const mins=Math.round((hours-whole)*60);
+  if(!whole)return `${mins}m`;
+  return mins?`${whole}h ${mins}m`:`${whole}h`;
+}
+function getWeekEventBusyMs(ev,dayStart){
+  if(ev?.allDay)return 0;
+  const start=ev?.startsAt?new Date(ev.startsAt):null;
+  const end=ev?.endsAt?new Date(ev.endsAt):null;
+  if(!start||!end||Number.isNaN(start.getTime())||Number.isNaN(end.getTime())||end<=start)return 0;
+  const dayEnd=new Date(dayStart.getTime()+24*60*60*1000);
+  const clippedStart=Math.max(start.getTime(),dayStart.getTime());
+  const clippedEnd=Math.min(end.getTime(),dayEnd.getTime());
+  return Math.max(0,clippedEnd-clippedStart);
+}
+function buildWeekLoadModel(){
+  const start=getWeekStart();
+  const days=Array.from({length:7},(_,idx)=>{
+    const date=new Date(start.getTime()+idx*24*60*60*1000);
+    return {date,label:formatWeekDayLabel(date),events:[],allDay:0,busyMs:0};
+  });
+  const end=new Date(start.getTime()+7*24*60*60*1000);
+  for(const ev of weekEvents){
+    const evStart=ev?.startsAt?new Date(ev.startsAt):null;
+    const evEnd=ev?.endsAt?new Date(ev.endsAt):evStart;
+    if(!evStart||Number.isNaN(evStart.getTime()))continue;
+    if(evEnd&&evEnd<start)continue;
+    if(evStart>=end)continue;
+    days.forEach(day=>{
+      const dayEnd=new Date(day.date.getTime()+24*60*60*1000);
+      const overlaps=ev.allDay
+        ? evStart<dayEnd&&(evEnd||evStart)>=day.date
+        : getWeekEventBusyMs(ev,day.date)>0;
+      if(!overlaps)return;
+      day.events.push(ev);
+      if(ev.allDay)day.allDay+=1;
+      else day.busyMs+=getWeekEventBusyMs(ev,day.date);
+    });
+  }
+  days.forEach(day=>{
+    day.busyHours=day.busyMs/(60*60*1000);
+    day.loadRatio=Math.min(1,day.busyHours/8);
+    day.freeHours=Math.max(0,8-day.busyHours);
+  });
+  return {start,end,days};
+}
+function weekLoadLevel(day){
+  if(day.busyHours>=6)return ['Pesante','heavy'];
+  if(day.busyHours>=3.5)return ['Medio','medium'];
+  if(day.busyHours>0)return ['Leggero','light'];
+  return ['Libero','free'];
+}
+function renderWeekControls(){
+  const connect=document.getElementById('week-connect-btn');
+  const refresh=document.getElementById('week-refresh-btn');
+  const sub=document.getElementById('week-load-sub');
+  if(connect)connect.style.display=calendarConnected?'none':'';
+  if(refresh){refresh.style.display=calendarConnected?'':'';refresh.disabled=weekEventsLoading;refresh.textContent=weekEventsLoading?'Aggiorno...':'Aggiorna settimana';}
+  if(sub){
+    if(weekEventsLoading)sub.textContent='Sto leggendo gli eventi Google Calendar di questa settimana.';
+    else if(weekEventsError)sub.textContent=weekEventsError;
+    else sub.textContent=calendarConnected?'Una lettura rapida di eventi, finestre libere e giorni piu carichi.':'Collega Google Calendar per vedere il carico reale della settimana.';
+  }
+}
+function renderWeekOverview(){
+  renderWeekControls();
+  const summary=document.getElementById('week-summary-grid');
+  const grid=document.getElementById('week-load-grid');
+  const insights=document.getElementById('week-insights');
+  if(!summary||!grid||!insights)return;
+  if(!calendarConnected){
+    summary.innerHTML='';
+    grid.innerHTML='<div class="empty-state week-empty"><div class="empty-title">Google Calendar non collegato</div><div class="empty-sub">La vista Settimana usa gli eventi collegati per stimare giorni pieni, leggeri e finestre libere.</div></div>';
+    insights.innerHTML='<div class="empty-sub">Appena colleghi il calendario, Filo mostrera il giorno piu pieno, il giorno piu leggero e il tempo gia occupato.</div>';
+    return;
+  }
+  if(weekEventsLoading){
+    summary.innerHTML='';
+    grid.innerHTML='<div class="empty-state week-empty"><div class="empty-title">Carico la settimana...</div><div class="empty-sub">Recupero gli eventi da Google Calendar.</div></div>';
+    insights.innerHTML='';
+    return;
+  }
+  if(weekEventsError){
+    summary.innerHTML='';
+    grid.innerHTML=`<div class="empty-state week-empty"><div class="empty-title">Settimana non disponibile</div><div class="empty-sub">${escapeHtml(weekEventsError)}</div></div>`;
+    insights.innerHTML='';
+    return;
+  }
+  const model=buildWeekLoadModel();
+  const totalHours=model.days.reduce((sum,day)=>sum+day.busyHours,0);
+  const totalEvents=model.days.reduce((sum,day)=>sum+day.events.length,0);
+  const heavyDays=model.days.filter(day=>day.busyHours>=6).length;
+  const freeWindows=model.days.filter(day=>day.freeHours>=2).length;
+  summary.innerHTML=[
+    ['Ore occupate',formatWeekHours(totalHours),'su una base di 8h al giorno'],
+    ['Eventi',String(totalEvents),'in questa settimana'],
+    ['Giorni pesanti',String(heavyDays),'sopra 6h occupate'],
+    ['Giorni leggeri',String(freeWindows),'almeno 2h libere']
+  ].map(([label,value,delta])=>`<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div><div class="stat-delta">${delta}</div></div>`).join('');
+  grid.innerHTML=model.days.map(day=>{
+    const [level,levelClass]=weekLoadLevel(day);
+    const height=Math.max(8,Math.round(day.loadRatio*100));
+    const topEvents=day.events.slice(0,3).map(ev=>escapeHtml(ev.title||'(Senza titolo)')).join(', ');
+    return `<div class="week-day-card ${levelClass}">
+      <div class="week-day-head"><div class="week-day-label">${escapeHtml(day.label)}</div><span class="badge ${levelClass==='heavy'?'b-alta':levelClass==='medium'?'b-normale':levelClass==='light'?'b-green':'b-bassa'}">${level}</span></div>
+      <div class="week-meter" aria-label="${escapeHtml(day.label)} ${escapeHtml(formatWeekHours(day.busyHours))} occupate"><div class="week-meter-fill" style="height:${height}%"></div></div>
+      <div class="week-day-hours">${escapeHtml(formatWeekHours(day.busyHours))} occupate</div>
+      <div class="week-day-free">${escapeHtml(formatWeekHours(day.freeHours))} libere stimate</div>
+      <div class="week-day-events">${day.events.length?escapeHtml(`${day.events.length} eventi${day.allDay?`, ${day.allDay} all-day`:''}`):'Nessun evento'}</div>
+      ${topEvents?`<div class="week-day-top">${topEvents}</div>`:''}
+    </div>`;
+  }).join('');
+  const busiest=model.days.reduce((best,day)=>day.busyHours>best.busyHours?day:best,model.days[0]);
+  const lightest=model.days.reduce((best,day)=>day.busyHours<best.busyHours?day:best,model.days[0]);
+  const insightRows=[
+    `${busiest.label} e il giorno piu pieno: ${formatWeekHours(busiest.busyHours)} occupate.`,
+    `${lightest.label} e il giorno piu leggero: ${formatWeekHours(lightest.freeHours)} libere stimate.`,
+    totalHours>24?'Settimana molto densa: valuta di proteggere almeno un blocco focus.':'Carico gestibile: ci sono margini per lavoro concentrato o recupero.'
+  ];
+  insights.innerHTML=insightRows.map(text=>`<div class="week-insight-row">${escapeHtml(text)}</div>`).join('');
+  if(document.getElementById('page-settimana')?.classList.contains('active')){
+    PAGE_META.settimana[1]=`${formatWeekHours(totalHours)} occupate · ${totalEvents} eventi`;
+    document.getElementById('page-sub').textContent=PAGE_META.settimana[1];
+  }
+}
+async function loadWeekEvents(force=false){
+  if(!currentUser?.id||!calendarConnected)return;
+  if(weekEventsLoading)return;
+  if(weekEvents.length&&!force){renderWeekOverview();return;}
+  weekEventsLoading=true;
+  weekEventsError='';
+  renderWeekOverview();
+  try{
+    const from=getWeekStart();
+    const to=new Date(from.getTime()+7*24*60*60*1000);
+    weekEvents=await fetchCalendarEventsRange(from,to,300);
+  }catch(err){
+    console.warn('Errore caricamento settimana:',err);
+    weekEventsError='Non riesco a caricare la settimana. Prova a sincronizzare il calendario.';
+  }finally{
+    weekEventsLoading=false;
+    renderWeekOverview();
   }
 }
 function renderTaskMeta(t){
@@ -2534,7 +2704,7 @@ function dismissTaskReminderToast(){
 function openReminderTask(){
   const id=activeReminderTaskId;
   dismissTaskReminderToast();
-  showPage('task',document.querySelectorAll('.nav-item')[3]);
+  openTaskPage();
   setTaskViewMode('list');
   if(id){
     setTimeout(()=>{
@@ -2697,6 +2867,8 @@ async function syncCalendar(){
     setCalendarConnectionState(true,syncedAt);
     await loadCalendarStatus();
     await loadCalendarEvents();
+    weekEvents=[];
+    if(document.getElementById('page-settimana')?.classList.contains('active'))await loadWeekEvents(true);
     setCalendarDiagnostic('OK','sincronizzazione completata');
   }catch(err){
     const reason=err?.message?String(err.message):'errore sconosciuto';
@@ -3237,7 +3409,7 @@ async function addTaskFromSuggestion(titolo,button=null,sourceTitle=null){
   renderTasks();
   if(button)setSuggestionTaskButtonState(button,true);
   refreshSuggestionTaskButtons();
-  showPage('task',document.querySelectorAll('.nav-item')[3]);
+  openTaskPage();
 }
 async function toggleTask(id){
   const idKey=String(id);
@@ -3460,7 +3632,7 @@ function extendFocusSession(extraMinutes=10){
 function completeFocusSession(){
   resetFocusActionButtons('completed');
   cancelFocusSession(false);
-  showPage('task',document.querySelectorAll('.nav-item')[3]);
+  openTaskPage();
 }
 function postponeFocusSession(){
   resetFocusActionButtons('postponed');
