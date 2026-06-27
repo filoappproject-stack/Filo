@@ -1533,6 +1533,7 @@ function mapCalendarEventToUi(item){
   const link=typeof item?.html_link==='string'?item.html_link.trim():'';
   return{
     id:item?.id||item?.provider_event_id||`event-${Math.random().toString(36).slice(2)}`,
+    calendarId:item?.calendar_id||item?.calendarId||'',
     title:item?.title||'(Senza titolo)',
     meta:allDay?'Tutto il giorno':(end&&start&&!Number.isNaN(end.getTime())&&!Number.isNaN(start.getTime()))?`${formatCalendarTime(start)} - ${formatCalendarTime(end)}`:formatCalendarTime(start),
     time:allDay?'--:--':formatCalendarTime(start)||'--:--',
@@ -2404,6 +2405,12 @@ function allDayEventIncludesDay(ev,dayDate){
   if(!endKey)return dayKey===startKey;
   return dayKey>=startKey&&dayKey<endKey;
 }
+function isBirthdayEvent(ev){
+  const calendarId=String(ev?.calendarId||'').toLowerCase();
+  const title=String(ev?.title||'').toLowerCase();
+  if(calendarId.includes('birthday')||calendarId.includes('contacts')||calendarId.includes('addressbook'))return true;
+  return /^compleanno\b/.test(title)||title.includes(' compleanno ')||/\bbirthday\b/.test(title);
+}
 function formatWeekDayLabel(date){
   return date.toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'2-digit'});
 }
@@ -2431,7 +2438,7 @@ function buildWeekLoadModel(){
     return {date,label:formatWeekDayLabel(date),events:[],allDay:0,busyMs:0};
   }).filter(day=>shouldShowWeekends()||!isWeekendDate(day.date));
   const end=new Date(start.getTime()+7*24*60*60*1000);
-  for(const ev of weekEvents){
+  for(const ev of weekEvents.filter(ev=>!isBirthdayEvent(ev))){
     const evStart=ev?.startsAt?new Date(ev.startsAt):null;
     const evEnd=ev?.endsAt?new Date(ev.endsAt):evStart;
     if(!evStart||Number.isNaN(evStart.getTime()))continue;

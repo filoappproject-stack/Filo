@@ -435,6 +435,7 @@ export async function listCalendarEvents(userId, options = {}) {
       SELECT
         id,
         provider_event_id,
+        calendar_id,
         title,
         description,
         starts_at,
