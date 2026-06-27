@@ -2468,9 +2468,10 @@ function renderWeekControls(){
   const copy=getWeekViewCopy();
   if(title)title.textContent=copy.title;
   if(connect)connect.style.display=calendarConnected?'none':'';
-  if(refresh){refresh.style.display=calendarConnected?'':'';refresh.disabled=weekEventsLoading;refresh.textContent=weekEventsLoading?'Aggiorno...':'Aggiorna 7 giorni';}
+  if(refresh){refresh.style.display=calendarConnected?'':'';refresh.disabled=weekEventsLoading||calendarSyncInProgress;refresh.textContent=(weekEventsLoading||calendarSyncInProgress)?'Aggiorno...':'Aggiorna da Calendar';}
   if(sub){
-    if(weekEventsLoading)sub.textContent='Sto leggendo gli eventi Google Calendar dei prossimi 7 giorni.';
+    if(calendarSyncInProgress)sub.textContent='Sincronizzo Google Calendar e aggiorno i prossimi 7 giorni.';
+    else if(weekEventsLoading)sub.textContent='Sto leggendo gli eventi Google Calendar dei prossimi 7 giorni.';
     else if(weekEventsError)sub.textContent=weekEventsError;
     else sub.textContent=calendarConnected?copy.sub:'Collega Google Calendar per vedere il carico reale dei prossimi giorni.';
   }
@@ -2559,6 +2560,60 @@ async function loadWeekEvents(force=false){
   }finally{
     weekEventsLoading=false;
     renderWeekOverview();
+  }
+}
+async function refreshWeekFromCalendar(){
+  if(!currentUser?.id){
+    weekEventsError='Sessione utente non disponibile per aggiornare il calendario.';
+    renderWeekOverview();
+    return;
+  }
+  if(!calendarConnected){
+    weekEventsError='Google Calendar non collegato.';
+    renderWeekOverview();
+    return;
+  }
+  if(calendarSyncInProgress||weekEventsLoading)return;
+  calendarSyncInProgress=true;
+  weekEventsLoading=true;
+  weekEventsError='';
+  setCalendarDiagnostic('IN CORSO','sincronizzazione calendario da Settimana');
+  renderCalendarControls();
+  renderWeekOverview();
+  try{
+    const {res,path}=await fetchCalendarApiWithFallback(
+      ['/api/v1/calendar/google/sync','/api/v1/calendar/sync'],
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id})}
+    );
+    if(!res.ok){
+      const txt=await res.text();
+      throw new Error(`POST ${path.replace('/api/v1','')} fallita (${res.status}): ${txt}`);
+    }
+    const payload=await res.json();
+    const syncedAt=payload?.data?.account?.last_synced_at||new Date().toISOString();
+    setCalendarConnectionState(true,syncedAt);
+    await loadCalendarStatus();
+    await loadCalendarEvents();
+    const from=getNextSevenDaysStart();
+    const to=new Date(from.getTime()+7*24*60*60*1000);
+    weekEvents=await fetchCalendarEventsRange(from,to,250);
+    setCalendarDiagnostic('OK','settimana aggiornata da Calendar');
+  }catch(err){
+    const reason=err?.message?String(err.message):'errore sconosciuto';
+    console.warn('Errore aggiornamento settimana da Calendar:',reason,err);
+    if(isCalendarAuthExpiredError(err)){
+      markCalendarReconnectRequired();
+      weekEvents=[];
+      weekEventsError='Sessione Google Calendar scaduta. Ricollega il calendario.';
+      setCalendarDiagnostic('KO','sessione Google Calendar scaduta');
+    }else{
+      weekEventsError=`Aggiornamento da Calendar non riuscito: ${reason}`;
+      setCalendarDiagnostic('KO',reason);
+    }
+  }finally{
+    calendarSyncInProgress=false;
+    weekEventsLoading=false;
+    renderAll();
   }
 }
 function renderTaskMeta(t){
