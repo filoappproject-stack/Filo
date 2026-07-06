@@ -760,21 +760,71 @@ function guestReset(){
   document.querySelectorAll('.guest-options button').forEach((btn)=>btn.classList.remove('active'));
   updateGuestStepUi();
 }
+function splitGuestFiloItems(raw){
+  const normalized=String(raw||'').replace(/\r/g,'\n').replace(/\s+/g,' ').trim();
+  if(!normalized)return [];
+  const prepared=normalized
+    .replace(/[,;]\s+(?=(devo|dovrei|da|prenotare|pagare|contattare|chiamare|scrivere|mandare|fare|comprare|ritirare|lubrificare)\b)/gi,'\n')
+    .replace(/\s+-\s+/g,'\n');
+  return prepared.split(/\n|\u2022|[*]/).map((item)=>item.trim().replace(/^[,.;:-]+|[,.;:-]+$/g,'')).filter(Boolean).slice(0,8);
+}
+function classifyGuestFiloItem(item){
+  const text=item.toLowerCase();
+  if(/farmacia|medic|dottor/.test(text))return {label:'Salute/famiglia',score:96,reason:'puo\' servire a qualcuno e conviene togliere subito incertezza'};
+  if(/pagare|pagamento|fattura|bolletta|condominio|scadenza|bonifico/.test(text))return {label:'Pagamento/scadenza',score:90,reason:'ha un costo se resta aperto troppo a lungo'};
+  if(/prenotare|appuntamento|tagliando|visita|calendario|scadenza/.test(text))return {label:'Prenotazione',score:82,reason:'dipende dalla disponibilita\' di altri e va messa in agenda'};
+  if(/contattare|chiamare|scrivere|rispondere|mail|email|messaggio|telefonare/.test(text))return {label:'Contatto',score:78,reason:'basta un messaggio o una telefonata per sbloccarla'};
+  if(/serratura|auto|casa|ripar|sistemare|lubrificare|manutenzione/.test(text))return {label:'Manutenzione',score:65,reason:'e\' concreta, ma puo\' stare dopo scadenze e contatti'};
+  if(/madre|mamma|padre|papa|suocera|suocero|figli|famiglia/.test(text))return {label:'Cura/famiglia',score:70,reason:'coinvolge altre persone e va trasformata in un impegno chiaro'};
+  return {label:'Da chiarire',score:55,reason:'va trasformata in una prossima azione esplicita'};
+}
+function buildGuestAction(item,category){
+  const clean=item.replace(/^devo\s+/i,'').trim();
+  if(category.label==='Pagamento/scadenza')return `Apri il pagamento e chiudilo o metti una scadenza precisa: ${clean}.`;
+  if(category.label==='Prenotazione')return `Prenota o blocca uno slot in calendario: ${clean}.`;
+  if(category.label==='Contatto')return `Invia il primo messaggio o fai la chiamata: ${clean}.`;
+  if(category.label==='Salute/famiglia'||category.label==='Cura/famiglia')return `Parti da questa, perche' riguarda qualcuno oltre te: ${clean}.`;
+  if(category.label==='Manutenzione')return `Trasformala in una micro-azione da 10 minuti: ${clean}.`;
+  return `Definisci il prossimo gesto fisico per: ${clean}.`;
+}
 function buildGuestFilo(raw){
   const clean=String(raw||'').trim();
   const words=clean.split(/\s+/).filter(Boolean);
-  const titleBase=guestFiloState.kind||'Il mio Filo';
-  const summary=clean.length>150?`${clean.slice(0,150).trim()}...`:clean;
-  const nextAction=guestFiloState.kind==='Una decisione da prendere'
-    ? 'Scrivi le due opzioni e il costo di non decidere entro questa settimana.'
-    : guestFiloState.kind==='Un progetto'
-      ? 'Scegli il prossimo passo visibile e la persona o risorsa che lo sblocca.'
-      : 'Rileggi la traccia e scegli una sola azione piccola da fare oggi.';
-  return {title:`${titleBase}: prima traccia`,context:summary||'Hai iniziato da un punto ancora aperto. Questo Filo serve a renderlo piu\' leggibile.',nodes:[`Punto di partenza: ${guestFiloState.source||'materiale iniziale'}.`,`Tema centrale: ${titleBase.toLowerCase()}.`,`Prossima azione: ${nextAction}`],note:[`Tipo: ${guestFiloState.kind||'Non specificato'}`,`Partenza: ${guestFiloState.source||'Non specificata'}`,`Materiale iniziale (${words.length} parole):`,clean,'','Traccia:',`- ${nextAction}`].join('\n')};
+  const items=splitGuestFiloItems(clean);
+  const analyzed=(items.length?items:[clean]).map((item)=>{const category=classifyGuestFiloItem(item);return {item,category,action:buildGuestAction(item,category)};}).sort((a,b)=>b.category.score-a.category.score);
+  const grouped=analyzed.reduce((acc,entry)=>{acc[entry.category.label]=(acc[entry.category.label]||0)+1;return acc;},{});
+  const groupText=Object.entries(grouped).map(([label,count])=>`${count} ${label.toLowerCase()}`).join(', ');
+  const first=analyzed[0];
+  const title=analyzed.length>1?`Mini piano: ${analyzed.length} cose da chiudere`:`Prossima azione: ${first.category.label.toLowerCase()}`;
+  const summary=analyzed.length>1
+    ? `Hai inserito ${analyzed.length} sospesi. Filo li ha separati in ${groupText} e li ha messi in un ordine d'azione.`
+    : `Hai inserito un sospeso. Filo lo ha trasformato in una prossima azione piu' chiara.`;
+  const plan=analyzed.map((entry,idx)=>({rank:idx+1,item:entry.item,category:entry.category.label,reason:entry.category.reason,action:entry.action}));
+  const quickWins=plan.filter((entry)=>/Contatto|Manutenzione/.test(entry.category)).slice(0,2);
+  const noteLines=[
+    title,
+    '',
+    summary,
+    '',
+    'Ordine consigliato:',
+    ...plan.map((entry)=>`${entry.rank}. ${entry.item} [${entry.category}] - ${entry.action}`),
+    '',
+    `Prima cosa da fare: ${first.action}`,
+    '',
+    `Materiale iniziale (${words.length} parole):`,
+    clean
+  ];
+  return {title,summary,firstAction:first.action,plan,quickWins,note:noteLines.join('\n')};
 }
 function renderGuestResult(result){
   const el=document.getElementById('guest-result');if(!el)return;
-  el.innerHTML=[`<div class="guest-result-block"><div class="guest-result-label">Titolo</div><div class="guest-result-title">${escapeHtml(result.title)}</div></div>`,`<div class="guest-result-block"><div class="guest-result-label">Contesto</div><div>${escapeHtml(result.context)}</div></div>`,`<div class="guest-result-block"><div class="guest-result-label">Nodi</div><ul>${result.nodes.map((node)=>`<li>${escapeHtml(node)}</li>`).join('')}</ul></div>`].join('');
+  el.innerHTML=[
+    `<div class="guest-result-block"><div class="guest-result-label">Titolo</div><div class="guest-result-title">${escapeHtml(result.title)}</div></div>`,
+    `<div class="guest-result-block"><div class="guest-result-label">Sintesi</div><div>${escapeHtml(result.summary)}</div></div>`,
+    `<div class="guest-result-block guest-result-priority"><div class="guest-result-label">Prima cosa da fare</div><div>${escapeHtml(result.firstAction)}</div></div>`,
+    `<div class="guest-result-block"><div class="guest-result-label">Ordine consigliato</div><ol class="guest-plan">${result.plan.map((entry)=>`<li><strong>${escapeHtml(entry.category)}</strong><span>${escapeHtml(entry.item)}</span><em>${escapeHtml(entry.reason)}</em></li>`).join('')}</ol></div>`,
+    result.quickWins.length?`<div class="guest-result-block"><div class="guest-result-label">Veloci da chiudere</div><ul>${result.quickWins.map((entry)=>`<li>${escapeHtml(entry.action)}</li>`).join('')}</ul></div>`:''
+  ].join('');
 }
 function generateGuestFilo(){
   const raw=document.getElementById('guest-raw-input')?.value.trim()||'';
