@@ -147,7 +147,7 @@ const handledInboxOAuthCodes = new Set();
 const handledCalendarOAuthCodes = new Set();
 let pendingLoginErrorMessage = '';
 const GUEST_FILO_DRAFT_KEY = 'filo_guest_first_filo_draft';
-let guestFiloState = { step: 1, kind: '', source: '', raw: '', result: null };
+let guestFiloState = { view: 'compose', kind: '', source: '', raw: '', result: null };
 
 function getGoogleLoginStatePrefix(){return 'login:';}
 function isGoogleLoginOauthState(state){return typeof state==='string'&&state.startsWith(getGoogleLoginStatePrefix());}
@@ -740,14 +740,7 @@ function shouldStartGuestFlow(){
 }
 function setGuestScreenVisible(visible){const guest=document.getElementById('guest-screen');if(guest)guest.style.display=visible?'flex':'none';}
 function updateGuestStepUi(){
-  document.querySelectorAll('[data-guest-panel]').forEach((panel)=>panel.classList.toggle('active',String(panel.dataset.guestPanel)===String(guestFiloState.step)));
-  document.querySelectorAll('.guest-step').forEach((el)=>el.classList.remove('active'));
-  if(guestFiloState.step==='result'){
-    document.querySelectorAll('.guest-step').forEach((el)=>el.classList.add('active'));
-    return;
-  }
-  const stepEl=document.getElementById(`guest-step-${guestFiloState.step}`);
-  if(stepEl)stepEl.classList.add('active');
+  document.querySelectorAll('[data-guest-panel]').forEach((panel)=>panel.classList.toggle('active',String(panel.dataset.guestPanel)===String(guestFiloState.view)));
 }
 function setupGuestOptionGroup(groupId,stateKey){
   const group=document.getElementById(groupId);
@@ -761,15 +754,8 @@ function setupGuestOptionGroup(groupId,stateKey){
   });
 }
 function initGuestFlow(){setupGuestOptionGroup('guest-kind-options','kind');setupGuestOptionGroup('guest-source-options','source');updateGuestStepUi();}
-function guestNextStep(){
-  if(guestFiloState.step===1&&!guestFiloState.kind){window.alert('Scegli cosa vuoi mettere in ordine.');return;}
-  if(guestFiloState.step===2&&!guestFiloState.source){window.alert('Scegli da cosa partiamo.');return;}
-  guestFiloState.step=Math.min(3,guestFiloState.step+1);
-  updateGuestStepUi();
-}
-function guestPrevStep(){guestFiloState.step=Math.max(1,guestFiloState.step-1);updateGuestStepUi();}
 function guestReset(){
-  guestFiloState={step:1,kind:'',source:'',raw:'',result:null};
+  guestFiloState={view:'compose',kind:'',source:'',raw:'',result:null};
   const raw=document.getElementById('guest-raw-input');if(raw)raw.value='';
   document.querySelectorAll('.guest-options button').forEach((btn)=>btn.classList.remove('active'));
   updateGuestStepUi();
@@ -796,7 +782,7 @@ function generateGuestFilo(){
   guestFiloState.raw=raw;
   guestFiloState.result=buildGuestFilo(raw);
   renderGuestResult(guestFiloState.result);
-  guestFiloState.step='result';
+  guestFiloState.view='result';
   updateGuestStepUi();
 }
 function saveGuestFiloAndRegister(){
