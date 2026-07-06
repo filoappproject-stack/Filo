@@ -31,8 +31,8 @@ body[data-color-set="salvia"]{
   --color-primary-rgb:45,125,104;
 }
 body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-bg);color:var(--color-text);font-size:14px;line-height:1.6;}
-.guest-screen{position:fixed;inset:0;background:var(--color-bg);display:flex;align-items:center;justify-content:center;z-index:220;padding:28px;overflow:auto;}
-.guest-wrap{width:min(1040px,100%);display:grid;grid-template-columns:minmax(0,0.9fr) minmax(360px,440px);gap:28px;align-items:stretch;position:relative;}
+.guest-screen{position:fixed;inset:0;background:var(--color-bg);display:flex;align-items:flex-start;justify-content:center;z-index:220;padding:56px 28px;overflow:auto;}
+.guest-wrap{width:min(1040px,100%);display:grid;grid-template-columns:minmax(0,0.9fr) minmax(360px,440px);gap:28px;align-items:start;position:relative;}
 .guest-copy,.guest-card{background:var(--color-surface);border:1px solid rgba(0,0,0,0.07);border-radius:20px;box-shadow:0 4px 40px rgba(0,0,0,0.06);}
 .guest-copy{padding:38px;display:flex;flex-direction:column;justify-content:center;}
 .guest-card{padding:34px;}
