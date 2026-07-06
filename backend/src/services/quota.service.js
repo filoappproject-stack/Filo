@@ -19,6 +19,13 @@ function resolveActorId(req, payload) {
   return `ip:${String(ip).split(',')[0].trim() || 'anonymous'}`;
 }
 
+function resolveGuestActorId(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  const ip = Array.isArray(forwarded) ? forwarded[0] : (forwarded || req.ip || 'anonymous');
+  const rawIp = String(ip).split(',')[0].trim() || 'anonymous';
+  return `guest-first-filo:${rawIp}:${env.AI_USAGE_HASH_SECRET || 'filo'}`;
+}
+
 function buildActorKey(req, payload) {
   const actorId = resolveActorId(req, payload);
   return crypto.createHash('sha256').update(actorId).digest('hex');
@@ -235,6 +242,42 @@ export async function consumeAnalysisQuota(req, payload) {
   } catch (error) {
     console.warn('Quota DB non disponibile, fallback in-memory attivato:', error?.message || error);
     return consumeInMemory(actorKey, dayKey, allowedLimit, now.getTime());
+  }
+}
+
+export async function consumeGuestFirstFiloQuota(req) {
+  const now = new Date();
+  const dayKey = getDayKey(now);
+  const actorKey = crypto.createHash('sha256').update(resolveGuestActorId(req)).digest('hex');
+  const allowedLimit = env.GUEST_AI_DAILY_LIMIT;
+
+  if (!pool || !env.DATABASE_URL) {
+    return consumeInMemory(actorKey, dayKey, allowedLimit, now.getTime());
+  }
+
+  try {
+    return consumeInDatabase(actorKey, dayKey, allowedLimit, now.toISOString());
+  } catch (error) {
+    console.warn('Quota guest DB non disponibile, fallback in-memory attivato:', error?.message || error);
+    return consumeInMemory(actorKey, dayKey, allowedLimit, now.getTime());
+  }
+}
+
+export async function refundGuestFirstFiloQuota(req) {
+  const now = new Date();
+  const dayKey = getDayKey(now);
+  const actorKey = crypto.createHash('sha256').update(resolveGuestActorId(req)).digest('hex');
+  const allowedLimit = env.GUEST_AI_DAILY_LIMIT;
+
+  if (!pool || !env.DATABASE_URL) {
+    return refundInMemory(actorKey, dayKey, allowedLimit, now.getTime());
+  }
+
+  try {
+    return refundInDatabase(actorKey, dayKey, allowedLimit, now.toISOString());
+  } catch (error) {
+    console.warn('Rimborso quota guest DB non disponibile, fallback in-memory attivato:', error?.message || error);
+    return refundInMemory(actorKey, dayKey, allowedLimit, now.getTime());
   }
 }
 

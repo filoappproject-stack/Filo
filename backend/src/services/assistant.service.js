@@ -289,6 +289,133 @@ ${celebrationRule}`;
   return suggestions;
 }
 
+function normalizeGuestFirstFilo(parsed, rawText) {
+  const safeString = (value, fallback = '') => String(value || fallback).trim();
+  const safeArray = (value) => Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
+  const safeObjects = (value) => Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') : [];
+
+  const actionLoop = safeObjects(parsed?.primo_giro).slice(0, 6).map((item, index) => ({
+    ordine: Number(item?.ordine) || index + 1,
+    titolo: safeString(item?.titolo, `Azione ${index + 1}`),
+    perche: safeString(item?.perche),
+    tempo: safeString(item?.tempo),
+    tipo: safeString(item?.tipo)
+  }));
+
+  const readyMessages = safeObjects(parsed?.messaggi_pronti).slice(0, 3).map((item) => ({
+    destinatario: safeString(item?.destinatario, 'Messaggio'),
+    testo: safeString(item?.testo)
+  })).filter((item) => item.testo);
+
+  return {
+    title: safeString(parsed?.titolo_salvataggio, 'Primo Filo'),
+    summary: safeString(parsed?.lettura, 'Filo ha trasformato le note in un primo piano operativo.'),
+    hiddenTheme: safeString(parsed?.tema_nascosto),
+    firstAction: actionLoop[0]?.titolo || safeString(parsed?.prima_azione, 'Scegli la prima azione concreta.'),
+    plan: actionLoop,
+    readyMessages,
+    quickWins: safeArray(parsed?.azioni_veloci).slice(0, 3),
+    saveAs: safeString(parsed?.salva_come, 'Primo Filo'),
+    note: [
+      safeString(parsed?.titolo_salvataggio, 'Primo Filo'),
+      '',
+      safeString(parsed?.lettura),
+      parsed?.tema_nascosto ? `Tema nascosto: ${safeString(parsed.tema_nascosto)}` : '',
+      '',
+      'Primo giro:',
+      ...actionLoop.map((item) => `${item.ordine}. ${item.titolo}${item.tempo ? ` (${item.tempo})` : ''}${item.perche ? ` - ${item.perche}` : ''}`),
+      readyMessages.length ? '\nMessaggi pronti:' : '',
+      ...readyMessages.map((item) => `${item.destinatario}: ${item.testo}`),
+      '',
+      'Materiale iniziale:',
+      rawText
+    ].filter(Boolean).join('\n')
+  };
+}
+
+export async function analyzeGuestFirstFilo(input) {
+  aiAttemptCounter += 1;
+  if (!env.AI_ENABLED || !env.ANTHROPIC_API_KEY) {
+    return null;
+  }
+
+  const rawText = String(input?.raw || '').trim();
+  const kind = String(input?.kind || '').trim() || 'non specificato';
+  const source = String(input?.source || '').trim() || 'non specificata';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), env.ANTHROPIC_TIMEOUT_MS);
+
+  const prompt = `Sei Filo, un assistente che trasforma note sparse in un primo giro d'azione.
+L'utente non ha ancora un account: deve vedere valore immediato, concreto, non una semplice riformulazione.
+
+Tipo scelto: ${kind}
+Punto di partenza: ${source}
+Note dell'utente:
+${rawText}
+
+Rispondi SOLO con JSON valido, senza markdown:
+{
+  "titolo_salvataggio": "titolo breve e personale",
+  "salva_come": "nome cartella/filo breve",
+  "lettura": "1-2 frasi: cosa hai capito sotto la superficie, non ripetere l'input",
+  "tema_nascosto": "pattern o carico nascosto che collega le note",
+  "prima_azione": "azione concreta da fare per prima",
+  "primo_giro": [
+    {"ordine":1,"titolo":"azione concreta","perche":"perche' questa posizione nell'ordine","tempo":"5-15 min","tipo":"contatto|pagamento|prenotazione|manutenzione|decisione|altro"}
+  ],
+  "messaggi_pronti": [
+    {"destinatario":"farmacia/meccanico/persona","testo":"messaggio pronto da copiare, naturale e breve"}
+  ],
+  "azioni_veloci": ["micro-azione chiudibile subito"]
+}
+
+Regole:
+- Non copiare semplicemente le note: interpreta, raggruppa, ordina.
+- Se ci sono commissioni familiari, esplicita il carico di coordinamento.
+- Se ci sono contatti o prenotazioni, prepara messaggi pronti.
+- Massimo 5 azioni nel primo_giro.
+- Italiano naturale, tono pratico e caldo.`;
+
+  const requestAnthropic = async (model) => fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1200,
+      messages: [{ role: 'user', content: prompt }]
+    }),
+    signal: controller.signal
+  });
+
+  try {
+    let response = await requestAnthropic(env.ANTHROPIC_MODEL);
+    if (!response.ok && response.status === 404) {
+      const candidates = FALLBACK_ANTHROPIC_MODELS.filter((m) => m !== env.ANTHROPIC_MODEL);
+      for (const candidate of candidates) {
+        response = await requestAnthropic(candidate);
+        if (response.ok) break;
+      }
+    }
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(`Anthropic API error (${response.status}): ${detail}`);
+    }
+
+    const data = await response.json();
+    const text = Array.isArray(data?.content)
+      ? data.content.map((item) => item?.text || '').join('')
+      : '';
+    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    return normalizeGuestFirstFilo(parsed, rawText);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function analyzeDay(input) {
   const inputSignature = normalizeInputForCache(input);
 

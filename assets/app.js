@@ -147,6 +147,8 @@ const handledInboxOAuthCodes = new Set();
 const handledCalendarOAuthCodes = new Set();
 let pendingLoginErrorMessage = '';
 const GUEST_FILO_DRAFT_KEY = 'filo_guest_first_filo_draft';
+const GUEST_FILO_AI_USAGE_KEY = 'filo_guest_first_filo_ai_usage';
+const GUEST_FILO_AI_DAILY_LIMIT = 3;
 let guestFiloState = { view: 'compose', kind: '', source: '', raw: '', result: null };
 
 function getGoogleLoginStatePrefix(){return 'login:';}
@@ -760,6 +762,26 @@ function guestReset(){
   document.querySelectorAll('.guest-options button').forEach((btn)=>btn.classList.remove('active'));
   updateGuestStepUi();
 }
+function getGuestUsageDayKey(date=new Date()){return date.toISOString().slice(0,10);}
+function getGuestAiUsage(){
+  try{
+    const parsed=JSON.parse(localStorage.getItem(GUEST_FILO_AI_USAGE_KEY)||'null');
+    if(parsed?.dayKey===getGuestUsageDayKey())return {dayKey:parsed.dayKey,count:Number(parsed.count)||0};
+  }catch(e){}
+  return {dayKey:getGuestUsageDayKey(),count:0};
+}
+function consumeGuestAiBrowserQuota(){
+  const usage=getGuestAiUsage();
+  if(usage.count>=GUEST_FILO_AI_DAILY_LIMIT)return {ok:false,...usage,limit:GUEST_FILO_AI_DAILY_LIMIT};
+  const next={dayKey:usage.dayKey,count:usage.count+1};
+  try{localStorage.setItem(GUEST_FILO_AI_USAGE_KEY,JSON.stringify(next));}catch(e){}
+  return {ok:true,...next,limit:GUEST_FILO_AI_DAILY_LIMIT};
+}
+function refundGuestAiBrowserQuota(){
+  const usage=getGuestAiUsage();
+  const next={dayKey:usage.dayKey,count:Math.max(usage.count-1,0)};
+  try{localStorage.setItem(GUEST_FILO_AI_USAGE_KEY,JSON.stringify(next));}catch(e){}
+}
 function splitGuestFiloItems(raw){
   const normalized=String(raw||'').replace(/\r/g,'\n').replace(/\s+/g,' ').trim();
   if(!normalized)return [];
@@ -814,29 +836,76 @@ function buildGuestFilo(raw){
     `Materiale iniziale (${words.length} parole):`,
     clean
   ];
-  return {title,summary,firstAction:first.action,plan,quickWins,note:noteLines.join('\n')};
+  return {title,summary,firstAction:first.action,plan,quickWins,readyMessages:[],saveAs:title,source:'local-fallback',note:noteLines.join('\n')};
 }
 function renderGuestResult(result){
   const el=document.getElementById('guest-result');if(!el)return;
+  const plan=Array.isArray(result.plan)?result.plan:[];
+  const readyMessages=Array.isArray(result.readyMessages)?result.readyMessages:[];
+  const quickWins=Array.isArray(result.quickWins)?result.quickWins:[];
+  const planHtml=plan.map((entry,idx)=>{
+    const label=entry.category||entry.tipo||`Azione ${idx+1}`;
+    const body=entry.item||entry.titolo||entry.action||'Azione da definire';
+    const reason=entry.reason||entry.perche||entry.tempo||'';
+    return `<li><strong>${escapeHtml(label)}</strong><span>${escapeHtml(body)}</span>${reason?`<em>${escapeHtml(reason)}</em>`:''}</li>`;
+  }).join('');
+  const sourceLabel=result.source==='ai'?"Generato dall'IA di Filo":'Versione locale di fallback';
   el.innerHTML=[
+    `<div class="guest-result-source">${sourceLabel}</div>`,
+    result.fallbackMessage?`<div class="guest-result-block"><div class="guest-result-label">Nota</div><div>${escapeHtml(result.fallbackMessage)}</div></div>`:'',
     `<div class="guest-result-block"><div class="guest-result-label">Titolo</div><div class="guest-result-title">${escapeHtml(result.title)}</div></div>`,
     `<div class="guest-result-block"><div class="guest-result-label">Sintesi</div><div>${escapeHtml(result.summary)}</div></div>`,
+    result.hiddenTheme?`<div class="guest-result-block"><div class="guest-result-label">Lettura di Filo</div><div>${escapeHtml(result.hiddenTheme)}</div></div>`:'',
     `<div class="guest-result-block guest-result-priority"><div class="guest-result-label">Prima cosa da fare</div><div>${escapeHtml(result.firstAction)}</div></div>`,
-    `<div class="guest-result-block"><div class="guest-result-label">Ordine consigliato</div><ol class="guest-plan">${result.plan.map((entry)=>`<li><strong>${escapeHtml(entry.category)}</strong><span>${escapeHtml(entry.item)}</span><em>${escapeHtml(entry.reason)}</em></li>`).join('')}</ol></div>`,
-    result.quickWins.length?`<div class="guest-result-block"><div class="guest-result-label">Veloci da chiudere</div><ul>${result.quickWins.map((entry)=>`<li>${escapeHtml(entry.action)}</li>`).join('')}</ul></div>`:''
+    planHtml?`<div class="guest-result-block"><div class="guest-result-label">Primo giro d'azione</div><ol class="guest-plan">${planHtml}</ol></div>`:'',
+    readyMessages.length?`<div class="guest-result-block"><div class="guest-result-label">Messaggi pronti</div><ul>${readyMessages.map((entry)=>`<li><strong>${escapeHtml(entry.destinatario||'Messaggio')}</strong><span>${escapeHtml(entry.testo||'')}</span></li>`).join('')}</ul></div>`:'',
+    quickWins.length?`<div class="guest-result-block"><div class="guest-result-label">Veloci da chiudere</div><ul>${quickWins.map((entry)=>`<li>${escapeHtml(entry.action||entry)}</li>`).join('')}</ul></div>`:''
   ].join('');
 }
-function generateGuestFilo(){
+async function requestGuestFirstFiloAi(raw){
+  const quota=consumeGuestAiBrowserQuota();
+  if(!quota.ok){
+    return {source:'local-fallback',result:null,message:'Hai usato le 3 generazioni IA gratuite di oggi su questo browser: mostro una versione locale.'};
+  }
+  try{
+    const res=await fetchApi('/api/v1/guest/first-filo',{
+      singleAttempt:true,
+      disableAuthRetry:true,
+      timeoutMs:35000,
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({raw,kind:guestFiloState.kind,source:guestFiloState.source})
+    });
+    const payload=await res.json().catch(()=>null);
+    if(res.status===429){
+      if(payload?.error==='CooldownExceeded'||payload?.error==='RateLimitExceeded')refundGuestAiBrowserQuota();
+      return {source:'local-fallback',result:null,message:payload?.message||'Limite giornaliero generazioni IA raggiunto: mostro una versione locale.'};
+    }
+    if(!res.ok)throw new Error(payload?.message||`POST /guest/first-filo fallita (${res.status})`);
+    const result=payload?.data?.result;
+    if(result){
+      return {source:'ai',result:{...result,source:'ai'},message:''};
+    }
+    refundGuestAiBrowserQuota();
+    return {source:'local-fallback',result:null,message:payload?.message||'IA non configurata: mostro una versione locale.'};
+  }catch(err){
+    refundGuestAiBrowserQuota();
+    console.warn('Generazione IA guest fallita, uso fallback locale:',err?.message||err);
+    return {source:'local-fallback',result:null,message:'IA temporaneamente non disponibile: mostro una versione locale.'};
+  }
+}
+async function generateGuestFilo(){
   const raw=document.getElementById('guest-raw-input')?.value.trim()||'';
   if(raw.length<12){window.alert('Scrivi almeno una frase: bastano poche parole, ma serve un punto da cui partire.');return;}
   guestFiloState.raw=raw;
-  guestFiloState.result=buildGuestFilo(raw);
+  const ai=await requestGuestFirstFiloAi(raw);
+  guestFiloState.result=ai.result||{...buildGuestFilo(raw),fallbackMessage:ai.message};
   renderGuestResult(guestFiloState.result);
   guestFiloState.view='result';
   updateGuestStepUi();
 }
-function saveGuestFiloAndRegister(){
-  if(!guestFiloState.result)generateGuestFilo();
+async function saveGuestFiloAndRegister(){
+  if(!guestFiloState.result)await generateGuestFilo();
   if(!guestFiloState.result)return;
   try{localStorage.setItem(GUEST_FILO_DRAFT_KEY,JSON.stringify({...guestFiloState.result,savedAt:new Date().toISOString()}));}catch(e){}
   showLoginScreen({force:true,register:true,message:'Il tuo primo Filo e\' pronto. Crea un account per salvarlo tra le note.'});

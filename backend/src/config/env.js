@@ -40,7 +40,9 @@ const EnvSchema = z.object({
     return value;
   }, z.boolean().default(true)),
   AI_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(60_000),
-  AI_RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(100).default(6)
+  AI_RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(100).default(6),
+  GUEST_AI_DAILY_LIMIT: z.coerce.number().int().min(1).max(20).default(3),
+  AI_USAGE_HASH_SECRET: z.string().optional().default('')
 });
 
 const parsed = EnvSchema.safeParse(process.env);
