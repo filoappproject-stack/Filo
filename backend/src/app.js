@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from './middleware/error.js';
 import authRoutes from './routes/auth.routes.js';
 import calendarRoutes from './routes/calendar.routes.js';
 import checkinsRoutes from './routes/checkins.routes.js';
+import guestRoutes from './routes/guest.routes.js';
 import healthRoutes from './routes/health.routes.js';
 import inboxRoutes from './routes/inbox.routes.js';
 import notesRoutes from './routes/notes.routes.js';
@@ -32,6 +33,7 @@ app.get('/', (req, res) => {
 
 app.use('/api/v1/health', healthRoutes);
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/guest', guestRoutes);
 app.use('/api/v1', requireAuth);
 app.use('/api/v1/tasks', tasksRoutes);
 app.use('/api/v1/notes', notesRoutes);
