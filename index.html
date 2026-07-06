@@ -12,6 +12,64 @@
 </head>
 <body data-color-set="classic">
 
+<!-- GUEST TRY -->
+<div class="guest-screen" id="guest-screen" style="display:none;">
+  <div class="guest-wrap">
+    <section class="guest-copy" aria-label="Crea il primo Filo senza account">
+      <div class="beta-kicker">Prova senza account</div>
+      <h1 class="beta-title">Metti in ordine un pensiero, un progetto o una decisione.</h1>
+      <p class="beta-lead">Rispondi a poche domande, scrivi quello che hai in mente anche in modo disordinato e ottieni una prima traccia. Ti registri solo se vuoi salvarla.</p>
+      <div class="guest-steps" aria-label="Passi della prova">
+        <span class="guest-step active" id="guest-step-1">1</span>
+        <span class="guest-step" id="guest-step-2">2</span>
+        <span class="guest-step" id="guest-step-3">3</span>
+      </div>
+    </section>
+
+    <section class="guest-card" aria-label="Generatore primo Filo">
+      <div class="guest-panel active" data-guest-panel="1">
+        <h2>Cosa vuoi mettere in ordine oggi?</h2>
+        <div class="guest-options" id="guest-kind-options">
+          <button type="button" data-value="Un pensiero personale">Un pensiero personale</button>
+          <button type="button" data-value="Un progetto">Un progetto</button>
+          <button type="button" data-value="Una decisione da prendere">Una decisione da prendere</button>
+          <button type="button" data-value="Un obiettivo">Un obiettivo</button>
+          <button type="button" data-value="Note sparse">Note sparse</button>
+        </div>
+        <button class="login-btn" type="button" onclick="guestNextStep()">Continua</button>
+      </div>
+
+      <div class="guest-panel" data-guest-panel="2">
+        <h2>Da cosa partiamo?</h2>
+        <div class="guest-options" id="guest-source-options">
+          <button type="button" data-value="Ho solo un'idea">Ho solo un'idea</button>
+          <button type="button" data-value="Ho appunti sparsi">Ho appunti sparsi</button>
+          <button type="button" data-value="Ho un problema da chiarire">Ho un problema da chiarire</button>
+          <button type="button" data-value="Ho una cosa da raccontare">Ho una cosa da raccontare</button>
+        </div>
+        <button class="login-btn" type="button" onclick="guestNextStep()">Continua</button>
+        <button class="guest-link-btn" type="button" onclick="guestPrevStep()">Indietro</button>
+      </div>
+
+      <div class="guest-panel" data-guest-panel="3">
+        <h2>Scrivi tutto quello che hai in mente.</h2>
+        <textarea class="guest-textarea" id="guest-raw-input" rows="8" placeholder="Esempio: devo decidere se continuare questo progetto, ho pochi segnali, mi serve capire cosa testare prima..."></textarea>
+        <button class="login-btn" type="button" onclick="generateGuestFilo()">Genera il mio Filo</button>
+        <button class="guest-link-btn" type="button" onclick="guestPrevStep()">Indietro</button>
+      </div>
+
+      <div class="guest-panel" data-guest-panel="result">
+        <h2>Il tuo primo Filo</h2>
+        <div class="guest-result" id="guest-result"></div>
+        <button class="login-btn" type="button" onclick="saveGuestFiloAndRegister()">Salva questo Filo</button>
+        <button class="guest-link-btn" type="button" onclick="guestReset()">Creane un altro</button>
+      </div>
+    </section>
+
+    <button class="guest-login-link" type="button" onclick="showLoginScreen({force:true})">Ho gia' un account</button>
+  </div>
+</div>
+
 <!-- LOGIN -->
 <div class="login-screen" id="login-screen" style="display:none;">
   <div class="login-wrap">

@@ -146,6 +146,8 @@ let lastAuthenticatedUserId = null;
 const handledInboxOAuthCodes = new Set();
 const handledCalendarOAuthCodes = new Set();
 let pendingLoginErrorMessage = '';
+const GUEST_FILO_DRAFT_KEY = 'filo_guest_first_filo_draft';
+let guestFiloState = { step: 1, kind: '', source: '', raw: '', result: null };
 
 function getGoogleLoginStatePrefix(){return 'login:';}
 function isGoogleLoginOauthState(state){return typeof state==='string'&&state.startsWith(getGoogleLoginStatePrefix());}
@@ -730,17 +732,122 @@ async function trySetSupabaseSessionFromHash() {
   }
 }
 
-function showLoginScreen() {
+function shouldStartGuestFlow(){
+  try{
+    const url=new URL(window.location.href);
+    return url.searchParams.get('try')==='1'||url.searchParams.get('guest')==='1';
+  }catch(e){return false;}
+}
+function setGuestScreenVisible(visible){const guest=document.getElementById('guest-screen');if(guest)guest.style.display=visible?'flex':'none';}
+function updateGuestStepUi(){
+  document.querySelectorAll('[data-guest-panel]').forEach((panel)=>panel.classList.toggle('active',String(panel.dataset.guestPanel)===String(guestFiloState.step)));
+  document.querySelectorAll('.guest-step').forEach((el)=>el.classList.remove('active'));
+  if(guestFiloState.step==='result'){
+    document.querySelectorAll('.guest-step').forEach((el)=>el.classList.add('active'));
+    return;
+  }
+  const stepEl=document.getElementById(`guest-step-${guestFiloState.step}`);
+  if(stepEl)stepEl.classList.add('active');
+}
+function setupGuestOptionGroup(groupId,stateKey){
+  const group=document.getElementById(groupId);
+  if(!group)return;
+  group.querySelectorAll('button[data-value]').forEach((btn)=>{
+    btn.addEventListener('click',()=>{
+      guestFiloState[stateKey]=btn.dataset.value||'';
+      group.querySelectorAll('button').forEach((item)=>item.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+}
+function initGuestFlow(){setupGuestOptionGroup('guest-kind-options','kind');setupGuestOptionGroup('guest-source-options','source');updateGuestStepUi();}
+function guestNextStep(){
+  if(guestFiloState.step===1&&!guestFiloState.kind){window.alert('Scegli cosa vuoi mettere in ordine.');return;}
+  if(guestFiloState.step===2&&!guestFiloState.source){window.alert('Scegli da cosa partiamo.');return;}
+  guestFiloState.step=Math.min(3,guestFiloState.step+1);
+  updateGuestStepUi();
+}
+function guestPrevStep(){guestFiloState.step=Math.max(1,guestFiloState.step-1);updateGuestStepUi();}
+function guestReset(){
+  guestFiloState={step:1,kind:'',source:'',raw:'',result:null};
+  const raw=document.getElementById('guest-raw-input');if(raw)raw.value='';
+  document.querySelectorAll('.guest-options button').forEach((btn)=>btn.classList.remove('active'));
+  updateGuestStepUi();
+}
+function buildGuestFilo(raw){
+  const clean=String(raw||'').trim();
+  const words=clean.split(/\s+/).filter(Boolean);
+  const titleBase=guestFiloState.kind||'Il mio Filo';
+  const summary=clean.length>150?`${clean.slice(0,150).trim()}...`:clean;
+  const nextAction=guestFiloState.kind==='Una decisione da prendere'
+    ? 'Scrivi le due opzioni e il costo di non decidere entro questa settimana.'
+    : guestFiloState.kind==='Un progetto'
+      ? 'Scegli il prossimo passo visibile e la persona o risorsa che lo sblocca.'
+      : 'Rileggi la traccia e scegli una sola azione piccola da fare oggi.';
+  return {title:`${titleBase}: prima traccia`,context:summary||'Hai iniziato da un punto ancora aperto. Questo Filo serve a renderlo piu\' leggibile.',nodes:[`Punto di partenza: ${guestFiloState.source||'materiale iniziale'}.`,`Tema centrale: ${titleBase.toLowerCase()}.`,`Prossima azione: ${nextAction}`],note:[`Tipo: ${guestFiloState.kind||'Non specificato'}`,`Partenza: ${guestFiloState.source||'Non specificata'}`,`Materiale iniziale (${words.length} parole):`,clean,'','Traccia:',`- ${nextAction}`].join('\n')};
+}
+function renderGuestResult(result){
+  const el=document.getElementById('guest-result');if(!el)return;
+  el.innerHTML=[`<div class="guest-result-block"><div class="guest-result-label">Titolo</div><div class="guest-result-title">${escapeHtml(result.title)}</div></div>`,`<div class="guest-result-block"><div class="guest-result-label">Contesto</div><div>${escapeHtml(result.context)}</div></div>`,`<div class="guest-result-block"><div class="guest-result-label">Nodi</div><ul>${result.nodes.map((node)=>`<li>${escapeHtml(node)}</li>`).join('')}</ul></div>`].join('');
+}
+function generateGuestFilo(){
+  const raw=document.getElementById('guest-raw-input')?.value.trim()||'';
+  if(raw.length<12){window.alert('Scrivi almeno una frase: bastano poche parole, ma serve un punto da cui partire.');return;}
+  guestFiloState.raw=raw;
+  guestFiloState.result=buildGuestFilo(raw);
+  renderGuestResult(guestFiloState.result);
+  guestFiloState.step='result';
+  updateGuestStepUi();
+}
+function saveGuestFiloAndRegister(){
+  if(!guestFiloState.result)generateGuestFilo();
+  if(!guestFiloState.result)return;
+  try{localStorage.setItem(GUEST_FILO_DRAFT_KEY,JSON.stringify({...guestFiloState.result,savedAt:new Date().toISOString()}));}catch(e){}
+  showLoginScreen({force:true,register:true,message:'Il tuo primo Filo e\' pronto. Crea un account per salvarlo tra le note.'});
+}
+async function claimGuestFiloDraft(){
+  if(!currentUser?.id)return;
+  let draft=null;try{draft=JSON.parse(localStorage.getItem(GUEST_FILO_DRAFT_KEY)||'null');}catch(e){draft=null;}
+  if(!draft?.title||!draft?.note)return;
+  const localNote={id:String(nextNoteId++),title:String(draft.title).slice(0,200),body:String(draft.note),tags:['primo-filo']};
+  notes=[localNote,...notes.filter((note)=>note.title!==localNote.title||note.body!==localNote.body)];
+  saveNotesToCache();
+  try{
+    const res=await fetchApi('/api/v1/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUser.id,title:localNote.title,body:localNote.body,tags:localNote.tags})});
+    if(res.ok){const payload=await res.json();const created=normalizeApiNote(payload?.data);notes=notes.map((note)=>note.id===localNote.id?created:note);saveNotesToCache();}
+  }catch(err){console.warn('Import primo Filo su backend fallito, resta in cache locale:',err);}
+  try{localStorage.removeItem(GUEST_FILO_DRAFT_KEY);}catch(e){}
+  showPage('note');
+  renderAll();
+  showSuccess('Primo Filo salvato tra le note.');
+}
+
+function showLoginScreen(options={}) {
+  if(!options.force&&shouldStartGuestFlow()){
+    activeSessionUserId = null;
+    currentUser = null;
+    authTransitionInFlight = false;
+    lastAuthenticatedUserId = null;
+    handledInboxOAuthCodes.clear();
+    clearMessages();
+    document.getElementById('app-shell').classList.remove('active');
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('checkin-overlay').style.display = 'none';
+    setGuestScreenVisible(true);
+    return;
+  }
   activeSessionUserId = null;
   currentUser = null;
   authTransitionInFlight = false;
   lastAuthenticatedUserId = null;
   handledInboxOAuthCodes.clear();
-  const messageToRestore=pendingLoginErrorMessage;
+  const messageToRestore=options.message||pendingLoginErrorMessage;
   clearMessages();
+  setGuestScreenVisible(false);
   document.getElementById('app-shell').classList.remove('active');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('checkin-overlay').style.display = 'none';
+  if(options.register)switchTab('register');
   if(messageToRestore)showError(messageToRestore);
 }
 
@@ -760,6 +867,7 @@ async function loginSuccess(user) {
   tasks = [];
   nextTaskId = 100;
   document.getElementById('login-screen').style.display = 'none';
+  setGuestScreenVisible(false);
   shell.classList.add('active');
 
   const name = user.user_metadata?.full_name || user.email.split('@')[0];
@@ -797,6 +905,7 @@ async function loginSuccess(user) {
   }
   await loadTasksFromApi();
   await loadNotesFromApi();
+  await claimGuestFiloDraft();
   await loadSuggestionStatesFromApi();
   // Evita fetch check-in da API al boot (in deploy degradati generava 500 a freddo).
   // Manteniamo solo recupero profilo/cache locale.
@@ -4428,6 +4537,7 @@ function copyQuickCheckSummary(){
 async function init() {
   loadPrefs();
   renderPrefs();
+  initGuestFlow();
   const bm=document.getElementById('build-marker');
   if(bm)bm.textContent=`Build: ${APP_BUILD_ID} · ${APP_BUILD_DATE}`;
   initDayDraftAutosave();
