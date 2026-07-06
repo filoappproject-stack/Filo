@@ -150,6 +150,7 @@ const GUEST_FILO_DRAFT_KEY = 'filo_guest_first_filo_draft';
 const GUEST_FILO_AI_USAGE_KEY = 'filo_guest_first_filo_ai_usage';
 const GUEST_FILO_AI_DAILY_LIMIT = 3;
 let guestFiloState = { view: 'compose', kind: '', source: '', raw: '', result: null };
+let guestFiloGenerationInFlight = false;
 
 function getGoogleLoginStatePrefix(){return 'login:';}
 function isGoogleLoginOauthState(state){return typeof state==='string'&&state.startsWith(getGoogleLoginStatePrefix());}
@@ -758,9 +759,20 @@ function setupGuestOptionGroup(groupId,stateKey){
 function initGuestFlow(){setupGuestOptionGroup('guest-kind-options','kind');setupGuestOptionGroup('guest-source-options','source');updateGuestStepUi();}
 function guestReset(){
   guestFiloState={view:'compose',kind:'',source:'',raw:'',result:null};
+  guestFiloGenerationInFlight=false;
   const raw=document.getElementById('guest-raw-input');if(raw)raw.value='';
+  const result=document.getElementById('guest-result');if(result)result.innerHTML='';
+  const btn=document.getElementById('guest-generate-btn');if(btn){btn.disabled=false;btn.textContent='Genera il mio Filo';}
   document.querySelectorAll('.guest-options button').forEach((btn)=>btn.classList.remove('active'));
   updateGuestStepUi();
+}
+function setGuestGenerating(isGenerating){
+  guestFiloGenerationInFlight=isGenerating;
+  const btn=document.getElementById('guest-generate-btn');
+  if(btn){
+    btn.disabled=isGenerating;
+    btn.textContent=isGenerating?'Filo sta leggendo...':'Genera il mio Filo';
+  }
 }
 function getGuestUsageDayKey(date=new Date()){return date.toISOString().slice(0,10);}
 function getGuestAiUsage(){
@@ -895,14 +907,23 @@ async function requestGuestFirstFiloAi(raw){
   }
 }
 async function generateGuestFilo(){
+  if(guestFiloGenerationInFlight)return;
   const raw=document.getElementById('guest-raw-input')?.value.trim()||'';
   if(raw.length<12){window.alert('Scrivi almeno una frase: bastano poche parole, ma serve un punto da cui partire.');return;}
-  guestFiloState.raw=raw;
-  const ai=await requestGuestFirstFiloAi(raw);
-  guestFiloState.result=ai.result||{...buildGuestFilo(raw),fallbackMessage:ai.message};
-  renderGuestResult(guestFiloState.result);
-  guestFiloState.view='result';
-  updateGuestStepUi();
+  setGuestGenerating(true);
+  try{
+    guestFiloState.raw=raw;
+    guestFiloState.result=null;
+    const ai=await requestGuestFirstFiloAi(raw);
+    guestFiloState.result=ai.result||{...buildGuestFilo(raw),fallbackMessage:ai.message};
+    renderGuestResult(guestFiloState.result);
+    guestFiloState.view='result';
+    updateGuestStepUi();
+    const guest=document.getElementById('guest-screen');
+    if(guest)guest.scrollTo({top:0,behavior:'smooth'});
+  }finally{
+    setGuestGenerating(false);
+  }
 }
 async function saveGuestFiloAndRegister(){
   if(!guestFiloState.result)await generateGuestFilo();
